@@ -80,20 +80,20 @@ def ask_gemini(prompt_content):
         if not API_KEY:
             return "⚠️ 请配置 API Key"
             
-        # 核心修正：必须带上 models/ 前缀，且建议使用最新的 1.5-flash
+        # 核心修正：必须带上 models/ 前缀，这是解决 404 的关键
         model = genai.GenerativeModel('models/gemini-1.5-flash')
         
-        # 发送请求
+        # 执行请求
         response = model.generate_content(prompt_content)
         
         # 返回结果
         if response and response.text:
             return response.text
         else:
-            return "AI 响应正常但内容为空"
+            return "AI 响应成功但内容为空"
             
     except Exception as e:
-        # 如果报错，会在这里显示具体的诊断信息
+        # 如果还是报错，会在这里显示具体的诊断信息
         return f"AI 诊断信息: {str(e)}"
 
 # ==========================================

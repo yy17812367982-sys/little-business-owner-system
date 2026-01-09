@@ -106,23 +106,32 @@ client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 
 # =========================================================
-# AI wrapper: "Yangyu's AI" persona + no vendor traces
+# AI wrapper: calls Gemini via google-genai (no vendor traces in UI)
 # =========================================================
 SYSTEM_POLICY = """
 You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
+
 Rules:
 - NEVER mention any underlying model/provider/vendor or internal API names.
 - If asked "Who are you?", "What model are you?", "Are you Gemini?" or similar:
-  answer: "I'm Yangyu's AI assistant." and optionally explain you are an AI helper inside this platform.
+  answer: "I'm Yangyu's AI assistant." (optionally: built into this platform to help SMEs).
 - Keep outputs structured and actionable; prefer bullet points, metrics, and next steps.
 - If user requests sensitive/illegal help, refuse briefly and offer safe alternatives.
 """
 
+# 你可以按需调整优先级：越靠前越先尝试
+MODEL_CANDIDATES = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+]
+
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:
-        return t("AI 服务未配置。", "AI service is not configured.")
+        return t("AI 服务未配置（请在 Secrets 或环境变量里配置 GEMINI_API_KEY）。",
+                 "AI service is not configured (set GEMINI_API_KEY in Secrets or env).")
 
-    # Mode-specific steering (kept generic)
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
         "open_store": "Focus on store-opening decisions: location, setup, launch checklist, risks, and actions.",
@@ -132,26 +141,47 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
-    max_attempts = 4
+    # retry policy
+    max_attempts = 3
     base_sleep = 1.2
-    for attempt in range(1, max_attempts + 1):
-        try:
-            resp = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt
-            )
-            text = getattr(resp, "text", None)
-            return text if text else t("AI 返回为空。", "No response returned.")
-        except Exception as e:
-            msg = str(e)
-            print(f"[AI_ERROR] attempt={attempt} err={msg}")
 
-            if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
-                time.sleep(base_sleep * (2 ** (attempt - 1)) + random.random())
-                continue
+    last_err = None
 
-            return t("AI 暂时不可用，请稍后重试。", "AI service is temporarily unavailable. Please try again.")
-    return t("AI 暂时不可用，请稍后重试。", "AI service is temporarily unavailable. Please try again.")
+    for model_name in MODEL_CANDIDATES:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                text = getattr(resp, "text", None)
+                if text and str(text).strip():
+                    return str(text).strip()
+                # 空返回也算失败，继续尝试别的模型
+                last_err = f"empty_response model={model_name}"
+                break
+
+            except Exception as e:
+                msg = str(e)
+                last_err = f"model={model_name} attempt={attempt} err={msg}"
+                print("[AI_ERROR]", last_err)
+
+                # 429/限流：退避重试
+                if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
+                    time.sleep(base_sleep * (2 ** (attempt - 1)) + random.random())
+                    continue
+
+                # 模型不存在/不支持：换模型
+                if ("404" in msg) or ("not found" in msg.lower()) or ("unsupported" in msg.lower()):
+                    break
+
+                # 其他错误：直接给用户友好提示（不暴露供应商）
+                return t("AI 暂时不可用，请稍后重试。", "AI is temporarily unavailable. Please try again.")
+
+    # 所有模型都失败
+    print("[AI_FATAL]", last_err)
+    return t("AI 暂时不可用，请稍后重试。", "AI is temporarily unavailable. Please try again.")
+
 
 
 # =========================================================

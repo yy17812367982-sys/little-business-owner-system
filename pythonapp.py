@@ -376,7 +376,9 @@ with st.sidebar:
 # Header + Top Ask AI (landing feature)
 # =========================================================
 st.title("Project B: SME BI Platform")
-st.markdown(f"**{t('由 Yangyu 的 AI 驱动', 'Powered by Yangyu’s AI')}**")
+ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+st.markdown(f"<div class='card'><b>{ai_label}:</b><br>{m['text']}</div>", unsafe_allow_html=True)
+
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
     colA, colB = st.columns([3, 1])

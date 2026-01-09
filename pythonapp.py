@@ -399,7 +399,7 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         st.rerun()
 
     if st.session_state.chat_history:
-    st.markdown("---")
+        st.markdown("---")
     for m in st.session_state.chat_history[-8:]:
         if m["role"] == "user":
             safe_user = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")

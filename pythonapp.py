@@ -26,7 +26,7 @@ else:
 # ==========================================
 # 在本地测试时，填入你的 Key。
 # 上线后，建议在 Streamlit 后台 Secrets 里配置，或者暂时先硬编码在这里（演示用）
-API_KEY = "AIzaSyDgAIkeGpS2RU1Y1JwvHqXJj5JzFKA4Maw"  # <--- 确保这里有你的 Key
+API_KEY = "AIzaSyCfUuSIGpTDMR55AmhzGms-ZqbZH8mqP_Y"  # <--- 确保这里有你的 Key
 
 if API_KEY:
     genai.configure(api_key=API_KEY)

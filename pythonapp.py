@@ -125,18 +125,40 @@ def ask_gemini(prompt_content: str, model_name: str = "gemini-2.5-flash") -> str
 # ==========================================
 # 📱 侧边栏
 # ==========================================
+# ==========================================
+# 📱 Sidebar
+# ==========================================
+if "username" not in st.session_state:
+    st.session_state.username = ""
+if "register_msg" not in st.session_state:
+    st.session_state.register_msg = ""
+
+def on_username_submit():
+    name = (st.session_state.username or "").strip()
+    if name:
+        st.session_state.register_msg = "Currently unavailable to register."
+    else:
+        st.session_state.register_msg = ""
+
 with st.sidebar:
-    st.button("🌐 Switch Language / 切换语言", on_click=toggle_language)
+    st.button("🌐 Switch Language", on_click=toggle_language)
     st.markdown("---")
     st.image("https://cdn-icons-png.flaticon.com/512/2362/2362378.png", width=50)
-    st.write("**User:** Zhuo (Owner)")
-    st.write("**Status:** NIW Premium")
+
+    # Username input (press Enter triggers on_change)
+    st.text_input(
+        "Username",
+        key="username",
+        placeholder="Enter a username",
+        on_change=on_username_submit
+    )
+
+    if st.session_state.register_msg:
+        st.warning(st.session_state.register_msg)
+
     st.success("🟢 System Online")
     st.caption("v3.2 Cloud Edition")
 
-    # ✅ Debug：快速验证 Key 是否已加载（不会显示 key）
-    if st.checkbox("Debug: Show key status", value=False):
-        st.write("API Key loaded:", bool(API_KEY))
 
 # ==========================================
 # 🖥️ 主界面

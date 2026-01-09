@@ -399,20 +399,21 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         st.rerun()
 
     if st.session_state.chat_history:
-        st.markdown("---")
-        for m in st.session_state.chat_history[-8:]:
-            if m["role"] == "user":
-                st.markdown(f"<div class='card'><b>{t('你', 'You')}:</b><br>{m['text']}</div>", unsafe_allow_html=True)
-            else:
-                ai_label = t("Yangyu 的 AI", "Yangyu's AI")
-safe_text = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-st.markdown(f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>", unsafe_allow_html=True)
+    st.markdown("---")
+    for m in st.session_state.chat_history[-8:]:
+        if m["role"] == "user":
+            st.markdown(f"<div class='card'><b>{t('你', 'You')}:</b><br>{m['text']}</div>", unsafe_allow_html=True)
+        else:
+            ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+            safe_text = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            st.markdown(f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>", unsafe_allow_html=True)
 
-        colc1, colc2 = st.columns([1, 4])
-        with colc1:
-            if st.button(t("清空对话", "Clear Chat")):
-                st.session_state.chat_history = []
-                st.rerun()
+    colc1, colc2 = st.columns([1, 4])
+    with colc1:
+        if st.button(t("清空对话", "Clear Chat")):
+            st.session_state.chat_history = []
+            st.rerun()
+
 
 
 # =========================================================

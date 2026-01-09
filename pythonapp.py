@@ -376,8 +376,13 @@ with st.sidebar:
 # Header + Top Ask AI (landing feature)
 # =========================================================
 st.title("Project B: SME BI Platform")
-ai_label = t("Yangyu 的 AI", "Yangyu's AI")
-st.markdown(f"<div class='card'><b>{ai_label}:</b><br>{m['text']}</div>", unsafe_allow_html=True)
+else:
+    ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+    safe_ai = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    st.markdown(
+        f"<div class='card'><b>{ai_label}:</b><br>{safe_ai}</div>",
+        unsafe_allow_html=True
+    )
 
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
@@ -399,7 +404,8 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         st.rerun()
 
     if st.session_state.chat_history:
-        st.markdown("---")
+    st.markdown("---")
+
     for m in st.session_state.chat_history[-8:]:
         if m["role"] == "user":
             safe_user = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -420,6 +426,7 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         if st.button(t("清空对话", "Clear Chat")):
             st.session_state.chat_history = []
             st.rerun()
+
 
 
 

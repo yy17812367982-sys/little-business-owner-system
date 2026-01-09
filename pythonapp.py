@@ -76,7 +76,7 @@ st.markdown("""
 
 # 状态管理
 if "lang" not in st.session_state:
-    st.session_state.lang = "zh"
+    st.session_state.lang = "en"
 
 def t(zh, en):
     return zh if st.session_state.lang == "zh" else en
@@ -88,13 +88,9 @@ def toggle_language():
 # 🧠 AI 调用函数（带重试 + 429 退避）
 # ==========================================
 def ask_gemini(prompt_content: str, model_name: str = "gemini-2.5-flash") -> str:
-    """
-    通用 AI 调用接口（Streamlit Cloud 友好版）
-    - 默认用 gemini-2.5-flash：快且稳定
-    - 轻量重试：处理偶发网络抖动/限流
-    """
     if not API_KEY or not client:
-        return "API Key Missing（请在 Streamlit Secrets 里配置 GEMINI_API_KEY）"
+        # 不暴露任何供应商/变量名
+        return "AI service is not configured."
 
     max_attempts = 4
     base_sleep = 1.2
@@ -106,21 +102,25 @@ def ask_gemini(prompt_content: str, model_name: str = "gemini-2.5-flash") -> str
                 contents=prompt_content
             )
             text = getattr(resp, "text", None)
-            return text if text else "AI 响应成功但内容为空"
+            return text if text else "No response returned."
 
         except Exception as e:
             msg = str(e)
 
-            # 429/限流：指数退避 + 抖动
+            # 后台记录详细错误（用户看不到）
+            print(f"[AI_ERROR] attempt={attempt} err={msg}")
+
+            # 限流/抖动：退避重试
             if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "rate" in msg.lower():
                 sleep_s = base_sleep * (2 ** (attempt - 1)) + random.random()
                 time.sleep(sleep_s)
                 continue
 
-            # 其他错误：直接返回诊断信息
-            return f"AI 诊断信息: {msg}"
+            # 其他错误：对用户只给中性提示
+            return "AI service is temporarily unavailable. Please try again."
 
-    return "AI 诊断信息: 重试次数用尽（可能是限流或网络波动）"
+    return "AI service is temporarily unavailable. Please try again."
+
 
 # ==========================================
 # 📱 侧边栏
@@ -142,7 +142,7 @@ with st.sidebar:
 # 🖥️ 主界面
 # ==========================================
 st.title(t("Project B: 全行业商业智能决策系统", "Project B: SME BI Platform"))
-st.markdown("**Powered by Google Gemini AI**")
+st.markdown("**Powered by AI Engine**")
 
 tab1, tab2, tab3 = st.tabs([
     t("📍 智能选址 (Map AI)", "📍 Site Selection"),
@@ -170,7 +170,7 @@ with tab1:
 
     if st.button(t("🚀 AI 分析该地段", "🚀 Analyze Location"), type="primary"):
         prompt = f"分析地址的商业潜力，已知人流量{traffic}，请给出：1.区域画像 2.竞争策略 3.评分(0-100)。"
-        with st.spinner("Gemini is analyzing map data..."):
+        with st.spinner("Analyzing..."):
             res = ask_gemini(prompt)
             st.success("Analysis Complete")
             st.write(res)

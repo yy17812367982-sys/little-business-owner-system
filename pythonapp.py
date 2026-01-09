@@ -406,49 +406,33 @@ with st.sidebar:
 
 
 # =========================================================
-# Header + Prominent Suites + Top Ask AI
+# Header + Top Ask AI (landing feature)
 # =========================================================
 st.title("Project B: SME BI Platform")
 
-# Prominent suites selector (center stage)
-st.markdown(
-    f"<div class='workspace-wrap'>"
-    f"<div class='workspace-title'><b>{t('功能集合', 'Suites')}</b> · {t('选择一个工作台', 'Pick a workspace')}</div>"
-    f"</div>",
-    unsafe_allow_html=True
-)
-
-w1, w2, w3 = st.columns(3)
-
-def suite_btn(label_zh: str, label_en: str, key: str, col):
-    selected = (st.session_state.active_suite == key)
-    label = f"✅ {t(label_zh, label_en)}" if selected else t(label_zh, label_en)
-    with col:
-        if st.button(label, use_container_width=True):
-            st.session_state.active_suite = key
-            st.rerun()
-
-suite_btn("🏪 开店", "🏪 Open a Store", "open_store", w1)
-suite_btn("⚙️ 运营", "⚙️ Operations", "operations", w2)
-suite_btn("💰 财务分析", "💰 Financial Analysis", "finance", w3)
-
-st.caption(
-    {
-        "open_store": t("用于开店决策流：画像 → 选址 → 库存 → 定价 → 最终 AI 总结", "Launch decision flow: profile → site → inventory → pricing → final AI"),
-        "operations": t("用于日常运营：库存周检、定价执行、运营问诊", "Day-to-day operations: inventory review, pricing execution, ops advisor"),
-        "finance": t("上传财务资料：现金流/利润率/成本/风险/行动清单", "Upload finance docs: cash flow/margins/costs/risks/action plan"),
-    }.get(st.session_state.active_suite, "")
-)
+# ---- state for top entry ----
+if "show_top_chat" not in st.session_state:
+    st.session_state.show_top_chat = False  # 默认不展示对话，避免影响观感
+if "top_chat_collapsed" not in st.session_state:
+    st.session_state.top_chat_collapsed = True  # 默认折叠
+if "top_submit_id" not in st.session_state:
+    st.session_state.top_submit_id = 0
+if "last_handled_submit_id" not in st.session_state:
+    st.session_state.last_handled_submit_id = -1
+if "clear_top_ask_ai" not in st.session_state:
+    st.session_state.clear_top_ask_ai = False
+if "top_last_status" not in st.session_state:
+    st.session_state.top_last_status = ""  # "ready" / ""
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
-    # --- UI toggles (persist in session) ---
-    if "show_top_chat" not in st.session_state:
-        st.session_state.show_top_chat = False   # 默认不展示
-    if "top_chat_collapsed" not in st.session_state:
-        st.session_state.top_chat_collapsed = True  # 默认折叠
+    # 清空输入：必须在 widget 创建之后做（避免 StreamlitAPIException）
+    # 这里用 dict 写法更稳
+    if st.session_state.clear_top_ask_ai:
+        st.session_state.clear_top_ask_ai = False
+        st.session_state["top_ask_ai"] = ""
 
-    # 输入 + 提交（建议你继续用 form 版本，避免重复写入）
+    # --- Input + send (use form to avoid duplicate submissions) ---
     with st.form("top_ai_form", clear_on_submit=False):
         colA, colB = st.columns([3, 1])
         with colA:
@@ -463,63 +447,75 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         with colB:
             submitted = st.form_submit_button(t("发送", "Send"), use_container_width=True)
 
-    # 处理提交（沿用你现有 dedupe 逻辑即可）
-    if "top_submit_id" not in st.session_state:
-        st.session_state.top_submit_id = 0
-    if "last_handled_submit_id" not in st.session_state:
-        st.session_state.last_handled_submit_id = -1
-
+    # --- Handle submit safely (no direct assignment to widget key in same run) ---
     if submitted:
         st.session_state.top_submit_id += 1
 
     if submitted and st.session_state.top_submit_id != st.session_state.last_handled_submit_id:
         st.session_state.last_handled_submit_id = st.session_state.top_submit_id
 
-        q = (st.session_state.top_ask_ai or "").strip()
+        q = (st.session_state.get("top_ask_ai") or "").strip()
         if q:
+            # 只 append 一次，避免重复刷屏
             st.session_state.chat_history.append({"role": "user", "text": q})
+
             mode = st.session_state.active_suite
             with st.spinner(t("分析中…", "Analyzing...")):
                 ans = ask_ai(q, mode=mode)
-            st.session_state.chat_history.append({"role": "ai", "text": ans})
-            st.session_state.top_ask_ai = ""
 
-            # 提交后自动打开“展示开关”，但仍保持折叠（不影响观感）
-            st.session_state.show_top_chat = True
+            st.session_state.chat_history.append({"role": "ai", "text": ans})
+
+            # 标记：下次 rerun 再清空输入框
+            st.session_state.clear_top_ask_ai = True
+
+            # 提交后：不直接展开对话，保持页面干净
+            st.session_state.top_last_status = "ready"
+            st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
 
-    # --- Controls row ---
-    c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 5])
+            st.rerun()
+
+    # --- Status & controls (minimal footprint) ---
+    c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
+
     with c1:
-        st.session_state.show_top_chat = st.toggle(
-            t("展示对话", "Show conversation"),
-            value=st.session_state.show_top_chat
-        )
+        if st.button(t("展示", "Show"), use_container_width=True):
+            st.session_state.show_top_chat = True
+            st.session_state.top_chat_collapsed = False
+            st.rerun()
+
     with c2:
-        if st.button(t("隐藏", "Hide"), use_container_width=True):
+        if st.button(t("收起", "Hide"), use_container_width=True):
             st.session_state.show_top_chat = False
+            st.session_state.top_chat_collapsed = True
+            st.rerun()
+
     with c3:
         if st.button(t("清空", "Clear"), use_container_width=True):
             st.session_state.chat_history = []
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
+            st.session_state.top_last_status = ""
             st.rerun()
 
-    # --- Render chat only if toggled on ---
+    # 右侧状态提示：不占地方但告诉你“有回答了”
+    with c4:
+        if st.session_state.top_last_status == "ready":
+            st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
+
+    # --- Render conversation only when user wants it ---
     if st.session_state.show_top_chat and st.session_state.chat_history:
         with st.expander(t("对话记录", "Conversation"), expanded=not st.session_state.top_chat_collapsed):
-            # 让用户可以一键展开/折叠（更像“收起来/关掉”）
-            cc1, cc2 = st.columns([1, 8])
-            with cc1:
-                if st.button(t("展开/折叠", "Toggle"), key="toggle_chat_fold"):
-                    st.session_state.top_chat_collapsed = not st.session_state.top_chat_collapsed
-                    st.rerun()
+
+            # 只展示最近 6 条，避免太长影响观感
+            recent = st.session_state.chat_history[-6:]
 
             st.markdown("---")
 
-            for m in st.session_state.chat_history[-8:]:
+            for m in recent:
                 role = m.get("role", "")
                 text = (m.get("text") or "")
+
                 safe_text = (
                     text.replace("&", "&amp;")
                         .replace("<", "&lt;")

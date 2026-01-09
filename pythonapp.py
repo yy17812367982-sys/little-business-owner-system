@@ -376,14 +376,6 @@ with st.sidebar:
 # Header + Top Ask AI (landing feature)
 # =========================================================
 st.title("Project B: SME BI Platform")
-else:
-    ai_label = t("Yangyu 的 AI", "Yangyu's AI")
-    safe_ai = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-    st.markdown(
-        f"<div class='card'><b>{ai_label}:</b><br>{safe_ai}</div>",
-        unsafe_allow_html=True
-    )
-
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
     colA, colB = st.columns([3, 1])
@@ -391,7 +383,10 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         user_q = st.text_input(
             t("你想问什么？", "Ask anything..."),
             key="top_ask_ai",
-            placeholder=t("例如：这个地址适合开店吗？我该怎么降库存？", "E.g., Is this site viable? How do I reduce dead stock?")
+            placeholder=t(
+                "例如：这个地址适合开店吗？我该怎么降库存？",
+                "E.g., Is this site viable? How do I reduce dead stock?"
+            )
         )
     with colB:
         send = st.button(t("发送", "Send"), type="primary", use_container_width=True)
@@ -404,28 +399,36 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         st.rerun()
 
     if st.session_state.chat_history:
-    st.markdown("---")
+        st.markdown("---")
 
-    for m in st.session_state.chat_history[-8:]:
-        if m["role"] == "user":
-            safe_user = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-            st.markdown(
-                f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_user}</div>",
-                unsafe_allow_html=True
-            )
-        else:
-            ai_label = t("Yangyu 的 AI", "Yangyu's AI")
-            safe_ai = (m["text"] or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-            st.markdown(
-                f"<div class='card'><b>{ai_label}:</b><br>{safe_ai}</div>",
-                unsafe_allow_html=True
+        for m in st.session_state.chat_history[-8:]:
+            role = m.get("role", "")
+            text = (m.get("text") or "")
+
+            # HTML escape because we use unsafe_allow_html=True
+            safe_text = (
+                text.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
             )
 
-    colc1, colc2 = st.columns([1, 4])
-    with colc1:
-        if st.button(t("清空对话", "Clear Chat")):
-            st.session_state.chat_history = []
-            st.rerun()
+            if role == "user":
+                st.markdown(
+                    f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_text}</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+                st.markdown(
+                    f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>",
+                    unsafe_allow_html=True
+                )
+
+        colc1, colc2 = st.columns([1, 4])
+        with colc1:
+            if st.button(t("清空对话", "Clear Chat")):
+                st.session_state.chat_history = []
+                st.rerun()
 
 
 

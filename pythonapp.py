@@ -24,7 +24,7 @@ else:
     print("🚀 生产模式：使用云端直连网络")
 
 # ==========================================
-# 🔑 API 配置区（强烈建议：只用 secrets / env）
+# 🔑 API 配置区（强烈建议：只用 secrets / v）
 # ==========================================
 # Streamlit Cloud: Settings -> Secrets 添加：
 # GEMINI_API_KEY="你的新key"
@@ -75,14 +75,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 状态管理
+# 状态管理：初始设为英文 (en)
 if "lang" not in st.session_state:
-    st.session_state.lang = "zh"
+    st.session_state.lang = "en"
 
-def t(zh, en):
-    return zh if st.session_state.lang == "zh" else en
+def t(en, zh):  # 交换参数顺序，优先英文
+    return en if st.session_state.lang == "en" else zh
 
 def toggle_language():
-    st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
+    st.session_state.lang = "zh" if st.session_state.lang == "en" else "en"
 
 # ==========================================
 # 🧠 AI 调用函数（带重试 + 429 退避）
@@ -142,7 +143,7 @@ with st.sidebar:
 # 🖥️ 主界面
 # ==========================================
 st.title(t("Project B: 全行业商业智能决策系统", "Project B: SME BI Platform"))
-st.markdown("**Powered by Google Gemini AI**")
+st.markdown("**Enterprise-Grade AI Engine**")
 
 tab1, tab2, tab3 = st.tabs([
     t("📍 智能选址 (Map AI)", "📍 Site Selection"),
@@ -170,7 +171,7 @@ with tab1:
 
     if st.button(t("🚀 AI 分析该地段", "🚀 Analyze Location"), type="primary"):
         prompt = f"分析地址的商业潜力，已知人流量{traffic}，请给出：1.区域画像 2.竞争策略 3.评分(0-100)。"
-        with st.spinner("Gemini is analyzing map data..."):
+        with st.spinner("AI is analyzing..."):
             res = ask_gemini(prompt)
             st.success("Analysis Complete")
             st.write(res)

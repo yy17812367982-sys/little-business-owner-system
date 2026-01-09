@@ -441,56 +441,103 @@ st.caption(
 )
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
-    colA, colB = st.columns([3, 1])
-    with colA:
-        user_q = st.text_input(
-            t("你想问什么？", "Ask anything..."),
-            key="top_ask_ai",
-            placeholder=t(
-                "例如：这个地址适合开店吗？我该怎么降库存？",
-                "E.g., Is this site viable? How do I reduce dead stock?"
+
+    # --- UI toggles (persist in session) ---
+    if "show_top_chat" not in st.session_state:
+        st.session_state.show_top_chat = False   # 默认不展示
+    if "top_chat_collapsed" not in st.session_state:
+        st.session_state.top_chat_collapsed = True  # 默认折叠
+
+    # 输入 + 提交（建议你继续用 form 版本，避免重复写入）
+    with st.form("top_ai_form", clear_on_submit=False):
+        colA, colB = st.columns([3, 1])
+        with colA:
+            user_q = st.text_input(
+                t("你想问什么？", "Ask anything..."),
+                key="top_ask_ai",
+                placeholder=t(
+                    "例如：这个地址适合开店吗？我该怎么降库存？",
+                    "E.g., Is this site viable? How do I reduce dead stock?"
+                )
             )
+        with colB:
+            submitted = st.form_submit_button(t("发送", "Send"), use_container_width=True)
+
+    # 处理提交（沿用你现有 dedupe 逻辑即可）
+    if "top_submit_id" not in st.session_state:
+        st.session_state.top_submit_id = 0
+    if "last_handled_submit_id" not in st.session_state:
+        st.session_state.last_handled_submit_id = -1
+
+    if submitted:
+        st.session_state.top_submit_id += 1
+
+    if submitted and st.session_state.top_submit_id != st.session_state.last_handled_submit_id:
+        st.session_state.last_handled_submit_id = st.session_state.top_submit_id
+
+        q = (st.session_state.top_ask_ai or "").strip()
+        if q:
+            st.session_state.chat_history.append({"role": "user", "text": q})
+            mode = st.session_state.active_suite
+            with st.spinner(t("分析中…", "Analyzing...")):
+                ans = ask_ai(q, mode=mode)
+            st.session_state.chat_history.append({"role": "ai", "text": ans})
+            st.session_state.top_ask_ai = ""
+
+            # 提交后自动打开“展示开关”，但仍保持折叠（不影响观感）
+            st.session_state.show_top_chat = True
+            st.session_state.top_chat_collapsed = True
+
+    # --- Controls row ---
+    c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 5])
+    with c1:
+        st.session_state.show_top_chat = st.toggle(
+            t("展示对话", "Show conversation"),
+            value=st.session_state.show_top_chat
         )
-    with colB:
-        send = st.button(t("发送", "Send"), type="primary", use_container_width=True)
+    with c2:
+        if st.button(t("隐藏", "Hide"), use_container_width=True):
+            st.session_state.show_top_chat = False
+    with c3:
+        if st.button(t("清空", "Clear"), use_container_width=True):
+            st.session_state.chat_history = []
+            st.session_state.show_top_chat = False
+            st.session_state.top_chat_collapsed = True
+            st.rerun()
 
-    if send and user_q.strip():
-        st.session_state.chat_history.append({"role": "user", "text": user_q.strip()})
-        mode = st.session_state.active_suite
-        ans = ask_ai(user_q.strip(), mode=mode)
-        st.session_state.chat_history.append({"role": "ai", "text": ans})
-        st.rerun()
+    # --- Render chat only if toggled on ---
+    if st.session_state.show_top_chat and st.session_state.chat_history:
+        with st.expander(t("对话记录", "Conversation"), expanded=not st.session_state.top_chat_collapsed):
+            # 让用户可以一键展开/折叠（更像“收起来/关掉”）
+            cc1, cc2 = st.columns([1, 8])
+            with cc1:
+                if st.button(t("展开/折叠", "Toggle"), key="toggle_chat_fold"):
+                    st.session_state.top_chat_collapsed = not st.session_state.top_chat_collapsed
+                    st.rerun()
 
-    if st.session_state.chat_history:
-        st.markdown("---")
+            st.markdown("---")
 
-        for m in st.session_state.chat_history[-8:]:
-            role = m.get("role", "")
-            text = (m.get("text") or "")
-
-            safe_text = (
-                text.replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-            )
-
-            if role == "user":
-                st.markdown(
-                    f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_text}</div>",
-                    unsafe_allow_html=True
-                )
-            else:
-                ai_label = t("Yangyu 的 AI", "Yangyu's AI")
-                st.markdown(
-                    f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>",
-                    unsafe_allow_html=True
+            for m in st.session_state.chat_history[-8:]:
+                role = m.get("role", "")
+                text = (m.get("text") or "")
+                safe_text = (
+                    text.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
                 )
 
-        colc1, colc2 = st.columns([1, 4])
-        with colc1:
-            if st.button(t("清空对话", "Clear Chat")):
-                st.session_state.chat_history = []
-                st.rerun()
+                if role == "user":
+                    st.markdown(
+                        f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_text}</div>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+                    st.markdown(
+                        f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>",
+                        unsafe_allow_html=True
+                    )
+
 
 
 # =========================================================

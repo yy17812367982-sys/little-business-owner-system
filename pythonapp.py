@@ -75,17 +75,26 @@ def toggle_language(): st.session_state.lang = 'en' if st.session_state.lang == 
 # 🧠 AI 调用函数
 # ==========================================
 def ask_gemini(prompt_content):
-    """通用 AI 调用接口"""
+    """通用 AI 调用接口 - 2026 最新适配版"""
     try:
         if not API_KEY:
-            time.sleep(2)
-            return "⚠️ API Key Missing. Please configure key."
-        
+            return "⚠️ 请配置 API Key"
+            
+        # 核心修正：必须带上 models/ 前缀，且建议使用最新的 1.5-flash
         model = genai.GenerativeModel('models/gemini-1.5-flash')
-        response = model.generate_content(prompt_content, stream=False)
-        return response.text
+        
+        # 发送请求
+        response = model.generate_content(prompt_content)
+        
+        # 返回结果
+        if response and response.text:
+            return response.text
+        else:
+            return "AI 响应正常但内容为空"
+            
     except Exception as e:
-        return f"AI Service Error: {str(e)}"
+        # 如果报错，会在这里显示具体的诊断信息
+        return f"AI 诊断信息: {str(e)}"
 
 # ==========================================
 # 📱 侧边栏

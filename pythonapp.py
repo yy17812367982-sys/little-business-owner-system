@@ -75,28 +75,25 @@ def toggle_language(): st.session_state.lang = 'en' if st.session_state.lang == 
 # 🧠 AI 调用函数
 # ==========================================
 def ask_gemini(prompt_content):
+    """通用 AI 调用接口 - 终极修复版"""
     try:
         if not API_KEY:
             return "API Key Missing"
         
-        # 强制指定版本号和完整模型路径
-        # 这是解决 404 报错的最稳妥写法
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-        )
+        # 显式指定模型名称，这是目前最稳健的路径
+        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
         
-        # 发送生成请求
+        # 执行生成请求
         response = model.generate_content(prompt_content)
         
-        # 提取文本
         if response.text:
             return response.text
         else:
-            return "AI 响应成功但无内容"
+            return "AI 响应成功但内容为空"
             
     except Exception as e:
         # 这里会打印出具体的错误原因，帮我们做最后诊断
-        return f"诊断信息: {str(e)}"
+        return f"AI 诊断信息: {str(e)}"
 
 # ==========================================
 # 📱 侧边栏

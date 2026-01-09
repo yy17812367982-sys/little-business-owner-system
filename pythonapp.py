@@ -26,6 +26,7 @@ st.markdown("""
         background-attachment: fixed;
     }
     .block-container { padding-top: 1.1rem; }
+
     .stMarkdown, .stMetric, .stRadio, .stSelectbox, .stTextInput, .stNumberInput, .stTextArea, .stFileUploader {
         background-color: rgba(20, 20, 20, 0.82);
         padding: 14px;
@@ -33,11 +34,14 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.08);
         color: white !important;
     }
+
     h1, h2, h3, p, label, span, div {
         color: #ffffff !important;
         text-shadow: 0px 0px 5px rgba(0,0,0,0.75);
     }
+
     section[data-testid="stSidebar"] { background-color: rgba(0, 0, 0, 0.9); }
+
     .pill {
         display:inline-block;
         padding: 6px 10px;
@@ -47,12 +51,26 @@ st.markdown("""
         margin-right: 8px;
         font-size: 0.9rem;
     }
+
     .card {
         background: rgba(0,0,0,0.30);
         border: 1px solid rgba(255,255,255,0.10);
         border-radius: 14px;
         padding: 14px 16px;
         margin: 8px 0;
+    }
+
+    .workspace-wrap {
+        margin: 10px 0 14px 0;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.10);
+        background: rgba(0,0,0,0.35);
+    }
+    .workspace-title {
+        font-size: 0.95rem;
+        opacity: 0.92;
+        margin-bottom: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -80,6 +98,7 @@ try:
     API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 except Exception:
     API_KEY = ""
+
 if not API_KEY:
     API_KEY = os.getenv("GEMINI_API_KEY", "")
 
@@ -94,7 +113,7 @@ You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
 Rules:
 - NEVER mention any underlying model/provider/vendor or internal API names.
 - If asked "Who are you?", "What model are you?", "Are you Gemini?" or similar:
-  answer: "I'm Yangyu's AI assistant." (and optionally explain you are an AI helper inside this platform).
+  answer: "I'm Yangyu's AI assistant." and optionally explain you are an AI helper inside this platform.
 - Keep outputs structured and actionable; prefer bullet points, metrics, and next steps.
 - If user requests sensitive/illegal help, refuse briefly and offer safe alternatives.
 """
@@ -311,7 +330,7 @@ def build_open_store_report_md() -> str:
 def read_uploaded_to_text(files) -> str:
     """
     Convert user uploaded documents into plain text summary for AI prompt.
-    Supports: CSV/XLSX/TXT/MD (simple). PDFs not handled here (keep minimal, safe).
+    Supports: CSV/XLSX/TXT/MD (simple). PDFs not handled here.
     """
     chunks = []
     for f in files:
@@ -325,7 +344,6 @@ def read_uploaded_to_text(files) -> str:
                 chunks.append(f"## {f.name}\n{df.head(50).to_string(index=False)}\n")
             elif name.endswith(".txt") or name.endswith(".md"):
                 text = f.read().decode("utf-8", errors="ignore")
-                # cap size
                 chunks.append(f"## {f.name}\n{text[:8000]}\n")
             else:
                 chunks.append(f"## {f.name}\n[Unsupported file type for text extraction in this version]\n")
@@ -335,7 +353,7 @@ def read_uploaded_to_text(files) -> str:
 
 
 # =========================================================
-# Sidebar (suite switching + username + language)
+# Sidebar (language + username + status only)
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
@@ -353,29 +371,44 @@ with st.sidebar:
         st.warning(st.session_state.register_msg)
 
     st.markdown("---")
-    st.caption(t("功能集合", "Suites"))
-    suite = st.radio(
-        "",
-        options=["open_store", "operations", "finance"],
-        format_func=lambda x: {
-            "open_store": t("开店", "Open a Store"),
-            "operations": t("运营", "Operations"),
-            "finance": t("财务分析", "Financial Analysis")
-        }[x],
-        index=["open_store","operations","finance"].index(st.session_state.active_suite)
-    )
-    if suite != st.session_state.active_suite:
-        st.session_state.active_suite = suite
-        st.rerun()
-
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.0 Suites Edition")
+    st.caption("v5.1 Prominent Suites")
 
 
 # =========================================================
-# Header + Top Ask AI (landing feature)
+# Header + Prominent Suites + Top Ask AI
 # =========================================================
 st.title("Project B: SME BI Platform")
+
+# Prominent suites selector (center stage)
+st.markdown(
+    f"<div class='workspace-wrap'>"
+    f"<div class='workspace-title'><b>{t('功能集合', 'Suites')}</b> · {t('选择一个工作台', 'Pick a workspace')}</div>"
+    f"</div>",
+    unsafe_allow_html=True
+)
+
+w1, w2, w3 = st.columns(3)
+
+def suite_btn(label_zh: str, label_en: str, key: str, col):
+    selected = (st.session_state.active_suite == key)
+    label = f"✅ {t(label_zh, label_en)}" if selected else t(label_zh, label_en)
+    with col:
+        if st.button(label, use_container_width=True):
+            st.session_state.active_suite = key
+            st.rerun()
+
+suite_btn("🏪 开店", "🏪 Open a Store", "open_store", w1)
+suite_btn("⚙️ 运营", "⚙️ Operations", "operations", w2)
+suite_btn("💰 财务分析", "💰 Financial Analysis", "finance", w3)
+
+st.caption(
+    {
+        "open_store": t("用于开店决策流：画像 → 选址 → 库存 → 定价 → 最终 AI 总结", "Launch decision flow: profile → site → inventory → pricing → final AI"),
+        "operations": t("用于日常运营：库存周检、定价执行、运营问诊", "Day-to-day operations: inventory review, pricing execution, ops advisor"),
+        "finance": t("上传财务资料：现金流/利润率/成本/风险/行动清单", "Upload finance docs: cash flow/margins/costs/risks/action plan"),
+    }.get(st.session_state.active_suite, "")
+)
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
     colA, colB = st.columns([3, 1])
@@ -405,7 +438,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
             role = m.get("role", "")
             text = (m.get("text") or "")
 
-            # HTML escape because we use unsafe_allow_html=True
             safe_text = (
                 text.replace("&", "&amp;")
                     .replace("<", "&lt;")
@@ -429,10 +461,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
             if st.button(t("清空对话", "Clear Chat")):
                 st.session_state.chat_history = []
                 st.rerun()
-
-
-
-
 
 
 # =========================================================
@@ -479,16 +507,22 @@ def render_open_store():
                     p["business_type"] if p["business_type"] in ["Auto Parts Store","Convenience Store","Coffee Shop","Restaurant","Beauty Salon","Other"] else "Other"
                 )
             )
-            p["stage"] = st.selectbox(t("阶段", "Stage"), ["Planning", "Open Soon", "Operating", "Expansion"],
-                                      index=["Planning","Open Soon","Operating","Expansion"].index(p["stage"]) if p["stage"] in ["Planning","Open Soon","Operating","Expansion"] else 0)
+            p["stage"] = st.selectbox(
+                t("阶段", "Stage"),
+                ["Planning", "Open Soon", "Operating", "Expansion"],
+                index=["Planning","Open Soon","Operating","Expansion"].index(p["stage"]) if p["stage"] in ["Planning","Open Soon","Operating","Expansion"] else 0
+            )
             p["city"] = st.text_input(t("城市", "City"), p["city"])
         with col2:
             p["budget"] = st.number_input(t("初始预算（美元）", "Initial Budget (USD)"), min_value=0, value=int(p["budget"]), step=1000)
             p["target_customer"] = st.text_input(t("目标客户", "Target Customer"), p["target_customer"])
             p["differentiator"] = st.text_input(t("差异化", "Differentiator"), p["differentiator"])
 
-        p["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), p["notes"],
-                                  placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc."))
+        p["notes"] = st.text_area(
+            t("备注（可选）", "Notes (optional)"),
+            p["notes"],
+            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
+        )
 
     # ---- Step 2
     elif st.session_state.open_step == 2:
@@ -497,15 +531,16 @@ def render_open_store():
         colA, colB = st.columns([1, 2])
         with colA:
             s["address"] = st.text_input(t("地址", "Address"), s["address"])
-            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0],
-                                             index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
+            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
             s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
             s["competitors"] = st.number_input(t("竞品数量（估计）", "Competitors (estimated)"), min_value=0, value=int(s["competitors"]), step=1)
             s["parking"] = st.selectbox(t("停车便利", "Parking"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["parking"]))
             s["rent_level"] = st.selectbox(t("租金水平", "Rent Level"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["rent_level"]))
-            s["foot_traffic_source"] = st.selectbox(t("客流来源", "Foot Traffic Source"),
-                                                    ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
-                                                    index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"]))
+            s["foot_traffic_source"] = st.selectbox(
+                t("客流来源", "Foot Traffic Source"),
+                ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
+                index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
+            )
         with colB:
             st.subheader(t("地图预览（演示）", "Map Preview (demo)"))
             base_lat, base_lon = 40.7590, -73.8290
@@ -538,11 +573,9 @@ def render_open_store():
         with col1:
             inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
             inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
-            inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
-                                              index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+            inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"], index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
-            inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                        placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+            inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"], placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -595,19 +628,18 @@ def render_open_store():
 
         col1, col2 = st.columns([1, 1])
         with col1:
-            pr["strategy"] = st.selectbox(t("定价策略", "Strategy"),
-                                         ["Competitive", "Value-based", "Premium", "Penetration"],
-                                         index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]))
+            pr["strategy"] = st.selectbox(
+                t("定价策略", "Strategy"),
+                ["Competitive", "Value-based", "Premium", "Penetration"],
+                index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"])
+            )
             pr["cost"] = st.number_input(t("单位成本（美元）", "Unit Cost (USD)"), min_value=0.0, value=float(pr["cost"]), step=1.0)
             pr["competitor_price"] = st.number_input(t("竞品价格（美元）", "Competitor Price (USD)"), min_value=0.0, value=float(pr["competitor_price"]), step=1.0)
 
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
-            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"),
-                                           ["Low", "Medium", "High"],
-                                           index=["Low","Medium","High"].index(pr["elasticity"]))
-            pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
-                                      placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(pr["elasticity"]))
+            pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"], placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
@@ -694,7 +726,10 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
 def render_operations():
     st.header(t("运营（帮助企业跑起来）", "Operations (Run the business)"))
 
-    st.markdown(f"<div class='card'>{t('这里更偏“日常运营”：库存周报、补货策略、促销触发、SOP 检查表等。', 'This suite focuses on day-to-day operations: weekly inventory review, replenishment rules, promo triggers, SOP checklists.')}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='card'>{t('这里更偏“日常运营”：库存周报、补货策略、促销触发、SOP 检查表等。', 'This suite focuses on day-to-day operations: weekly inventory review, replenishment rules, promo triggers, SOP checklists.')}</div>",
+        unsafe_allow_html=True
+    )
 
     tab_ops1, tab_ops2, tab_ops3 = st.tabs([
         t("库存周检", "Inventory Weekly Review"),
@@ -702,7 +737,6 @@ def render_operations():
         t("运营问诊", "Ops Advisor")
     ])
 
-    # Inventory Weekly Review
     with tab_ops1:
         inv = st.session_state.inventory
         st.subheader(t("库存周检（数据+指标）", "Inventory Weekly Review (Data + Metrics)"))
@@ -746,7 +780,6 @@ def render_operations():
             st.checkbox(t("设置补货阈值（销量×交期×安全系数）", "Set replenishment thresholds (sales × lead time × safety factor)"))
             st.checkbox(t("把库存周报发给负责人并约 15 分钟复盘", "Send weekly report and run a 15-min review"))
 
-    # Pricing Execution
     with tab_ops2:
         pr = st.session_state.pricing
         st.subheader(t("定价执行（从策略到动作）", "Pricing Execution (From strategy to actions)"))
@@ -771,7 +804,6 @@ def render_operations():
         st.write(t("- 每周固定一天复盘：销量、毛利、投诉、缺货率。", "- Weekly review: sales, margin, complaints, stockout rate."))
         st.write(t("- 促销触发：滞销>2个月 或 库存周转>目标两倍。", "- Promo triggers: dead-stock >2 months or turnover >2× target."))
 
-    # Ops Advisor (AI)
     with tab_ops3:
         st.subheader(t("运营问诊（AI）", "Operations Advisor (AI)"))
         q = st.text_area(
@@ -791,7 +823,10 @@ def render_operations():
 def render_finance():
     st.header(t("财务分析（上传资料 → AI 指导）", "Financial Analysis (Upload docs → AI guidance)"))
 
-    st.markdown(f"<div class='card'>{t('上传你自己的财务资料（CSV/XLSX/TXT），AI 会做结构化分析：现金流、利润率、成本项、风险点、下一步动作。', 'Upload your own finance materials (CSV/XLSX/TXT). AI will produce a structured analysis: cash flow, margins, costs, risks, next actions.')}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='card'>{t('上传你自己的财务资料（CSV/XLSX/TXT），AI 会做结构化分析：现金流、利润率、成本项、风险点、下一步动作。', 'Upload your own finance materials (CSV/XLSX/TXT). AI will produce a structured analysis: cash flow, margins, costs, risks, next actions.')}</div>",
+        unsafe_allow_html=True
+    )
 
     files = st.file_uploader(
         t("上传资料（可多选）", "Upload files (multi)"),

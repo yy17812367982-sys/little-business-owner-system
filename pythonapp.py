@@ -81,8 +81,8 @@ def ask_gemini(prompt_content):
             time.sleep(2)
             return "⚠️ API Key Missing. Please configure key."
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt_content)
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        response = model.generate_content(prompt_content, stream=False)
         return response.text
     except Exception as e:
         return f"AI Service Error: {str(e)}"

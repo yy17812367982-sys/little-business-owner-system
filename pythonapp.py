@@ -17,247 +17,130 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown(r"""
+st.markdown("""
 <style>
-/* =======================
-   0) Background + layout
-   ======================= */
-.stApp{
-  background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-  background-size:cover;
-  background-position:center;
-  background-attachment:fixed;
+
+/* ---------- 全局背景 ---------- */
+.stApp {
+    background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
 }
 
-/* Add a dark veil so content is readable */
-.stApp::before{
-  content:"";
-  position:fixed;
-  inset:0;
-  background: radial-gradient(1200px 600px at 30% 20%, rgba(255,255,255,0.06), transparent 60%),
-              radial-gradient(900px 500px at 80% 30%, rgba(255,74,94,0.05), transparent 55%),
-              linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0.58));
-  pointer-events:none;
-  z-index:0;
-}
-.block-container{
-  position:relative;
-  z-index:1;
-  padding-top: 1.1rem;
-  max-width: 1400px;
+.block-container {
+    padding-top: 1.2rem;
 }
 
-/* =======================
-   1) Tokens
-   ======================= */
-:root{
-  --panel: rgba(14, 18, 28, 0.62);
-  --panel2: rgba(14, 18, 28, 0.78);
-  --border: rgba(255,255,255,0.10);
-  --border2: rgba(255,255,255,0.16);
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.70);
-  --accent: rgba(255,74,94,0.95);
-  --accentSoft: rgba(255,74,94,0.18);
-  --shadow: 0 14px 40px rgba(0,0,0,0.40);
-  --r: 16px;
-  --r2: 18px;
+/* ---------- 所有控件统一风格 ---------- */
+input, textarea, select, .stTextInput input, .stNumberInput input,
+.stSelectbox div[data-baseweb], .stTextArea textarea {
+    background: rgba(20, 25, 35, 0.55) !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    backdrop-filter: blur(6px);
 }
 
-/* =======================
-   2) Typography
-   ======================= */
-h1, h2, h3, p, label, span, div{
-  color: var(--text) !important;
-  text-shadow: 0 0 10px rgba(0,0,0,0.55);
-}
-small, .stCaption { color: var(--muted) !important; }
-
-/* =======================
-   3) Sidebar
-   ======================= */
-section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.72);
-  border-right: 1px solid var(--border);
-}
-section[data-testid="stSidebar"] *{
-  text-shadow: none !important;
+/* placeholder 颜色 */
+input::placeholder, textarea::placeholder {
+    color: rgba(255,255,255,0.45) !important;
 }
 
-/* =======================
-   4) Reusable cards
-   ======================= */
-.card{
-  background: rgba(0,0,0,0.22);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: 14px 16px;
-  margin: 10px 0;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
-}
-.glass{
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(16px);
-}
-.pill{
-  display:inline-block;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(0,0,0,0.22);
-  margin-right: 8px;
-  font-size: 0.9rem;
-  color: var(--muted) !important;
+/* ---------- 卡片样式 ---------- */
+.card {
+    background: rgba(20,25,35,0.55);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 16px 18px;
+    margin: 10px 0;
+    backdrop-filter: blur(8px);
 }
 
-/* =======================
-   5) BaseWeb inputs (关键：把灰白塑料感干掉)
-   ======================= */
-/* Text input / textarea outer */
-div[data-baseweb="input"] > div,
-div[data-baseweb="textarea"] > div{
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r2) !important;
-  box-shadow: none !important;
-}
-/* Focus ring */
-div[data-baseweb="input"] > div:focus-within,
-div[data-baseweb="textarea"] > div:focus-within,
-div[data-baseweb="select"] > div:focus-within{
-  border-color: rgba(255,74,94,0.50) !important;
-  box-shadow: 0 0 0 4px rgba(255,74,94,0.12) !important;
+/* ---------- expander ---------- */
+details {
+    background: rgba(20,25,35,0.5);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 4px 10px;
 }
 
-/* Actual input text */
-input, textarea{
-  color: var(--text) !important;
-  caret-color: rgba(255,255,255,0.95) !important;
-}
-input::placeholder, textarea::placeholder{
-  color: rgba(255,255,255,0.45) !important;
+/* expander header */
+summary {
+    color: white !important;
+    font-weight: 600;
 }
 
-/* Select */
-div[data-baseweb="select"] > div{
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r2) !important;
-}
-div[data-baseweb="select"] span{
-  color: var(--text) !important;
+/* ---------- sidebar ---------- */
+section[data-testid="stSidebar"] {
+    background: rgba(10,12,20,0.85);
+    backdrop-filter: blur(8px);
 }
 
-/* Number input: the +/- buttons */
-button[aria-label="Increment"], button[aria-label="Decrement"]{
-  background: rgba(255,255,255,0.08) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 12px !important;
-}
-button[aria-label="Increment"]:hover, button[aria-label="Decrement"]:hover{
-  border-color: rgba(255,255,255,0.22) !important;
+/* ---------- 所有文字 ---------- */
+h1, h2, h3, h4, label, span, p, div {
+    color: #ffffff !important;
+    text-shadow: 0 0 4px rgba(0,0,0,0.7);
 }
 
-/* File uploader */
-section[data-testid="stFileUploaderDropzone"]{
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px dashed rgba(255,255,255,0.18) !important;
-  border-radius: var(--r2) !important;
+/* ---------- 按钮 ---------- */
+button {
+    background: linear-gradient(135deg, #2a5cff, #00c6ff) !important;
+    border: none !important;
+    color: white !important;
+    border-radius: 12px !important;
+    padding: 0.6rem 1.2rem !important;
 }
 
-/* =======================
-   6) Buttons
-   ======================= */
-.stButton > button{
-  border-radius: var(--r2) !important;
-  border: 1px solid var(--border2) !important;
-  background: rgba(255,255,255,0.06) !important;
-  color: var(--text) !important;
-  transition: all .18s ease;
-  box-shadow: none !important;
-}
-.stButton > button:hover{
-  transform: translateY(-1px);
-  background: rgba(255,255,255,0.10) !important;
-  border-color: rgba(255,255,255,0.26) !important;
-}
-.stButton > button[kind="primary"]{
-  background: linear-gradient(135deg, rgba(255,74,94,0.98), rgba(255,74,94,0.60)) !important;
-  border: 1px solid rgba(255,74,94,0.60) !important;
-  color: #fff !important;
-}
-.stButton > button[kind="primary"]:hover{
-  filter: brightness(1.06);
+button:hover {
+    filter: brightness(1.15);
+    transform: scale(1.02);
 }
 
-/* =======================
-   7) Tabs
-   ======================= */
-div[data-baseweb="tab-list"]{
-  background: rgba(0,0,0,0.18) !important;
-  border: 1px solid var(--border);
-  border-radius: 999px !important;
-  padding: 6px !important;
-}
-button[role="tab"]{
-  border-radius: 999px !important;
-  color: var(--muted) !important;
-}
-button[role="tab"][aria-selected="true"]{
-  background: var(--accentSoft) !important;
-  border: 1px solid rgba(255,74,94,0.22) !important;
-  color: var(--text) !important;
+/* ---------- 进度条 ---------- */
+div[data-testid="stProgress"] > div > div {
+    background: linear-gradient(90deg, #00c6ff, #2a5cff);
 }
 
-/* =======================
-   8) Expander
-   ======================= */
-details{
-  border: 1px solid var(--border) !important;
-  border-radius: var(--r2) !important;
-  background: rgba(0,0,0,0.16) !important;
-  box-shadow: var(--shadow);
-  overflow:hidden;
-}
-details summary{
-  padding: 10px 14px !important;
-}
-details summary p{
-  margin:0 !important;
-  font-weight: 700;
+/* ---------- tabs ---------- */
+div[data-baseweb="tab-list"] {
+    background: rgba(20,25,35,0.6);
+    border-radius: 14px;
+    padding: 6px;
 }
 
-/* =======================
-   9) Metrics
-   ======================= */
-div[data-testid="stMetric"]{
-  background: rgba(0,0,0,0.20);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: 12px 14px;
-  box-shadow: var(--shadow);
+div[data-baseweb="tab"] {
+    color: white;
 }
 
-/* =======================
-   10) Remove the ugly white padding blocks around markdown containers (optional)
-   ======================= */
-.stMarkdown, .stTextInput, .stNumberInput, .stTextArea, .stSelectbox, .stFileUploader{
-  background: transparent !important;
-  padding: 0 !important;
-  border: none !important;
+/* ---------- radio ---------- */
+div[role="radiogroup"] label {
+    background: rgba(20,25,35,0.55);
+    padding: 6px 10px;
+    border-radius: 10px;
+    margin-bottom: 6px;
 }
 
-/* Optional: reduce widget label spacing */
-div[data-testid="stWidgetLabel"] > label{
-  font-weight: 650;
-  color: rgba(255,255,255,0.88) !important;
+/* ---------- metric ---------- */
+div[data-testid="stMetric"] {
+    background: rgba(20,25,35,0.55);
+    border-radius: 14px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
 }
+
+/* ---------- scrollbar ---------- */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+}
+
 </style>
 """, unsafe_allow_html=True)
+
 
 
 

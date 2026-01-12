@@ -19,61 +19,195 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stApp {
-        background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }
-    .block-container { padding-top: 1.1rem; }
+/* ---------- Theme tokens ---------- */
+:root{
+  --bg: rgba(8, 10, 16, 0.55);
+  --panel: rgba(18, 22, 34, 0.62);
+  --panel2: rgba(18, 22, 34, 0.78);
+  --border: rgba(255,255,255,0.10);
+  --border2: rgba(255,255,255,0.14);
+  --text: rgba(255,255,255,0.92);
+  --muted: rgba(255,255,255,0.72);
+  --accent: rgba(255, 74, 94, 0.95);
+  --accent2: rgba(255, 74, 94, 0.20);
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
+  --radius: 16px;
+}
 
-    .stMarkdown, .stMetric, .stRadio, .stSelectbox, .stTextInput, .stNumberInput, .stTextArea, .stFileUploader {
-        background-color: rgba(20, 20, 20, 0.82);
-        padding: 14px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        color: white !important;
-    }
+/* ---------- App background ---------- */
+.stApp{
+  background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+.block-container{ padding-top: 1rem; }
 
-    h1, h2, h3, p, label, span, div {
-        color: #ffffff !important;
-        text-shadow: 0px 0px 5px rgba(0,0,0,0.75);
-    }
+/* ---------- Global typography ---------- */
+h1, h2, h3, p, label, span, div{
+  color: var(--text) !important;
+  text-shadow: 0 0 8px rgba(0,0,0,0.55);
+}
+small, .stCaption { color: var(--muted) !important; }
 
-    section[data-testid="stSidebar"] { background-color: rgba(0, 0, 0, 0.9); }
+/* ---------- Sidebar ---------- */
+section[data-testid="stSidebar"]{
+  background: rgba(0,0,0,0.78);
+  border-right: 1px solid var(--border);
+}
 
-    .pill {
-        display:inline-block;
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.15);
-        background: rgba(0,0,0,0.35);
-        margin-right: 8px;
-        font-size: 0.9rem;
-    }
+/* ---------- Glass card helpers ---------- */
+.glass{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+.card{
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 10px 0;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.28);
+  backdrop-filter: blur(10px);
+}
+.pill{
+  display:inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.28);
+  margin-right: 8px;
+  font-size: 0.9rem;
+  color: var(--muted) !important;
+}
 
-    .card {
-        background: rgba(0,0,0,0.30);
-        border: 1px solid rgba(255,255,255,0.10);
-        border-radius: 14px;
-        padding: 14px 16px;
-        margin: 8px 0;
-    }
+/* ---------- Inputs ---------- */
+div[data-baseweb="input"] > div,
+div[data-baseweb="textarea"] > div{
+  background: rgba(0,0,0,0.28) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+input, textarea{
+  color: var(--text) !important;
+}
+input::placeholder, textarea::placeholder{
+  color: rgba(255,255,255,0.45) !important;
+}
+div[data-baseweb="select"] > div{
+  background: rgba(0,0,0,0.28) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+}
 
-    .workspace-wrap {
-        margin: 10px 0 14px 0;
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(0,0,0,0.35);
-    }
-    .workspace-title {
-        font-size: 0.95rem;
-        opacity: 0.92;
-        margin-bottom: 10px;
-    }
+/* ---------- Buttons ---------- */
+.stButton > button{
+  border-radius: 14px !important;
+  border: 1px solid var(--border2) !important;
+  background: rgba(0,0,0,0.18) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+  transition: all .18s ease;
+}
+.stButton > button:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.22) !important;
+  background: rgba(0,0,0,0.28) !important;
+}
+.stButton > button[kind="primary"]{
+  background: linear-gradient(135deg, rgba(255,74,94,0.95), rgba(255,74,94,0.60)) !important;
+  border: 1px solid rgba(255,74,94,0.65) !important;
+  color: white !important;
+}
+.stButton > button[kind="primary"]:hover{
+  filter: brightness(1.06);
+}
+
+/* ---------- Expander ---------- */
+details{
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  background: rgba(0,0,0,0.20) !important;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+details summary{
+  padding: 10px 14px !important;
+}
+details summary p{
+  margin: 0 !important;
+  font-weight: 600;
+}
+
+/* ---------- Tabs ---------- */
+div[data-baseweb="tab-list"]{
+  background: rgba(0,0,0,0.18) !important;
+  border: 1px solid var(--border);
+  border-radius: 999px !important;
+  padding: 6px !important;
+}
+button[role="tab"]{
+  border-radius: 999px !important;
+  color: var(--muted) !important;
+}
+button[role="tab"][aria-selected="true"]{
+  background: rgba(255,74,94,0.18) !important;
+  color: var(--text) !important;
+  border: 1px solid rgba(255,74,94,0.25) !important;
+}
+
+/* ---------- Metrics ---------- */
+div[data-testid="stMetric"]{
+  background: rgba(0,0,0,0.20);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+/* ---------- Radio pills (for top suite switch) ---------- */
+.suitebar{
+  display:flex;
+  gap: 12px;
+  margin: 8px 0 14px 0;
+}
+.suitebtn{
+  flex:1;
+  padding: 14px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,0.20);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+.suitebtn:hover{
+  border-color: rgba(255,255,255,0.18);
+  transform: translateY(-1px);
+}
+.suitebtn.active{
+  border-color: rgba(255,74,94,0.55);
+  background: rgba(255,74,94,0.14);
+}
+.suitebtn .title{
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.suitebtn .desc{
+  margin-top: 4px;
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.70);
+}
+
+/* ---------- Hide Streamlit footer/menu if you want ---------- */
+/* #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} */
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # =========================================================

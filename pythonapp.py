@@ -227,18 +227,30 @@ Rules:
 """
 
 # 你可以按需调整优先级：越靠前越先尝试
-MODEL_CANDIDATES = [
-    "gemini-1.5-pro",
+# =========================================================
+# Model routing (Pro-first with fallback)
+# =========================================================
+# 你可以在这里调整优先级：越靠前越先尝试
+MODEL_CANDIDATES_PRO = [
+    "gemini-3-pro-preview",  # 最强，但通常需要 Paid（Free tier Not available）
+    "gemini-2.5-pro",        # 强推理/代码；Free tier 有但额度/速率会卡
+    "gemini-3-flash-preview",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
 ]
 
+MODEL_CANDIDATES_FAST = [
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",        # fast 模式兜底也可以试试 pro
+]
+
+# UI: 让你在侧边栏一键选择“追求最强 / 追求速度”
+if "ai_quality" not in st.session_state:
+    st.session_state.ai_quality = "pro"  # pro / fast
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:
-        return t("AI 服务未配置（请在 Secrets 或环境变量里配置 GEMINI_API_KEY）。",
-                 "AI service is not configured (set GEMINI_API_KEY in Secrets or env).")
+        return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。", "AI service is not configured (missing GEMINI_API_KEY or client).")
 
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
@@ -249,14 +261,13 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
-    # retry policy
-    max_attempts = 3
-    base_sleep = 1.2
+    # 选择候选模型列表
+    models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
 
     last_err = None
-
-    for model_name in MODEL_CANDIDATES:
-        for attempt in range(1, max_attempts + 1):
+    # 每个模型给 2 次机会（主要为 429/配额抖动）
+    for model_name in models:
+        for attempt in range(2):
             try:
                 resp = client.models.generate_content(
                     model=model_name,
@@ -264,31 +275,30 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
                 )
                 text = getattr(resp, "text", None)
                 if text and str(text).strip():
-                    return str(text).strip()
-                # 空返回也算失败，继续尝试别的模型
-                last_err = f"empty_response model={model_name}"
-                break
-
+                    return text
+                last_err = f"Empty response from {model_name}"
             except Exception as e:
                 msg = str(e)
-                last_err = f"model={model_name} attempt={attempt} err={msg}"
-                print("[AI_ERROR]", last_err)
+                last_err = f"{model_name}: {msg}"
 
-                # 429/限流：退避重试
+                # 常见：限流/配额/资源不足 → 稍等重试，然后换模型
                 if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
-                    time.sleep(base_sleep * (2 ** (attempt - 1)) + random.random())
+                    time.sleep(1.2 + random.random())
                     continue
 
-                # 模型不存在/不支持：换模型
-                if ("404" in msg) or ("not found" in msg.lower()) or ("unsupported" in msg.lower()):
+                # 某些模型在 Free tier 直接不可用/权限不够 → 直接换下一个
+                if ("Not available" in msg) or ("PERMISSION_DENIED" in msg) or ("403" in msg):
                     break
 
-                # 其他错误：直接给用户友好提示（不暴露供应商）
-                return t("AI 暂时不可用，请稍后重试。", "AI is temporarily unavailable. Please try again.")
+                # 其它异常：也换下一个模型
+                break
 
-    # 所有模型都失败
-    print("[AI_FATAL]", last_err)
-    return t("AI 暂时不可用，请稍后重试。", "AI is temporarily unavailable. Please try again.")
+    # 全部失败：给用户一个“可操作”的报错方向
+    return t(
+        f"AI 暂时不可用。可能原因：免费额度/限流、或所选模型需要开通 Paid。最后错误：{last_err}",
+        f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
+    )
+
 
 
 

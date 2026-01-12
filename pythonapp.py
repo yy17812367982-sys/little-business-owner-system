@@ -19,124 +19,163 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-
-/* ---------- 全局背景 ---------- */
-.stApp {
-    background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
+/* 背景 */
+.stApp{
+  background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
 }
+.block-container{ padding-top: 1.1rem; }
 
-.block-container {
-    padding-top: 1.2rem;
-}
-
-/* ---------- 所有控件统一风格 ---------- */
-input, textarea, select, .stTextInput input, .stNumberInput input,
-.stSelectbox div[data-baseweb], .stTextArea textarea {
-    background: rgba(20, 25, 35, 0.55) !important;
-    color: #ffffff !important;
-    border-radius: 12px !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
-    backdrop-filter: blur(6px);
+/* 统一：把“白底区域”都变透明 */
+div[data-testid="stAppViewContainer"],
+div[data-testid="stMain"],
+div[data-testid="stHeader"],
+div[data-testid="stToolbar"]{
+  background: transparent !important;
 }
 
-/* placeholder 颜色 */
-input::placeholder, textarea::placeholder {
-    color: rgba(255,255,255,0.45) !important;
+/* 侧边栏玻璃 */
+section[data-testid="stSidebar"]{
+  background: rgba(0,0,0,0.35) !important;
+  backdrop-filter: blur(10px);
+  border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* ---------- 卡片样式 ---------- */
-.card {
-    background: rgba(20,25,35,0.55);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 16px;
-    padding: 16px 18px;
-    margin: 10px 0;
-    backdrop-filter: blur(8px);
+/* 标题文字统一白 */
+h1,h2,h3,h4,p,label,span,div{
+  color:#fff !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-/* ---------- expander ---------- */
-details {
-    background: rgba(20,25,35,0.5);
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.12);
-    padding: 4px 10px;
+/* ===== 关键：BaseWeb/Streamlit 控件全透明玻璃化 ===== */
+
+/* 所有输入类外壳（selectbox、multiselect、number、text、textarea等） */
+div[data-baseweb="input"],
+div[data-baseweb="base-input"],
+div[data-baseweb="select"],
+div[data-baseweb="textarea"],
+div[data-baseweb="popover"],
+div[data-baseweb="input"] > div,
+div[data-baseweb="base-input"] > div{
+  background: rgba(0,0,0,0.28) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+  box-shadow: none !important;
 }
 
-/* expander header */
-summary {
-    color: white !important;
-    font-weight: 600;
+/* 真正的 input / textarea 本体透明 */
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea{
+  background: transparent !important;
+  color: #fff !important;
 }
 
-/* ---------- sidebar ---------- */
-section[data-testid="stSidebar"] {
-    background: rgba(10,12,20,0.85);
-    backdrop-filter: blur(8px);
+/* placeholder */
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder{
+  color: rgba(255,255,255,0.45) !important;
 }
 
-/* ---------- 所有文字 ---------- */
-h1, h2, h3, h4, label, span, p, div {
-    color: #ffffff !important;
-    text-shadow: 0 0 4px rgba(0,0,0,0.7);
+/* selectbox 当前值那一条（避免白块） */
+div[data-baseweb="select"] *{
+  background: transparent !important;
+  color: #fff !important;
 }
 
-/* ---------- 按钮 ---------- */
-button {
-    background: linear-gradient(135deg, #2a5cff, #00c6ff) !important;
-    border: none !important;
-    color: white !important;
-    border-radius: 12px !important;
-    padding: 0.6rem 1.2rem !important;
+/* 下拉菜单弹层也玻璃化（否则点开一片白） */
+div[role="listbox"]{
+  background: rgba(0,0,0,0.60) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  backdrop-filter: blur(14px);
+}
+div[role="option"]{
+  background: transparent !important;
+  color:#fff !important;
+}
+div[role="option"]:hover{
+  background: rgba(255,255,255,0.10) !important;
 }
 
-button:hover {
-    filter: brightness(1.15);
-    transform: scale(1.02);
+/* expander：把那条白色标题栏干掉 */
+details, summary{
+  background: rgba(0,0,0,0.20) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+}
+summary{
+  padding: 8px 12px !important;
 }
 
-/* ---------- 进度条 ---------- */
-div[data-testid="stProgress"] > div > div {
-    background: linear-gradient(90deg, #00c6ff, #2a5cff);
+/* dataframe/table 背景也不要白 */
+div[data-testid="stDataFrame"]{
+  background: rgba(0,0,0,0.20) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+}
+div[data-testid="stDataFrame"] *{
+  background: transparent !important;
+  color:#fff !important;
 }
 
-/* ---------- tabs ---------- */
-div[data-baseweb="tab-list"] {
-    background: rgba(20,25,35,0.6);
-    border-radius: 14px;
-    padding: 6px;
+/* metric 卡片透明 */
+div[data-testid="stMetric"]{
+  background: rgba(0,0,0,0.22) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
 }
 
-div[data-baseweb="tab"] {
-    color: white;
+/* tabs 顶部条透明 */
+div[data-baseweb="tab-list"]{
+  background: rgba(0,0,0,0.22) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+}
+div[data-baseweb="tab"]{
+  color:#fff !important;
 }
 
-/* ---------- radio ---------- */
-div[role="radiogroup"] label {
-    background: rgba(20,25,35,0.55);
-    padding: 6px 10px;
-    border-radius: 10px;
-    margin-bottom: 6px;
+/* radio 透明（避免灰块） */
+div[role="radiogroup"] label{
+  background: rgba(0,0,0,0.22) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
+  backdrop-filter: blur(10px);
 }
 
-/* ---------- metric ---------- */
-div[data-testid="stMetric"] {
-    background: rgba(20,25,35,0.55);
-    border-radius: 14px;
-    padding: 12px;
-    border: 1px solid rgba(255,255,255,0.12);
+/* 按钮也玻璃化（你要全透明的话就别渐变） */
+button{
+  background: rgba(0,0,0,0.25) !important;
+  border: 1px solid rgba(255,255,255,0.16) !important;
+  color:#fff !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(10px);
+}
+button:hover{
+  background: rgba(255,255,255,0.12) !important;
 }
 
-/* ---------- scrollbar ---------- */
-::-webkit-scrollbar {
-    width: 6px;
+/* 你自定义 card 继续保留玻璃 */
+.card{
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin: 8px 0;
+  backdrop-filter: blur(10px);
 }
-::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.2);
-    border-radius: 10px;
-}
+
+/* 滚动条 */
+::-webkit-scrollbar{ width:6px; }
+::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 
 </style>
 """, unsafe_allow_html=True)

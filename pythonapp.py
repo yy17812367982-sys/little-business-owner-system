@@ -17,133 +17,186 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
+st.markdown(r"""
 <style>
-/* ---------- Theme tokens ---------- */
-:root{
-  --bg: rgba(8, 10, 16, 0.55);
-  --panel: rgba(18, 22, 34, 0.62);
-  --panel2: rgba(18, 22, 34, 0.78);
-  --border: rgba(255,255,255,0.10);
-  --border2: rgba(255,255,255,0.14);
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.72);
-  --accent: rgba(255, 74, 94, 0.95);
-  --accent2: rgba(255, 74, 94, 0.20);
-  --shadow: 0 10px 30px rgba(0,0,0,0.35);
-  --radius: 16px;
-}
-
-/* ---------- App background ---------- */
+/* =======================
+   0) Background + layout
+   ======================= */
 .stApp{
-  background-image: url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
+  background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
 }
-.block-container{ padding-top: 1rem; }
 
-/* ---------- Global typography ---------- */
+/* Add a dark veil so content is readable */
+.stApp::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  background: radial-gradient(1200px 600px at 30% 20%, rgba(255,255,255,0.06), transparent 60%),
+              radial-gradient(900px 500px at 80% 30%, rgba(255,74,94,0.05), transparent 55%),
+              linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0.58));
+  pointer-events:none;
+  z-index:0;
+}
+.block-container{
+  position:relative;
+  z-index:1;
+  padding-top: 1.1rem;
+  max-width: 1400px;
+}
+
+/* =======================
+   1) Tokens
+   ======================= */
+:root{
+  --panel: rgba(14, 18, 28, 0.62);
+  --panel2: rgba(14, 18, 28, 0.78);
+  --border: rgba(255,255,255,0.10);
+  --border2: rgba(255,255,255,0.16);
+  --text: rgba(255,255,255,0.92);
+  --muted: rgba(255,255,255,0.70);
+  --accent: rgba(255,74,94,0.95);
+  --accentSoft: rgba(255,74,94,0.18);
+  --shadow: 0 14px 40px rgba(0,0,0,0.40);
+  --r: 16px;
+  --r2: 18px;
+}
+
+/* =======================
+   2) Typography
+   ======================= */
 h1, h2, h3, p, label, span, div{
   color: var(--text) !important;
-  text-shadow: 0 0 8px rgba(0,0,0,0.55);
+  text-shadow: 0 0 10px rgba(0,0,0,0.55);
 }
 small, .stCaption { color: var(--muted) !important; }
 
-/* ---------- Sidebar ---------- */
+/* =======================
+   3) Sidebar
+   ======================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.78);
+  background: rgba(0,0,0,0.72);
   border-right: 1px solid var(--border);
 }
-
-/* ---------- Glass card helpers ---------- */
-.glass{
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
+section[data-testid="stSidebar"] *{
+  text-shadow: none !important;
 }
+
+/* =======================
+   4) Reusable cards
+   ======================= */
 .card{
   background: rgba(0,0,0,0.22);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r2);
   padding: 14px 16px;
   margin: 10px 0;
-  box-shadow: 0 10px 26px rgba(0,0,0,0.28);
-  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+.glass{
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
 }
 .pill{
   display:inline-block;
   padding: 7px 12px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: rgba(0,0,0,0.28);
+  background: rgba(0,0,0,0.22);
   margin-right: 8px;
   font-size: 0.9rem;
   color: var(--muted) !important;
 }
 
-/* ---------- Inputs ---------- */
+/* =======================
+   5) BaseWeb inputs (关键：把灰白塑料感干掉)
+   ======================= */
+/* Text input / textarea outer */
 div[data-baseweb="input"] > div,
 div[data-baseweb="textarea"] > div{
-  background: rgba(0,0,0,0.28) !important;
+  background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 14px !important;
+  border-radius: var(--r2) !important;
   box-shadow: none !important;
 }
+/* Focus ring */
+div[data-baseweb="input"] > div:focus-within,
+div[data-baseweb="textarea"] > div:focus-within,
+div[data-baseweb="select"] > div:focus-within{
+  border-color: rgba(255,74,94,0.50) !important;
+  box-shadow: 0 0 0 4px rgba(255,74,94,0.12) !important;
+}
+
+/* Actual input text */
 input, textarea{
   color: var(--text) !important;
+  caret-color: rgba(255,255,255,0.95) !important;
 }
 input::placeholder, textarea::placeholder{
   color: rgba(255,255,255,0.45) !important;
 }
+
+/* Select */
 div[data-baseweb="select"] > div{
-  background: rgba(0,0,0,0.28) !important;
+  background: rgba(255,255,255,0.06) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 14px !important;
+  border-radius: var(--r2) !important;
+}
+div[data-baseweb="select"] span{
+  color: var(--text) !important;
 }
 
-/* ---------- Buttons ---------- */
+/* Number input: the +/- buttons */
+button[aria-label="Increment"], button[aria-label="Decrement"]{
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+}
+button[aria-label="Increment"]:hover, button[aria-label="Decrement"]:hover{
+  border-color: rgba(255,255,255,0.22) !important;
+}
+
+/* File uploader */
+section[data-testid="stFileUploaderDropzone"]{
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px dashed rgba(255,255,255,0.18) !important;
+  border-radius: var(--r2) !important;
+}
+
+/* =======================
+   6) Buttons
+   ======================= */
 .stButton > button{
-  border-radius: 14px !important;
+  border-radius: var(--r2) !important;
   border: 1px solid var(--border2) !important;
-  background: rgba(0,0,0,0.18) !important;
+  background: rgba(255,255,255,0.06) !important;
   color: var(--text) !important;
-  box-shadow: none !important;
   transition: all .18s ease;
+  box-shadow: none !important;
 }
 .stButton > button:hover{
   transform: translateY(-1px);
-  border-color: rgba(255,255,255,0.22) !important;
-  background: rgba(0,0,0,0.28) !important;
+  background: rgba(255,255,255,0.10) !important;
+  border-color: rgba(255,255,255,0.26) !important;
 }
 .stButton > button[kind="primary"]{
-  background: linear-gradient(135deg, rgba(255,74,94,0.95), rgba(255,74,94,0.60)) !important;
-  border: 1px solid rgba(255,74,94,0.65) !important;
-  color: white !important;
+  background: linear-gradient(135deg, rgba(255,74,94,0.98), rgba(255,74,94,0.60)) !important;
+  border: 1px solid rgba(255,74,94,0.60) !important;
+  color: #fff !important;
 }
 .stButton > button[kind="primary"]:hover{
   filter: brightness(1.06);
 }
 
-/* ---------- Expander ---------- */
-details{
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  background: rgba(0,0,0,0.20) !important;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-details summary{
-  padding: 10px 14px !important;
-}
-details summary p{
-  margin: 0 !important;
-  font-weight: 600;
-}
-
-/* ---------- Tabs ---------- */
+/* =======================
+   7) Tabs
+   ======================= */
 div[data-baseweb="tab-list"]{
   background: rgba(0,0,0,0.18) !important;
   border: 1px solid var(--border);
@@ -155,56 +208,54 @@ button[role="tab"]{
   color: var(--muted) !important;
 }
 button[role="tab"][aria-selected="true"]{
-  background: rgba(255,74,94,0.18) !important;
+  background: var(--accentSoft) !important;
+  border: 1px solid rgba(255,74,94,0.22) !important;
   color: var(--text) !important;
-  border: 1px solid rgba(255,74,94,0.25) !important;
 }
 
-/* ---------- Metrics ---------- */
+/* =======================
+   8) Expander
+   ======================= */
+details{
+  border: 1px solid var(--border) !important;
+  border-radius: var(--r2) !important;
+  background: rgba(0,0,0,0.16) !important;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+details summary{
+  padding: 10px 14px !important;
+}
+details summary p{
+  margin:0 !important;
+  font-weight: 700;
+}
+
+/* =======================
+   9) Metrics
+   ======================= */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.20);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r2);
   padding: 12px 14px;
   box-shadow: var(--shadow);
 }
 
-/* ---------- Radio pills (for top suite switch) ---------- */
-.suitebar{
-  display:flex;
-  gap: 12px;
-  margin: 8px 0 14px 0;
-}
-.suitebtn{
-  flex:1;
-  padding: 14px 14px;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background: rgba(0,0,0,0.20);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(12px);
-  cursor: pointer;
-}
-.suitebtn:hover{
-  border-color: rgba(255,255,255,0.18);
-  transform: translateY(-1px);
-}
-.suitebtn.active{
-  border-color: rgba(255,74,94,0.55);
-  background: rgba(255,74,94,0.14);
-}
-.suitebtn .title{
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-.suitebtn .desc{
-  margin-top: 4px;
-  font-size: 0.88rem;
-  color: rgba(255,255,255,0.70);
+/* =======================
+   10) Remove the ugly white padding blocks around markdown containers (optional)
+   ======================= */
+.stMarkdown, .stTextInput, .stNumberInput, .stTextArea, .stSelectbox, .stFileUploader{
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
 }
 
-/* ---------- Hide Streamlit footer/menu if you want ---------- */
-/* #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;} */
+/* Optional: reduce widget label spacing */
+div[data-testid="stWidgetLabel"] > label{
+  font-weight: 650;
+  color: rgba(255,255,255,0.88) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 

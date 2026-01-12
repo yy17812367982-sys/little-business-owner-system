@@ -228,11 +228,12 @@ Rules:
 
 # 你可以按需调整优先级：越靠前越先尝试
 MODEL_CANDIDATES = [
+    "gemini-1.5-pro",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
-    "gemini-1.5-pro",
 ]
+
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:

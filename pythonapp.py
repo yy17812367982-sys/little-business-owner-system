@@ -15,7 +15,7 @@ import math
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"  # ✅ 手机先收起，避免遮挡。桌面端也可点左上角展开
+    initial_sidebar_state="expanded"  # ✅ 手机先收起，避免遮挡。桌面端也可点左上角展开
 )
 
 # =========================================================
@@ -291,6 +291,64 @@ window.__scrollToBottom = function(){
     )
 
 _inject_scroll_js()
+
+# ===== Sidebar Toggle Button (ALWAYS visible) =====
+st.markdown(r"""
+<style>
+/* 让 sidebar 永远在最上层，不会被盖住 */
+section[data-testid="stSidebar"]{
+  z-index: 9998 !important;
+}
+header[data-testid="stHeader"]{
+  z-index: 9999 !important;
+}
+
+/* 自己的汉堡按钮（固定左上角） */
+.sidebar-toggle-btn{
+  position: fixed;
+  left: 14px;
+  top: 12px;
+  z-index: 10000;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(0,0,0,0.35);
+  color: rgba(255,255,255,0.95);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 44px;
+  text-align: center;
+  user-select: none;
+}
+.sidebar-toggle-btn:hover{
+  background: rgba(255,255,255,0.12);
+}
+</style>
+
+<div class="sidebar-toggle-btn" onclick="window.__toggleSidebar()" title="Menu">☰</div>
+
+<script>
+window.__toggleSidebar = function(){
+  const doc = window.parent.document;
+
+  // Streamlit 不同版本 title 文案可能不一样，所以多尝试几种 selector
+  const openBtn =
+    doc.querySelector('button[title="Open sidebar"]') ||
+    doc.querySelector('button[aria-label="Open sidebar"]') ||
+    Array.from(doc.querySelectorAll("button")).find(b => (b.innerText || "").toLowerCase().includes("sidebar") && (b.title || "").toLowerCase().includes("open"));
+
+  const closeBtn =
+    doc.querySelector('button[title="Close sidebar"]') ||
+    doc.querySelector('button[aria-label="Close sidebar"]') ||
+    Array.from(doc.querySelectorAll("button")).find(b => (b.innerText || "").toLowerCase().includes("sidebar") && (b.title || "").toLowerCase().includes("close"));
+
+  if (openBtn) openBtn.click();
+  else if (closeBtn) closeBtn.click();
+};
+</script>
+""", unsafe_allow_html=True)
 
 # =========================================================
 # Language

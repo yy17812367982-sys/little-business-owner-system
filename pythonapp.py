@@ -59,10 +59,17 @@ div[data-testid="stToolbar"]{
 /* =============================
    Typography: improve contrast
    ============================= */
-h1,h2,h3,h4{
-  color: rgba(255,255,255,0.96) !important;
-  text-shadow: 0 1px 10px rgba(0,0,0,0.75);
+/* ✅ 只给主页面内容区（不是下拉弹层）上白字 */
+.stApp :where(h1,h2,h3,h4,p,label,span){
+  color:#fff !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
+
+/* ✅ 但下拉菜单里一律不要阴影（否则糊） */
+div[data-baseweb="menu"] *{
+  text-shadow: none !important;
+}
+
 p, label, span, li, div, small{
   color: rgba(255,255,255,0.90) !important;
   text-shadow: 0 1px 8px rgba(0,0,0,0.70);

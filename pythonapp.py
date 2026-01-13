@@ -58,22 +58,16 @@ div[data-testid="stToolbar"]{
 
 /* =============================
    Typography: improve contrast
+   ⚠️ 重点：不要全局染 span（会把下拉菜单里的选项也染白）
    ============================= */
-/* ✅ 只给主页面内容区（不是下拉弹层）上白字 */
-.stApp :where(h1,h2,h3,h4,p,label,span){
+
+/* ✅ 主内容区文字：白字更清晰（不包含下拉弹层） */
+div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-/* ✅ 但下拉菜单里一律不要阴影（否则糊） */
-div[data-baseweb="menu"] *{
-  text-shadow: none !important;
-}
-
-p, label, span, li, div, small{
-  color: rgba(255,255,255,0.90) !important;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.70);
-}
+/* ✅ 链接 */
 a, a *{
   color: rgba(180,220,255,0.95) !important;
 }
@@ -87,13 +81,13 @@ section[data-testid="stSidebar"]{
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* ===== 关键：BaseWeb/Streamlit 控件全透明玻璃化 ===== */
+/* =============================
+   Inputs: glass on dark background
+   ============================= */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
 div[data-baseweb="select"],
 div[data-baseweb="textarea"],
-div[data-baseweb="popover"],
-div[data-baseweb="menu"],
 div[data-baseweb="input"] > div,
 div[data-baseweb="base-input"] > div{
   background: rgba(0,0,0,0.33) !important;
@@ -117,39 +111,62 @@ div[data-baseweb="base-input"] > div{
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* selectbox 当前值那一条 */
+/* selectbox 当前值那一条（控制框内） */
 div[data-baseweb="select"] *{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.55);
 }
 
-/* 下拉菜单弹层（popover/menu）玻璃化 */
-/* Dropdown（Selectbox/Multiselect）统一：白底 + 黑字 */
-div[data-baseweb="popover"]{ background: transparent !important; }
+/* =============================
+   Dropdown (Selectbox/Multiselect): 白底 + 黑字 + hover 不透明
+   ✅ 修复你说的“鼠标放上去透明/移开变白”的问题
+   ============================= */
 
+/* popover 外层允许透明（无所谓） */
+div[data-baseweb="popover"]{
+  background: transparent !important;
+}
+
+/* ✅ 真正的菜单层：强制白底，永远不透明 */
 div[data-baseweb="menu"],
 div[role="listbox"]{
-  background:#fff !important;
-  border:1px solid rgba(0,0,0,0.15) !important;
-  border-radius:12px !important;
-  box-shadow:0 10px 30px rgba(0,0,0,0.25) !important;
-  overflow:hidden !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.18) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 34px rgba(0,0,0,0.28) !important;
+  overflow: hidden !important;
+  backdrop-filter: none !important;   /* 防止你之前的 blur 规则干扰 */
 }
 
+/* ✅ 菜单内部：统一黑字（注意：不要把背景全设 transparent 否则 hover/选中会被你“抹掉”） */
 div[data-baseweb="menu"] *,
 div[role="listbox"] *{
-  color:#111 !important;
-  background:transparent !important;
-  text-shadow:none !important;
+  color: #111 !important;
+  text-shadow: none !important;
 }
 
+/* ✅ 每个选项：默认透明背景（显示白底），hover/选中明确给浅灰底 */
+div[data-baseweb="menu"] div[role="option"],
+div[role="listbox"] div[role="option"]{
+  background: transparent !important;
+}
+
+/* hover */
 div[data-baseweb="menu"] div[role="option"]:hover,
 div[role="listbox"] div[role="option"]:hover{
-  background:#f2f3f5 !important;
+  background: #f2f3f5 !important;
 }
 
+/* aria-selected（选中态） */
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
+div[role="listbox"] div[role="option"][aria-selected="true"]{
+  background: #e9eefc !important;
+}
 
-/* File uploader */
+/* =============================
+   File uploader
+   ============================= */
 div[data-testid="stFileUploader"]{
   background: rgba(0,0,0,0.26) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -170,7 +187,9 @@ div[data-testid="stFileUploader"] button{
   border-radius: 14px !important;
 }
 
-/* DataFrame */
+/* =============================
+   DataFrame
+   ============================= */
 div[data-testid="stDataFrame"]{
   background: rgba(0,0,0,0.28) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -182,7 +201,9 @@ div[data-testid="stDataFrame"] *{
   color: rgba(255,255,255,0.95) !important;
 }
 
-/* metric */
+/* =============================
+   metric
+   ============================= */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -190,7 +211,9 @@ div[data-testid="stMetric"]{
   backdrop-filter: blur(10px);
 }
 
-/* tabs */
+/* =============================
+   tabs
+   ============================= */
 div[data-baseweb="tab-list"]{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -201,7 +224,9 @@ div[data-baseweb="tab"]{
   color: rgba(255,255,255,0.95) !important;
 }
 
-/* radio */
+/* =============================
+   radio
+   ============================= */
 div[role="radiogroup"] label{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -210,7 +235,9 @@ div[role="radiogroup"] label{
   backdrop-filter: blur(10px);
 }
 
-/* buttons */
+/* =============================
+   buttons
+   ============================= */
 button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -222,7 +249,9 @@ button:hover{
   background: rgba(255,255,255,0.12) !important;
 }
 
-/* custom card */
+/* =============================
+   custom card
+   ============================= */
 .card{
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
@@ -232,7 +261,9 @@ button:hover{
   backdrop-filter: blur(10px);
 }
 
-/* scrollbar */
+/* =============================
+   scrollbar
+   ============================= */
 ::-webkit-scrollbar{ width:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 </style>
@@ -668,7 +699,6 @@ with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
     st.markdown("---")
 
-    # ✅ Suites moved here (top)
     st.markdown("### " + t("功能集合", "Suites"))
     suite_label = st.radio(
         "",

@@ -303,9 +303,27 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 
 /* ✅ 手机端：隐藏原生 sidebar（它在手机只能抽屉覆盖，体验差） */
 @media (max-width: 900px){
+  /* 不再隐藏 sidebar（否则桌面窗口窄一点也没了） */
   section[data-testid="stSidebar"]{
-    display:none !important;
+    display:block !important;
   }
+
+  /* 手机端更丝滑：关闭 blur + fixed 背景（iOS/Android 很吃性能） */
+  .stApp{
+    background-attachment: scroll !important;
+  }
+  .card,
+  div[data-testid="stMetric"],
+  div[data-testid="stDataFrame"],
+  div[data-baseweb="tab-list"],
+  div[data-baseweb="input"],
+  div[data-baseweb="base-input"],
+  div[data-baseweb="select"],
+  div[data-baseweb="textarea"]{
+    backdrop-filter: none !important;
+  }
+}
+
   /* 手机端更丝滑：关闭 blur + fixed 背景（iOS/Android 很吃性能） */
   .stApp{
     background-attachment: scroll !important;

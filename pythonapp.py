@@ -6,6 +6,8 @@ import time
 import random
 from datetime import datetime
 from google import genai
+import requests
+from urllib.parse import quote
 
 
 # =========================================================
@@ -180,10 +182,10 @@ div[role="listbox"]{
   border-radius: 12px !important;
   box-shadow: 0 12px 34px rgba(0,0,0,0.28) !important;
   overflow: hidden !important;
-  backdrop-filter: none !important;   /* 防止你之前的 blur 规则干扰 */
+  backdrop-filter: none !important;
 }
 
-/* ✅ 菜单内部：统一黑字（注意：不要把背景全设 transparent 否则 hover/选中会被你“抹掉”） */
+/* ✅ 菜单内部：统一黑字 */
 div[data-baseweb="menu"] *,
 div[role="listbox"] *{
   color: #111 !important;
@@ -420,6 +422,40 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 
 
 # =========================================================
+# ✅ Geocoding (Nominatim) — Address -> Lat/Lon (multi candidates)
+# =========================================================
+@st.cache_data(show_spinner=False, ttl=24 * 3600)
+def geocode_nominatim_candidates(query: str, limit: int = 5):
+    q = (query or "").strip()
+    if not q:
+        return []
+
+    url = (
+        "https://nominatim.openstreetmap.org/search?"
+        f"q={quote(q)}&format=json&addressdetails=1&limit={int(limit)}"
+    )
+    headers = {
+        # ⚠️ 建议你改成自己的邮箱，Nominatim 明确要求 UA 可联系
+        "User-Agent": "ProjectB-SME-BI-Platform/1.0 (contact: your_email@example.com)"
+    }
+
+    try:
+        r = requests.get(url, headers=headers, timeout=8)
+        r.raise_for_status()
+        data = r.json()
+        out = []
+        for d in data:
+            out.append({
+                "display_name": d.get("display_name", ""),
+                "lat": float(d["lat"]),
+                "lon": float(d["lon"]),
+            })
+        return out
+    except Exception:
+        return []
+
+
+# =========================================================
 # State init
 # =========================================================
 if "active_suite" not in st.session_state:
@@ -533,62 +569,6 @@ def inventory_health(df: pd.DataFrame) -> dict:
         "dead_value": dead_value
     }
 
-def build_open_store_report_md() -> str:
-    p = st.session_state.profile
-    s = st.session_state.site
-    inv = st.session_state.inventory
-    pr = st.session_state.pricing
-    out = st.session_state.outputs
-
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    md = []
-    md.append("# Open a Store — Decision Report\n")
-    md.append(f"- Generated: {now}\n")
-
-    md.append("## Business Profile\n")
-    md.append(f"- Type: {p['business_type']}\n")
-    md.append(f"- Stage: {p['stage']}\n")
-    md.append(f"- City: {p['city']}\n")
-    md.append(f"- Budget: ${p['budget']:,.0f}\n")
-    md.append(f"- Target customer: {p['target_customer']}\n")
-    md.append(f"- Differentiator: {p['differentiator']}\n")
-    if p["notes"].strip():
-        md.append(f"- Notes: {p['notes'].strip()}\n")
-
-    md.append("\n## Site\n")
-    md.append(f"- Address: {s['address']}\n")
-    md.append(f"- Radius: {s['radius_miles']} miles\n")
-    md.append(f"- Traffic: {s['traffic']}\n")
-    md.append(f"- Competitors: {s['competitors']}\n")
-    md.append(f"- Parking: {s['parking']} | Rent: {s['rent_level']}\n")
-    if s["risk_flags"]:
-        md.append(f"- Risk flags: {', '.join(s['risk_flags'])}\n")
-
-    md.append("\n## Inventory & Cash\n")
-    if inv["df"] is None:
-        md.append("- Inventory data: Not provided\n")
-    else:
-        md.append(f"- Cash target: {inv['cash_target_days']} days\n")
-        md.append(f"- Lead time: {inv['supplier_lead_time_days']} days\n")
-        md.append(f"- Seasonality: {inv['seasonality']}\n")
-        if inv["notes"].strip():
-            md.append(f"- Notes: {inv['notes'].strip()}\n")
-        if out["inventory_summary"]:
-            md.append(f"- Snapshot: {out['inventory_summary']}\n")
-
-    md.append("\n## Pricing\n")
-    md.append(f"- Strategy: {pr['strategy']}\n")
-    md.append(f"- Cost: ${pr['cost']}\n")
-    md.append(f"- Target margin: {pr['target_margin']}%\n")
-    md.append(f"- Competitor price: ${pr['competitor_price']}\n")
-    md.append(f"- Elasticity: {pr['elasticity']}\n")
-    if pr["notes"].strip():
-        md.append(f"- Notes: {pr['notes'].strip()}\n")
-
-    md.append("\n## Final Output\n")
-    md.append(out["final_open_store"].strip() + "\n" if out["final_open_store"] else "Not generated.\n")
-    return "\n".join(md)
-
 def ai_report_open_store() -> str:
     p = st.session_state.profile
     s = st.session_state.site
@@ -645,7 +625,6 @@ Pricing: {pr}
 """
     return ask_ai(prompt, mode="open_store")
 
-
 def ai_report_operations() -> str:
     out = st.session_state.outputs
     ops_ai = out.get("ops_ai_output", "")
@@ -683,7 +662,6 @@ Inventory table:
 """
     return ask_ai(prompt, mode="operations")
 
-
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
     finance_ai = st.session_state.outputs.get("finance_ai_output", "")
 
@@ -713,7 +691,6 @@ Previous AI output (if any):
 {finance_ai if finance_ai.strip() else '[None]'}
 """
     return ask_ai(prompt, mode="finance")
-
 
 def read_uploaded_to_text(files) -> str:
     chunks = []
@@ -783,7 +760,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.1 Prominent Suites")
+    st.caption("v5.2 Geocoding Enabled")
 
 
 # =========================================================
@@ -947,6 +924,7 @@ def render_open_store():
         s = st.session_state.site
         st.subheader(t("第 2 步：选址检查", "Step 2: Site Check"))
         colA, colB = st.columns([1, 2])
+
         with colA:
             s["address"] = st.text_input(t("地址", "Address"), s["address"])
             s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0],
@@ -960,12 +938,42 @@ def render_open_store():
                 ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
                 index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
             )
+
         with colB:
-            st.subheader(t("地图预览（演示）", "Map Preview (demo)"))
-            base_lat, base_lon = 40.7590, -73.8290
-            map_data = pd.DataFrame({"lat": [base_lat + np.random.randn()/2000], "lon": [base_lon + np.random.randn()/2000]})
-            st.map(map_data, zoom=14)
-            st.caption(t("当前是演示点位：后续可接真实地理编码与 POI 统计。", "Demo marker only. Replace with real geocoding + POI counts later."))
+            st.subheader(t("地图预览（输入地址→搜索→定位）", "Map Preview (address → search → locate)"))
+
+            # ✅ 搜索 + 多候选
+            query = (s.get("address") or "").strip()
+            cands = geocode_nominatim_candidates(query, limit=6)
+
+            if not cands:
+                st.warning(t("没搜到该地址。建议补全：门牌号 + 街道 + 城市 + 州/国家。",
+                             "No results. Try a more complete query: street number + street + city + state/country."))
+                base_lat, base_lon = 40.7590, -73.8290
+                st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
+                st.caption(t("当前显示兜底位置（演示）。", "Fallback demo location is shown."))
+            else:
+                labels = [c["display_name"] for c in cands]
+                default_idx = 0
+
+                picked = st.selectbox(
+                    t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
+                    labels,
+                    index=default_idx
+                )
+                chosen = cands[labels.index(picked)]
+                lat, lon = chosen["lat"], chosen["lon"]
+
+                st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
+                st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+
+                # （可选）把选中的 display_name 回写到 address，防止你输入“简写地址”但后续报告里太模糊
+                if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
+                    s["address"] = chosen.get("display_name", s["address"])
+                    st.rerun()
+
+            st.caption(t("说明：这里用 OpenStreetMap 的 Nominatim 做地理编码；不是 POI 统计。",
+                         "Note: Geocoding uses OpenStreetMap Nominatim; POI stats not included."))
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []

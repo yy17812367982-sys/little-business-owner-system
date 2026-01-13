@@ -8,6 +8,7 @@ from datetime import datetime
 from google import genai
 import requests
 import math
+import streamlit.components.v1 as components
 
 # =========================================================
 # Page config + style

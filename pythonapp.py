@@ -43,15 +43,26 @@ section[data-testid="stSidebar"]{
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* 标题文字统一白（别用 div 全覆盖太狠，会误伤很多组件，这里缩窄点） */
+/* 标题文字统一白（不要用 div 全覆盖，误伤太多） */
 h1,h2,h3,h4,p,label,span{
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-/* ===== 关键：BaseWeb/Streamlit 控件全透明玻璃化 ===== */
+/* 你在代码里用到了 pill，这里补一下 */
+.pill{
+  display:inline-block;
+  padding: 4px 10px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.14);
+  backdrop-filter: blur(10px);
+}
 
-/* 所有输入类外壳（selectbox、multiselect、number、text、textarea等） */
+/* ===== BaseWeb/Streamlit 控件玻璃化 ===== */
+
+/* 输入类外壳（selectbox、multiselect、number、text、textarea等） */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
 div[data-baseweb="select"],
@@ -66,7 +77,7 @@ div[data-baseweb="base-input"] > div{
   box-shadow: none !important;
 }
 
-/* 真正的 input / textarea 本体透明 */
+/* input / textarea 本体透明 */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
@@ -163,7 +174,7 @@ div[data-testid="stHorizontalBlock"]{
   background: transparent !important;
 }
 
-/* expander：把那条白色标题栏干掉 */
+/* expander */
 details, summary{
   background: rgba(0,0,0,0.20) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -172,7 +183,7 @@ details, summary{
 }
 summary{ padding: 8px 12px !important; }
 
-/* dataframe/table 背景也不要白 */
+/* dataframe/table */
 div[data-testid="stDataFrame"]{
   background: rgba(0,0,0,0.20) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -184,7 +195,7 @@ div[data-testid="stDataFrame"] *{
   color:#fff !important;
 }
 
-/* metric 卡片透明 */
+/* metric */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -192,7 +203,7 @@ div[data-testid="stMetric"]{
   backdrop-filter: blur(10px);
 }
 
-/* tabs 顶部条透明 */
+/* tabs */
 div[data-baseweb="tab-list"]{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -203,7 +214,7 @@ div[data-baseweb="tab"]{
   color:#fff !important;
 }
 
-/* radio 透明 */
+/* radio */
 div[role="radiogroup"] label{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -212,7 +223,7 @@ div[role="radiogroup"] label{
   backdrop-filter: blur(10px);
 }
 
-/* 按钮玻璃 */
+/* 按钮玻璃（注意：全局 button 会影响所有按钮；先留着） */
 button{
   background: rgba(0,0,0,0.25) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -224,7 +235,7 @@ button:hover{
   background: rgba(255,255,255,0.12) !important;
 }
 
-/* 自定义 card 玻璃 */
+/* 自定义 card */
 .card{
   background: rgba(0,0,0,0.22);
   border: 1px solid rgba(255,255,255,0.12);
@@ -239,6 +250,7 @@ button:hover{
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 /* =============================

@@ -124,36 +124,30 @@ div[data-baseweb="select"] *{
 }
 
 /* 下拉菜单弹层（popover/menu）玻璃化 */
-div[data-baseweb="popover"],
-div[data-baseweb="menu"]{
-  background: rgba(0,0,0,0.70) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  backdrop-filter: blur(14px);
-}
+/* Dropdown（Selectbox/Multiselect）统一：白底 + 黑字 */
+div[data-baseweb="popover"]{ background: transparent !important; }
 
-/* menu 内部子元素不要白底 */
-div[data-baseweb="menu"] *{
-  background: transparent !important;
-  color: rgba(255,255,255,0.95) !important;
-}
-
-/* listbox 兜底 */
+div[data-baseweb="menu"],
 div[role="listbox"]{
-  background: rgba(0,0,0,0.70) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  backdrop-filter: blur(14px);
-}
-div[role="listbox"] ul,
-div[role="listbox"] li{
-  background: transparent !important;
-  color: rgba(255,255,255,0.95) !important;
+  background:#fff !important;
+  border:1px solid rgba(0,0,0,0.15) !important;
+  border-radius:12px !important;
+  box-shadow:0 10px 30px rgba(0,0,0,0.25) !important;
+  overflow:hidden !important;
 }
 
-/* option hover */
-div[role="option"]:hover,
-div[data-baseweb="menu"] li:hover{
-  background: rgba(255,255,255,0.12) !important;
+div[data-baseweb="menu"] *,
+div[role="listbox"] *{
+  color:#111 !important;
+  background:transparent !important;
+  text-shadow:none !important;
 }
+
+div[data-baseweb="menu"] div[role="option"]:hover,
+div[role="listbox"] div[role="option"]:hover{
+  background:#f2f3f5 !important;
+}
+
 
 /* File uploader */
 div[data-testid="stFileUploader"]{

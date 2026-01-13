@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import os
@@ -8,115 +9,19 @@ from datetime import datetime
 from google import genai
 import requests
 import math
-import streamlit.components.v1 as components
 
 # =========================================================
-# Page config + style
+# Page config
 # =========================================================
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"  # ✅ 手机上默认不弹出
+    initial_sidebar_state="collapsed"  # ✅ 默认收起，手机不会一上来盖住内容
 )
 
 # =========================================================
-# Mobile-first nav (replace sidebar on phones)
+# CSS (ALL CSS MUST stay inside this string!)
 # =========================================================
-if "scroll_to" not in st.session_state:
-    st.session_state.scroll_to = None
-
-def _do_scroll(where: str):
-    st.session_state.scroll_to = where
-    st.rerun()
-
-def _scroll_js(where: str) -> str:
-    # Streamlit iframe 里，window.parent 才是页面本体
-    if where == "top":
-        return "<script>window.parent.scrollTo({top:0,left:0,behavior:'smooth'});</script>"
-    if where == "bottom":
-        return "<script>window.parent.scrollTo({top:document.body.scrollHeight,left:0,behavior:'smooth'});</script>"
-    return ""
-
-def go_home():
-    # ✅ 回到主页：你可以定义“主页=Open a Store Step1”
-    st.session_state.active_suite = "open_store"
-    st.session_state.open_step = 1
-    _do_scroll("top")
-
-def switch_suite(suite: str):
-    st.session_state.active_suite = suite
-    _do_scroll("top")
-
-# 顶部“固定导航”容器（手机体验会像 App）
-nav1, nav2, nav3, nav4 = st.columns([1.1, 1.2, 1.2, 1.2])
-
-with nav1:
-    if st.button("🏠 Home", use_container_width=True):
-        go_home()
-
-with nav2:
-    # “菜单”放在主页面里，手机不靠 sidebar
-    st.session_state._open_menu = st.session_state.get("_open_menu", False)
-    if st.button("☰ Menu", use_container_width=True):
-        st.session_state._open_menu = not st.session_state._open_menu
-        st.rerun()
-
-with nav3:
-    if st.button("⬆ Top", use_container_width=True):
-        _do_scroll("top")
-
-with nav4:
-    if st.button("⬇ Bottom", use_container_width=True):
-        _do_scroll("bottom")
-
-# 主页面菜单（手机端用它替代 sidebar）
-if st.session_state.get("_open_menu", False):
-    st.markdown("<div class='nav-panel'>", unsafe_allow_html=True)
-
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        st.markdown("### Navigation")
-    with c2:
-        if st.button("✖ Close", use_container_width=True):
-            st.session_state._open_menu = False
-            st.rerun()
-
-    # Suites（统一入口）
-    suite = st.session_state.get("active_suite", "open_store")
-    opt = st.radio(
-        "Suites",
-        options=["open_store", "operations", "finance"],
-        index={"open_store":0, "operations":1, "finance":2}.get(suite, 0),
-        format_func=lambda x: {
-            "open_store": "Open a Store",
-            "operations": "Operations",
-            "finance": "Finance"
-        }[x]
-    )
-    if opt != suite:
-        switch_suite(opt)
-
-    # 语言切换（把你原来的 toggle_language 复用）
-    if st.button("🌐 Switch Language", use_container_width=True):
-        toggle_language()
-
-    # 你想要的“一键到底”也在菜单里给一份
-    cc1, cc2 = st.columns(2)
-    with cc1:
-        if st.button("⬆ Back to Top", use_container_width=True):
-            _do_scroll("top")
-    with cc2:
-        if st.button("⬇ Go Bottom", use_container_width=True):
-            _do_scroll("bottom")
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ✅ 在页面渲染后执行滚动
-if st.session_state.scroll_to:
-    components.html(_scroll_js(st.session_state.scroll_to), height=0)
-    st.session_state.scroll_to = None
-
-
 st.markdown(r"""
 <style>
 /* =============================
@@ -128,7 +33,6 @@ html, body{
   overflow-x: hidden !important;
 }
 
-/* Streamlit outer containers must remain scrollable */
 div[data-testid="stAppViewContainer"]{
   height: auto !important;
   min-height: 100vh !important;
@@ -149,7 +53,7 @@ div[data-testid="stAppViewContainer"]{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
   background-size:cover;
   background-position:center;
-  background-attachment:scroll;
+  background-attachment:fixed;
 }
 
 /* Dark overlay: fixed, but does NOT capture scroll */
@@ -169,7 +73,7 @@ div[data-testid="stAppViewContainer"]{
 }
 
 /* main padding */
-.block-container{ padding-top: 1.1rem; }
+.block-container{ padding-top: 1.0rem; }
 
 /* =============================
    2) Transparent "white areas"
@@ -205,7 +109,7 @@ a, a *{
 }
 
 /* =============================
-   4) Sidebar glass
+   4) Sidebar glass (desktop only; mobile will be hidden below)
    ============================= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.42) !important;
@@ -392,49 +296,48 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
-</style>
-""", unsafe_allow_html=True)
 
-/* =============================
-   Mobile: hide native Streamlit sidebar completely
-   - 手机端不要让它盖住内容
-   ============================= */
+/* =========================================================
+   MOBILE FIXES
+   ========================================================= */
+
+/* ✅ 手机端：隐藏原生 sidebar（它在手机只能抽屉覆盖，体验差） */
 @media (max-width: 900px){
   section[data-testid="stSidebar"]{
-    display: none !important;
+    display:none !important;
   }
-  /* 也把左上角那个 sidebar 的小折叠控件干掉（避免误触） */
-  button[kind="header"]{
-    display: none !important;
+  /* 手机端更丝滑：关闭 blur + fixed 背景（iOS/Android 很吃性能） */
+  .stApp{
+    background-attachment: scroll !important;
+  }
+  .card,
+  div[data-testid="stMetric"],
+  div[data-testid="stDataFrame"],
+  div[data-baseweb="tab-list"],
+  section[data-testid="stSidebar"],
+  div[data-baseweb="input"],
+  div[data-baseweb="base-input"],
+  div[data-baseweb="select"],
+  div[data-baseweb="textarea"]{
+    backdrop-filter: none !important;
   }
 }
 
-/* =============================
-   Top nav unified style
-   ============================= */
-div[data-testid="stHorizontalBlock"] button{
-  border-radius: 14px !important;
-}
-
-/* menu panel style */
+/* 顶部导航容器 */
 .nav-panel{
   background: rgba(0,0,0,0.30);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
   padding: 12px 12px;
-  margin: 10px 0 16px 0;
-  backdrop-filter: blur(6px);
+  margin: 10px 0 14px 0;
 }
 
-/* ✅ 继续压掉帧：手机端彻底关 blur（iOS/Android 都吃不消） */
-@media (max-width: 900px){
-  .nav-panel,
-  .card,
-  section[data-testid="stSidebar"]{
-    backdrop-filter: none !important;
-  }
+/* 让顶部按钮更一致 */
+div[data-testid="stHorizontalBlock"] button{
+  border-radius: 14px !important;
 }
-
+</style>
+""", unsafe_allow_html=True)
 
 # =========================================================
 # Language
@@ -448,6 +351,96 @@ def t(zh: str, en: str) -> str:
 def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
     st.rerun()
+
+# =========================================================
+# Mobile-first top nav (replaces sidebar behavior on phones)
+# =========================================================
+if "scroll_to" not in st.session_state:
+    st.session_state.scroll_to = None
+if "_open_menu" not in st.session_state:
+    st.session_state._open_menu = False
+
+def _scroll_js(where: str) -> str:
+    if where == "top":
+        return "<script>window.parent.scrollTo({top:0,left:0,behavior:'smooth'});</script>"
+    if where == "bottom":
+        return "<script>window.parent.scrollTo({top:document.body.scrollHeight,left:0,behavior:'smooth'});</script>"
+    return ""
+
+def _do_scroll(where: str):
+    st.session_state.scroll_to = where
+    st.rerun()
+
+def go_home():
+    st.session_state.active_suite = "open_store"
+    st.session_state.open_step = 1
+    st.session_state._open_menu = False
+    _do_scroll("top")
+
+def switch_suite(suite: str):
+    st.session_state.active_suite = suite
+    st.session_state._open_menu = False
+    _do_scroll("top")
+
+# Top nav bar (works on both desktop & mobile; on desktop you still have sidebar)
+nav1, nav2, nav3, nav4 = st.columns([1.1, 1.2, 1.2, 1.2])
+with nav1:
+    if st.button("🏠 Home", use_container_width=True):
+        go_home()
+with nav2:
+    if st.button("☰ Menu", use_container_width=True):
+        st.session_state._open_menu = not st.session_state._open_menu
+        st.rerun()
+with nav3:
+    if st.button("⬆ Top", use_container_width=True):
+        _do_scroll("top")
+with nav4:
+    if st.button("⬇ Bottom", use_container_width=True):
+        _do_scroll("bottom")
+
+# Menu panel
+if st.session_state._open_menu:
+    st.markdown("<div class='nav-panel'>", unsafe_allow_html=True)
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.markdown("### Navigation")
+    with c2:
+        if st.button("✖ Close", use_container_width=True):
+            st.session_state._open_menu = False
+            st.rerun()
+
+    suite = st.session_state.get("active_suite", "open_store")
+    opt = st.radio(
+        "Suites",
+        options=["open_store", "operations", "finance"],
+        index={"open_store": 0, "operations": 1, "finance": 2}.get(suite, 0),
+        format_func=lambda x: {"open_store": "Open a Store", "operations": "Operations", "finance": "Finance"}[x]
+    )
+    if opt != suite:
+        switch_suite(opt)
+
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        if st.button("🌐 Switch Language", use_container_width=True):
+            toggle_language()
+    with cc2:
+        if st.button("🏠 Back Home", use_container_width=True):
+            go_home()
+
+    cc3, cc4 = st.columns(2)
+    with cc3:
+        if st.button("⬆ Back to Top", use_container_width=True):
+            _do_scroll("top")
+    with cc4:
+        if st.button("⬇ Go Bottom", use_container_width=True):
+            _do_scroll("bottom")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# Execute scroll after render
+if st.session_state.scroll_to:
+    components.html(_scroll_js(st.session_state.scroll_to), height=0)
+    st.session_state.scroll_to = None
 
 # =========================================================
 # API Key + client
@@ -716,20 +709,14 @@ def _business_to_competitor_osm_filters(business_type: str):
     ]
 
 def _overpass_post(query: str, timeout: int = 35):
-    """
-    关键：永远不要 raise 让 app 崩。
-    成功返回 (data, debug)；失败返回 (None, debug)
-    """
     headers = {"User-Agent": NOMINATIM_UA}
     last_dbg = {"ok": False, "err": "no attempt"}
     body = query.encode("utf-8")
 
     for ep in OVERPASS_ENDPOINTS:
-        # 轻微随机抖动，降低被限流概率
         time.sleep(0.25 + random.random() * 0.25)
         try:
             resp = requests.post(ep, data=body, headers=headers, timeout=timeout)
-            # 不要 raise_for_status 直接炸；我们自己处理
             if resp.status_code != 200:
                 last_dbg = {
                     "ok": False,
@@ -737,10 +724,8 @@ def _overpass_post(query: str, timeout: int = 35):
                     "status": resp.status_code,
                     "text_head": (resp.text[:260] if isinstance(resp.text, str) else "")
                 }
-                # 429/502/504 这种就换端点继续
                 if resp.status_code in (429, 502, 503, 504):
                     continue
-                # 400/401/403 这种一般是 query/权限问题，直接停
                 if resp.status_code in (400, 401, 403):
                     return None, last_dbg
                 continue
@@ -907,7 +892,6 @@ if "outputs" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Step2 map state
 if "site_geo" not in st.session_state:
     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
@@ -1093,7 +1077,7 @@ def read_uploaded_to_text(files) -> str:
     return "\n".join(chunks)
 
 # =========================================================
-# Sidebar
+# Sidebar (desktop only; mobile hidden by CSS)
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
@@ -1134,7 +1118,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.3 Geocoding + Overpass (robust)")
+    st.caption("v5.4 Mobile-first Nav + Smooth Scroll")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1259,9 +1243,7 @@ def render_open_store():
         st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
                      "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
 
-    # -------------------------
     # Step 1
-    # -------------------------
     if st.session_state.open_step == 1:
         p = st.session_state.profile
         st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
@@ -1291,9 +1273,7 @@ def render_open_store():
             placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
         )
 
-    # -------------------------
     # Step 2
-    # -------------------------
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         p = st.session_state.profile
@@ -1301,7 +1281,6 @@ def render_open_store():
         st.subheader(t("第 2 步：选址检查", "Step 2: Site Check"))
         colA, colB = st.columns([1, 2])
 
-        # Left controls
         with colA:
             s["address"] = st.text_input(t("地址（支持模糊）", "Address (fuzzy supported)"), s["address"])
             s["radius_miles"] = st.selectbox(
@@ -1310,7 +1289,6 @@ def render_open_store():
                 index=[0.5, 1.0, 3.0].index(s["radius_miles"])
             )
 
-            # 这里仍然允许手工调（Overpass 失败也不影响你用）
             s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
             s["competitors"] = st.number_input(t("竞品数量（估计）", "Competitors (estimated)"), min_value=0, value=int(s["competitors"]), step=1)
             s["parking"] = st.selectbox(t("停车便利", "Parking"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["parking"]))
@@ -1321,7 +1299,6 @@ def render_open_store():
                 index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
             )
 
-        # Right map + auto-estimate
         with colB:
             st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
 
@@ -1351,7 +1328,6 @@ def render_open_store():
             geo = st.session_state.site_geo
             cands = geo.get("cands", []) or []
 
-            # Render map state
             if geo.get("status") == "idle":
                 st.info(t("还没有搜索结果。请点击「Search/Locate」。", "No results yet. Click “Search/Locate”."))
                 base_lat, base_lon = 40.7590, -73.8290
@@ -1387,7 +1363,6 @@ def render_open_store():
                     s["address"] = chosen.get("display_name", s["address"])
                     st.rerun()
 
-                # ---- Auto estimate section (robust)
                 st.divider()
                 e1, e2 = st.columns([1, 1])
 
@@ -1396,7 +1371,6 @@ def render_open_store():
                         bt = p.get("business_type", "Other")
                         rad = float(s.get("radius_miles", 1.0))
 
-                        # competitors
                         comp = estimate_competitors_overpass(lat, lon, rad, bt)
                         s["competitors_debug"] = comp
                         if comp.get("ok"):
@@ -1405,7 +1379,6 @@ def render_open_store():
                             st.warning(t("竞品自动估算失败（Overpass 不稳定/限流很常见），已保留你手动输入的数值。",
                                          "Competitor auto-estimation failed (Overpass is often rate-limited). Keeping your manual value."))
 
-                        # traffic
                         tp = estimate_traffic_proxy_overpass(lat, lon, rad)
                         s["traffic_debug"] = tp
                         if tp.get("ok"):
@@ -1422,7 +1395,6 @@ def render_open_store():
                         s.pop("traffic_debug", None)
                         st.rerun()
 
-            # Debug expanders
             with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
                 st.write(geo.get("debug", {}))
 
@@ -1433,7 +1405,6 @@ def render_open_store():
             st.caption(t("说明：地图=地理编码（地址→坐标）；竞品/交通=基于 OSM 的近似估算，失败很常见但不会影响手工输入。",
                          "Note: Map is geocoding (address→coords). Competitors/traffic are OSM-based estimates; failures are common but won't break manual inputs."))
 
-        # ---- Score + metrics (ALWAYS computed from current inputs)
         score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
         risk_flags = []
         if int(s["competitors"]) > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
@@ -1451,9 +1422,7 @@ def render_open_store():
         else:
             st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
 
-    # -------------------------
     # Step 3
-    # -------------------------
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
         st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash (no AI here)"))
@@ -1513,9 +1482,7 @@ def render_open_store():
             with st.expander(t("查看缺货风险明细", "View stockout-risk details")):
                 st.dataframe(health["stockout_items"], use_container_width=True)
 
-    # -------------------------
     # Step 4
-    # -------------------------
     else:
         pr = st.session_state.pricing
         st.subheader(t("第 4 步：定价 & 一键总分析", "Step 4: Pricing & One-click Final Analysis"))

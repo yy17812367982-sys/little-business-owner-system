@@ -15,7 +15,7 @@ import math
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # ✅ 手机上默认不弹出
 )
 
 st.markdown(r"""

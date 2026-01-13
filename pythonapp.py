@@ -43,8 +43,8 @@ section[data-testid="stSidebar"]{
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* 标题文字统一白 */
-h1,h2,h3,h4,p,label,span,div{
+/* 标题文字统一白（别用 div 全覆盖太狠，会误伤很多组件，这里缩窄点） */
+h1,h2,h3,h4,p,label,span{
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
@@ -86,18 +86,81 @@ div[data-baseweb="select"] *{
   color: #fff !important;
 }
 
-/* 下拉菜单弹层也玻璃化（否则点开一片白） */
+/* =============================
+   Fix 1: Selectbox / Multiselect dropdown white panels
+   ============================= */
+
+/* 下拉菜单弹层外壳（popover/menu）玻璃化 */
+div[data-baseweb="popover"],
+div[data-baseweb="menu"]{
+  background: rgba(0,0,0,0.60) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  backdrop-filter: blur(14px);
+}
+
+/* menu 内部子元素不要白底 */
+div[data-baseweb="menu"] *{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* listbox 兜底 */
 div[role="listbox"]{
   background: rgba(0,0,0,0.60) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   backdrop-filter: blur(14px);
 }
+div[role="listbox"] ul,
+div[role="listbox"] li{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* option */
 div[role="option"]{
   background: transparent !important;
   color:#fff !important;
 }
-div[role="option"]:hover{
+div[role="option"]:hover,
+div[data-baseweb="menu"] li:hover{
   background: rgba(255,255,255,0.10) !important;
+}
+
+/* =============================
+   Fix 2: File uploader white dropzone
+   ============================= */
+div[data-testid="stFileUploader"]{
+  background: rgba(0,0,0,0.20) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(12px);
+}
+
+/* dropzone 内部白底区域（多写几种结构兜底） */
+div[data-testid="stFileUploader"] section,
+div[data-testid="stFileUploader"] section *,
+div[data-testid="stFileUploader"] [data-testid="stFileDropzone"],
+div[data-testid="stFileUploader"] [data-testid="stFileDropzone"] *{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* 上传组件里的按钮 */
+div[data-testid="stFileUploader"] button{
+  background: rgba(0,0,0,0.25) !important;
+  border: 1px solid rgba(255,255,255,0.16) !important;
+  color:#fff !important;
+  border-radius: 14px !important;
+}
+
+/* =============================
+   Fix 3: 一些“白底卡片/容器”兜底
+   ============================= */
+div[data-testid="stForm"],
+div[data-testid="stExpander"],
+div[data-testid="stVerticalBlock"],
+div[data-testid="stHorizontalBlock"]{
+  background: transparent !important;
 }
 
 /* expander：把那条白色标题栏干掉 */
@@ -107,9 +170,7 @@ details, summary{
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
-summary{
-  padding: 8px 12px !important;
-}
+summary{ padding: 8px 12px !important; }
 
 /* dataframe/table 背景也不要白 */
 div[data-testid="stDataFrame"]{
@@ -142,7 +203,7 @@ div[data-baseweb="tab"]{
   color:#fff !important;
 }
 
-/* radio 透明（避免灰块） */
+/* radio 透明 */
 div[role="radiogroup"] label{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -151,7 +212,7 @@ div[role="radiogroup"] label{
   backdrop-filter: blur(10px);
 }
 
-/* 按钮也玻璃化（你要全透明的话就别渐变） */
+/* 按钮玻璃 */
 button{
   background: rgba(0,0,0,0.25) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -163,7 +224,7 @@ button:hover{
   background: rgba(255,255,255,0.12) !important;
 }
 
-/* 你自定义 card 继续保留玻璃 */
+/* 自定义 card 玻璃 */
 .card{
   background: rgba(0,0,0,0.22);
   border: 1px solid rgba(255,255,255,0.12);
@@ -176,9 +237,9 @@ button:hover{
 /* 滚动条 */
 ::-webkit-scrollbar{ width:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
-
 </style>
 """, unsafe_allow_html=True)
+
 
 /* =============================
    Fix 1: Selectbox / Multiselect dropdown white panels

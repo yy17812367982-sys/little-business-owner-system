@@ -180,6 +180,74 @@ button:hover{
 </style>
 """, unsafe_allow_html=True)
 
+/* =============================
+   Fix 1: Selectbox / Multiselect dropdown white panels
+   ============================= */
+
+/* BaseWeb menu 容器（下拉白底的罪魁祸首之一） */
+div[data-baseweb="menu"],
+div[data-baseweb="menu"] *{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* BaseWeb popover（下拉浮层的外壳，有时也是白的） */
+div[data-baseweb="popover"]{
+  background: rgba(0,0,0,0.60) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  backdrop-filter: blur(14px);
+}
+
+/* listbox 里面的 ul / li */
+div[role="listbox"] ul,
+div[role="listbox"] li{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* option hover 再强化一次 */
+div[role="option"]:hover,
+div[data-baseweb="menu"] li:hover{
+  background: rgba(255,255,255,0.10) !important;
+}
+
+/* =============================
+   Fix 2: File uploader white dropzone
+   ============================= */
+
+/* stFileUploader 整体容器透明 */
+div[data-testid="stFileUploader"]{
+  background: rgba(0,0,0,0.20) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(12px);
+}
+
+/* dropzone 内部白底区域（不同版本 Streamlit 结构会有差异，多写几个兜底） */
+div[data-testid="stFileUploader"] section,
+div[data-testid="stFileUploader"] section *{
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* 上传组件里的按钮（Browse files）保持玻璃风格 */
+div[data-testid="stFileUploader"] button{
+  background: rgba(0,0,0,0.25) !important;
+  border: 1px solid rgba(255,255,255,0.16) !important;
+  color:#fff !important;
+  border-radius: 14px !important;
+}
+
+/* =============================
+   Fix 3: 还有一些“白底卡片/容器”兜底
+   ============================= */
+div[data-testid="stForm"],
+div[data-testid="stExpander"],
+div[data-testid="stVerticalBlock"],
+div[data-testid="stHorizontalBlock"]{
+  background: transparent !important;
+}
+
 
 
 
@@ -370,11 +438,12 @@ if "outputs" not in st.session_state:
         "final_open_store": None,
         "open_store_report_md": "",
         "inventory_summary": None,
-        "ops_ai_output": None,
-        "finance_ai_output": None,
-        "ops_report_md": "",
-        "finance_report_md": "",
+        "ops_ai_output": "",          # ✅ 改成字符串
+        "ops_report_md": "",          # ✅ 新增：运营报告
+        "finance_ai_output": "",
+        "finance_report_md": ""       # ✅ 可选：财务报告
     }
+
 
 
 # Top Ask-AI chat
@@ -535,47 +604,43 @@ Pricing: {pr}
 
 
 def ai_report_operations() -> str:
-    inv = st.session_state.inventory
-    pr = st.session_state.pricing
-    inv_df = inv.get("df", None)
+    out = st.session_state.outputs
 
-    inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
-    ops_ai = st.session_state.outputs.get("ops_ai_output", "")
+    ops_ai = out.get("ops_ai_output", "")
+    # 关键：确保是字符串，且可 strip
+    if ops_ai is None:
+        ops_ai = ""
+    elif not isinstance(ops_ai, str):
+        ops_ai = str(ops_ai)
+
+    inv = st.session_state.inventory
+    inv_df = inv.get("df")
+    inv_table = inv_df.to_string(index=False) if isinstance(inv_df, pd.DataFrame) else "Not provided"
+    inv_snapshot = out.get("inventory_summary", "No inventory summary available.")
 
     prompt = f"""
-You are producing an Operations Report for an SME owner. Output MUST be Markdown.
+Return Markdown.
 
-Use ONLY provided info; do not invent data.
+# Operations Report
+## Current Snapshot
+- Inventory snapshot: {inv_snapshot}
 
-Report structure:
-# Operations Weekly Report
-## 1) This Week Snapshot
-- Inventory snapshot (use provided)
-- Pricing settings (use provided)
+## Key Signals from Data
+- Use only provided inputs.
 
-## 2) KPI & Red Flags
-- Mention dead stock / stockout risk if implied by snapshot or table
+## Ops Advisor Notes (if any)
+{ops_ai.strip() if ops_ai.strip() else "[None]"}
 
-## 3) Action Checklist (12 bullets)
-- Replenishment rules, clearance plan, SOP checks, weekly review loop
-- Each bullet must include: owner + metric/trigger
-
-## 4) AI Advisor Notes (if any)
-- Summarize ops_ai_output if provided (do not quote overly long)
-
-Inputs:
-Inventory controls: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supplier_lead_time_days']}, seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
-Inventory snapshot: {inv_snapshot}
+## Inventory Rules
+## Pricing Execution Rules
+## KPIs (8)
+## Next 14 Days Action Plan (owner/metric)
+## Data Gaps
 Inventory table:
-{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
-
-Pricing: strategy={pr['strategy']}, cost={pr['cost']}, competitor_price={pr['competitor_price']},
-target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}
-
-Ops AI output:
-{ops_ai if ops_ai.strip() else '[None]'}
+{inv_table}
 """
     return ask_ai(prompt, mode="operations")
+
 
 
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:

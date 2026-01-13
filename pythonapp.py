@@ -7,7 +7,7 @@ import random
 from datetime import datetime
 from google import genai
 import requests
-from urllib.parse import quote
+import math
 
 # =========================================================
 # Page config + style
@@ -18,7 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ✅ 所有 CSS 必须放在字符串里（否则会 SyntaxError）
 st.markdown(r"""
 <style>
 /* =============================
@@ -60,7 +59,6 @@ div[data-testid="stToolbar"]{
 /* =============================
    Improve readability for subtitles / helper text
    ============================= */
-
 div[data-testid="stCaption"],
 div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important;
@@ -80,39 +78,30 @@ div[data-testid="stCaption"] *{
 /* =============================
    FIX: Restore metric readability
    ============================= */
-
-/* Metric 容器标题 */
 div[data-testid="stMetric"] label,
 div[data-testid="stMetric"] .stMetricLabel{
   color: rgba(255,255,255,0.78) !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.8) !important;
 }
 
-/* Metric 数值本体（最重要） */
 div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
-  color: rgba(255,255,255,0.98) !important;   /* 几乎纯白 */
+  color: rgba(255,255,255,0.98) !important;
   font-weight: 600 !important;
   text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
 }
 
-/* 防止被 .stMarkdown / .card 覆盖 */
 div[data-testid="stMetric"] *{
   opacity: 1 !important;
 }
 
-
 /* =============================
    Typography: improve contrast
-   ⚠️ 重点：不要全局染 span（会把下拉菜单里的选项也染白）
    ============================= */
-
-/* ✅ 主内容区文字：白字更清晰（不包含下拉弹层） */
 div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-/* ✅ 链接 */
 a, a *{
   color: rgba(180,220,255,0.95) !important;
 }
@@ -142,7 +131,6 @@ div[data-baseweb="base-input"] > div{
   box-shadow: none !important;
 }
 
-/* input/textarea 本体透明 */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
@@ -150,13 +138,11 @@ div[data-baseweb="base-input"] > div{
   color: rgba(255,255,255,0.95) !important;
 }
 
-/* placeholder */
 .stTextInput input::placeholder,
 .stTextArea textarea::placeholder{
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* selectbox 当前值那一条（控制框内） */
 div[data-baseweb="select"] *{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
@@ -164,7 +150,7 @@ div[data-baseweb="select"] *{
 }
 
 /* =============================
-   Dropdown (Selectbox/Multiselect): 白底 + 黑字 + hover 不透明
+   Dropdown: white bg + black text
    ============================= */
 div[data-baseweb="popover"]{ background: transparent !important; }
 
@@ -237,7 +223,7 @@ div[data-testid="stDataFrame"] *{
 }
 
 /* =============================
-   metric
+   metric card
    ============================= */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.30) !important;
@@ -328,7 +314,7 @@ if not API_KEY:
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 # =========================================================
-# AI wrapper: calls Gemini via google-genai (no vendor traces in UI)
+# AI wrapper
 # =========================================================
 SYSTEM_POLICY = """
 You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
@@ -402,20 +388,11 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
         f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
     )
 
-
 # =========================================================
 # ✅ Geocoding: fuzzy queries + multi provider + strong debug
-#   FIX: maps.co may require API key -> skip if missing
 # =========================================================
-import os
-import time
-import random
-import requests
-
 NOMINATIM_CONTACT_EMAIL = "yy17812367982@gmail.com"
 NOMINATIM_UA = f"ProjectB-SME-BI-Platform/1.0 (contact: {NOMINATIM_CONTACT_EMAIL})"
-
-# ✅ 可选：如果你自己有 maps.co key，放环境变量 MAPSCO_API_KEY
 MAPSCO_API_KEY = os.getenv("MAPSCO_API_KEY", "").strip()
 
 def _normalize_query(q: str) -> str:
@@ -427,7 +404,6 @@ def _fuzzy_queries(q: str):
     q0 = _normalize_query(q)
     if not q0:
         return []
-
     variants = [q0]
 
     q1 = q0.replace(",", " ").replace("  ", " ").strip()
@@ -479,12 +455,9 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
     headers = {"User-Agent": NOMINATIM_UA}
     queries = _fuzzy_queries(q)
 
-    # ✅ 轻微节流：避免连续点导致 Nominatim 429/403
     time.sleep(0.8)
 
     providers = []
-
-    # --- Provider 1: Nominatim (recommended) ---
     providers.append({
         "name": "nominatim",
         "url": "https://nominatim.openstreetmap.org/search",
@@ -498,8 +471,6 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
         },
     })
 
-    # --- Provider 2: maps.co (OPTIONAL; requires key on many setups) ---
-    # ✅ 没 key 就不加入 providers，避免你看到 401
     if MAPSCO_API_KEY:
         providers.append({
             "name": "maps_co",
@@ -526,7 +497,6 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
                                     "lon": float(d["lon"]),
                                 })
                 else:
-                    # maps.co
                     if isinstance(data, list):
                         for d in data[:limit]:
                             lat = d.get("lat")
@@ -557,8 +527,6 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
                     "query_used": qq,
                     "err": str(e),
                 }
-
-                # ✅ 如果 Nominatim 被 429 限流，稍等再继续（同 provider 的下一轮会继续）
                 if "429" in str(e) or "Too Many Requests" in str(e):
                     time.sleep(1.2 + random.random())
                 continue
@@ -569,9 +537,6 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
 # ✅ POI / Competitor estimation (OSM Overpass)
 # ✅ Traffic proxy estimation (road-class weighted)
 # =========================================================
-import math
-import requests
-
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 def _miles_to_meters(mi: float) -> float:
@@ -581,13 +546,8 @@ def _clamp(x, lo, hi):
     return max(lo, min(hi, x))
 
 def _business_to_competitor_osm_filters(business_type: str):
-    """
-    返回一个 Overpass QL 中使用的过滤条件列表。
-    你可以按自己的业态继续扩展。
-    """
     bt = (business_type or "").lower()
 
-    # 汽配店/修车相关
     if "auto" in bt:
         return [
             '["shop"="car_parts"]',
@@ -596,16 +556,12 @@ def _business_to_competitor_osm_filters(business_type: str):
             '["amenity"="car_wash"]',
             '["amenity"="fuel"]'
         ]
-
-    # 便利店
     if "convenience" in bt:
         return [
             '["shop"="convenience"]',
             '["shop"="supermarket"]',
             '["shop"="grocery"]'
         ]
-
-    # 咖啡/餐饮
     if "coffee" in bt:
         return [
             '["amenity"="cafe"]',
@@ -618,8 +574,6 @@ def _business_to_competitor_osm_filters(business_type: str):
             '["amenity"="fast_food"]',
             '["amenity"="cafe"]'
         ]
-
-    # 美业
     if "beauty" in bt or "salon" in bt:
         return [
             '["shop"="beauty"]',
@@ -627,7 +581,6 @@ def _business_to_competitor_osm_filters(business_type: str):
             '["amenity"="spa"]'
         ]
 
-    # 兜底：一些通用商业点
     return [
         '["shop"]',
         '["amenity"="restaurant"]',
@@ -639,7 +592,6 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
     r = int(_miles_to_meters(radius_miles))
     filters = _business_to_competitor_osm_filters(business_type)
 
-    # 用 nwr: node/way/relation 都算
     parts = []
     for f in filters:
         parts.append(f'nwr{f}(around:{r},{lat},{lon});')
@@ -658,12 +610,10 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
     data = resp.json()
     elements = data.get("elements", [])
 
-    # 去重（OSM id + type）
     seen = set()
     for e in elements:
         seen.add((e.get("type"), e.get("id")))
 
-    # 给你返回 count + 一些样本（用于debug）
     sample = []
     for e in elements[:8]:
         tags = e.get("tags", {}) or {}
@@ -679,10 +629,6 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
 
 @st.cache_data(show_spinner=False, ttl=6*3600)
 def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float):
-    """
-    OSM 没有真实 traffic count，这里用道路等级做 proxy：
-    motorway/trunk/primary/secondary/tertiary 等按权重累加。
-    """
     r = int(_miles_to_meters(radius_miles))
 
     query = f"""
@@ -722,8 +668,6 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
         score += w
         cnt += 1
 
-    # 把 proxy score 映射到你 slider 的 1000~50000
-    # 这个映射是经验参数：你可以按使用感受再调
     traffic_est = int(_clamp(1000 + score * 120, 1000, 50000))
 
     return {
@@ -732,12 +676,11 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
         "traffic_est": traffic_est
     }
 
-
 # =========================================================
 # State init
 # =========================================================
 if "active_suite" not in st.session_state:
-    st.session_state.active_suite = "open_store"  # open_store / operations / finance
+    st.session_state.active_suite = "open_store"
 
 if "username" not in st.session_state:
     st.session_state.username = ""
@@ -749,7 +692,7 @@ def on_username_submit():
     st.session_state.register_msg = t("目前不可注册。", "Currently unavailable to register.") if name else ""
 
 if "open_step" not in st.session_state:
-    st.session_state.open_step = 1  # 1..4
+    st.session_state.open_step = 1
 
 if "profile" not in st.session_state:
     st.session_state.profile = {
@@ -807,13 +750,14 @@ if "outputs" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# geocode session state
-if "site_last_candidates" not in st.session_state:
-    st.session_state.site_last_candidates = []
-if "site_last_geocode_debug" not in st.session_state:
-    st.session_state.site_last_geocode_debug = {}
-if "site_last_query" not in st.session_state:
-    st.session_state.site_last_query = ""
+# Step2 map state
+if "site_geo" not in st.session_state:
+    st.session_state.site_geo = {
+        "status": "idle",   # idle / ok / fail
+        "cands": [],
+        "picked_idx": 0,
+        "debug": {}
+    }
 
 # =========================================================
 # Helpers
@@ -863,7 +807,7 @@ def ai_report_open_store() -> str:
     inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
     inv_df = inv.get("df", None)
 
-    site_score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
+    site_score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
     rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
 
     prompt = f"""
@@ -998,7 +942,7 @@ def read_uploaded_to_text(files) -> str:
     return "\n".join(chunks)
 
 # =========================================================
-# Sidebar (✅ Suites moved to TOP)
+# Sidebar
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
@@ -1204,13 +1148,18 @@ def render_open_store():
 
     elif st.session_state.open_step == 2:
         s = st.session_state.site
+        p = st.session_state.profile
         st.subheader(t("第 2 步：选址检查", "Step 2: Site Check"))
         colA, colB = st.columns([1, 2])
 
+        # ---- Left controls ----
         with colA:
             s["address"] = st.text_input(t("地址（支持模糊）", "Address (fuzzy supported)"), s["address"])
-            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0],
-                                            index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
+            s["radius_miles"] = st.selectbox(
+                t("半径（英里）", "Radius (miles)"),
+                [0.5, 1.0, 3.0],
+                index=[0.5, 1.0, 3.0].index(float(s["radius_miles"]))
+            )
             s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
             s["competitors"] = st.number_input(t("竞品数量（估计）", "Competitors (estimated)"), min_value=0, value=int(s["competitors"]), step=1)
             s["parking"] = st.selectbox(t("停车便利", "Parking"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["parking"]))
@@ -1221,139 +1170,125 @@ def render_open_store():
                 index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
             )
 
-with colB:
-    st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
+        # ---- Right map & tools (✅ 关键：这段必须缩进在 colB / step2 内) ----
+        with colB:
+            st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
 
-    # --- state for site result ---
-    if "site_geo" not in st.session_state:
-        st.session_state.site_geo = {
-            "status": "idle",   # idle / ok / fail
-            "cands": [],
-            "picked_idx": 0,
-            "debug": {}
-        }
+            geo_state = st.session_state.site_geo
 
-    s = st.session_state.site
-    p = st.session_state.profile
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                do_search = st.button("🔎 " + t("Search / Locate", "Search / Locate"), use_container_width=True)
+            with b2:
+                do_clear = st.button(t("Clear Results", "Clear Results"), use_container_width=True)
 
-    # buttons
-    b1, b2 = st.columns([1, 1])
-    with b1:
-        do_search = st.button("🔎 " + t("Search / Locate", "Search / Locate"), use_container_width=True)
-    with b2:
-        do_clear = st.button(t("Clear Results", "Clear Results"), use_container_width=True)
-
-    if do_clear:
-        st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
-        s.pop("lat", None)
-        s.pop("lon", None)
-        s.pop("competitors_debug", None)
-        s.pop("traffic_debug", None)
-        st.rerun()
-
-    # run search
-    if do_search:
-        query = (s.get("address") or "").strip()
-
-        # 用你已经写好的 geocode 函数（如果你按我之前方案改了，是 geocode_candidates_multi_fuzzy）
-        # 如果你还在用老的 geocode_nominatim_candidates，就把下一行替换成：
-        # cands = geocode_nominatim_candidates(query, limit=6)
-        cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
-
-        st.session_state.site_geo["cands"] = cands
-        st.session_state.site_geo["debug"] = dbg
-        st.session_state.site_geo["status"] = "ok" if cands else "fail"
-        st.session_state.site_geo["picked_idx"] = 0
-        st.rerun()
-
-    # render result
-    geo = st.session_state.site_geo
-    cands = geo.get("cands", []) or []
-
-    if geo.get("status") == "idle":
-        st.info(t("还没有搜索结果。请点击「Search/Locate」。", "No results yet. Click “Search/Locate”."))
-        base_lat, base_lon = 40.7590, -73.8290
-        st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-
-    elif not cands:
-        st.warning(t("没搜到该地址。建议输入更短/更模糊的关键词，例如：'7 Champagne Ct 12189'。",
-                     "No matches. Try shorter input, e.g., '7 Champagne Ct 12189'."))
-        base_lat, base_lon = 40.7590, -73.8290
-        st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-
-    else:
-        labels = [c["display_name"] for c in cands]
-        idx = int(geo.get("picked_idx", 0))
-        idx = max(0, min(idx, len(labels) - 1))
-
-        picked = st.selectbox(
-            t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
-            labels,
-            index=idx,
-            key="site_pick_label"
-        )
-        chosen = cands[labels.index(picked)]
-        lat, lon = chosen["lat"], chosen["lon"]
-
-        # store coords
-        s["lat"] = float(lat)
-        s["lon"] = float(lon)
-
-        st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
-        st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
-
-        # normalized address
-        if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
-            s["address"] = chosen.get("display_name", s["address"])
-            st.rerun()
-
-        # auto estimate competitors + traffic
-        st.divider()
-        e1, e2 = st.columns([1, 1])
-        with e1:
-            if st.button(t("自动估算竞品&交通", "Auto-estimate competitors & traffic"), use_container_width=True):
-                bt = p.get("business_type", "Other")
-                rad = float(s.get("radius_miles", 1.0))
-
-                comp = estimate_competitors_overpass(lat, lon, rad, bt)
-                s["competitors"] = int(comp["count"])
-                s["competitors_debug"] = comp
-
-                tp = estimate_traffic_proxy_overpass(lat, lon, rad)
-                s["traffic"] = int(tp["traffic_est"])
-                s["traffic_debug"] = tp
-
-                st.rerun()
-
-        with e2:
-            if st.button(t("清空估算结果", "Clear estimates"), use_container_width=True):
+            if do_clear:
+                st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
+                s.pop("lat", None)
+                s.pop("lon", None)
                 s.pop("competitors_debug", None)
                 s.pop("traffic_debug", None)
                 st.rerun()
 
-    # debug
-    with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
-        st.write(geo.get("debug", {}))
+            if do_search:
+                query = (s.get("address") or "").strip()
+                cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
 
-    with st.expander(t("估算调试信息（可选）", "Estimation Debug (optional)"), expanded=False):
-        st.write("competitors_debug =", s.get("competitors_debug", None))
-        st.write("traffic_debug =", s.get("traffic_debug", None))
+                st.session_state.site_geo["cands"] = cands
+                st.session_state.site_geo["debug"] = dbg
+                st.session_state.site_geo["status"] = "ok" if cands else "fail"
+                st.session_state.site_geo["picked_idx"] = 0
+                st.rerun()
 
-    st.caption(t("说明：地图=地理编码（地址→坐标）；竞品/交通=基于 OSM 的近似估算。",
-                 "Note: Map is geocoding (address→coords). Competitors/traffic are OSM-based estimates."))
+            geo = st.session_state.site_geo
+            cands = geo.get("cands", []) or []
 
+            if geo.get("status") == "idle":
+                st.info(t("还没有搜索结果。请点击「Search/Locate」。", "No results yet. Click “Search/Locate”."))
+                base_lat, base_lon = 40.7590, -73.8290
+                st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
 
-        score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
+            elif not cands:
+                st.warning(t("没搜到该地址。建议输入更短/更模糊的关键词，例如：'7 Champagne Ct 12189'。",
+                             "No matches. Try shorter input, e.g., '7 Champagne Ct 12189'."))
+                base_lat, base_lon = 40.7590, -73.8290
+                st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
+
+            else:
+                labels = [c.get("display_name", "") for c in cands]
+                idx0 = int(geo.get("picked_idx", 0))
+                idx0 = max(0, min(idx0, len(labels) - 1))
+
+                # ✅ 用 index 选，避免同名地址导致 labels.index(picked) 乱套
+                picked_idx = st.selectbox(
+                    t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
+                    options=list(range(len(labels))),
+                    index=idx0,
+                    format_func=lambda i: labels[i] if 0 <= i < len(labels) else str(i)
+                )
+
+                chosen = cands[int(picked_idx)]
+                st.session_state.site_geo["picked_idx"] = int(picked_idx)
+
+                lat, lon = float(chosen["lat"]), float(chosen["lon"])
+                s["lat"] = lat
+                s["lon"] = lon
+
+                st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
+                st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+
+                if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
+                    s["address"] = chosen.get("display_name", s["address"])
+                    st.rerun()
+
+                st.divider()
+                e1, e2 = st.columns([1, 1])
+                with e1:
+                    if st.button(t("自动估算竞品&交通", "Auto-estimate competitors & traffic"), use_container_width=True):
+                        bt = p.get("business_type", "Other")
+                        rad = float(s.get("radius_miles", 1.0))
+
+                        comp = estimate_competitors_overpass(lat, lon, rad, bt)
+                        s["competitors"] = int(comp["count"])
+                        s["competitors_debug"] = comp
+
+                        tp = estimate_traffic_proxy_overpass(lat, lon, rad)
+                        s["traffic"] = int(tp["traffic_est"])
+                        s["traffic_debug"] = tp
+
+                        st.rerun()
+
+                with e2:
+                    if st.button(t("清空估算结果", "Clear estimates"), use_container_width=True):
+                        s.pop("competitors_debug", None)
+                        s.pop("traffic_debug", None)
+                        st.rerun()
+
+            with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
+                st.write(st.session_state.site_geo.get("debug", {}))
+
+            with st.expander(t("估算调试信息（可选）", "Estimation Debug (optional)"), expanded=False):
+                st.write("competitors_debug =", s.get("competitors_debug", None))
+                st.write("traffic_debug =", s.get("traffic_debug", None))
+
+            st.caption(t("说明：地图=地理编码（地址→坐标）；竞品/交通=基于 OSM 的近似估算。",
+                         "Note: Map is geocoding (address→coords). Competitors/traffic are OSM-based estimates."))
+
+        # ✅ 评分&三指标（必须在 step2 内，但不在 colB 的缩进陷阱里）
+        traffic = int(s.get("traffic") or 0)
+        competitors = int(s.get("competitors") or 0)
+        score = score_from_inputs_site(traffic, competitors, s["rent_level"], s["parking"])
+
         risk_flags = []
-        if s["competitors"] > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
+        if competitors > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
         if s["rent_level"] == "High": risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
         if s["parking"] == "Low": risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
         s["risk_flags"] = risk_flags
 
         c1, c2, c3 = st.columns(3)
         c1.metric(t("选址评分", "Site Score"), score)
-        c2.metric(t("竞品数", "Competitors"), s["competitors"])
-        c3.metric(t("流量", "Traffic"), s["traffic"])
+        c2.metric(t("竞品数", "Competitors"), competitors)
+        c3.metric(t("流量", "Traffic"), traffic)
 
         if risk_flags:
             st.warning(t("风险提示：", "Risk flags: ") + "，".join(risk_flags))

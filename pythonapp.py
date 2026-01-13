@@ -21,44 +21,10 @@ st.set_page_config(
 # =========================================================
 # CSS (SAFE: do NOT break Streamlit scroll / sidebar)
 # =========================================================
-st.markdown(r"""
+st.markdown(
+    r"""
 <style>
-/* =============================
-   0) Scroll system (关键修复：鼠标滚轮不动)
-   - Streamlit 的滚动容器是 stAppViewContainer，不是 body
-   ============================= */
-html, body{
-  height: 100%;
-  overflow: hidden !important;      /* ✅ body 不滚，避免双滚动&滚轮失效 */
-}
-
-/* ✅ 让 stAppViewContainer 接管滚动 */
-div[data-testid="stAppViewContainer"]{
-  height: 100vh !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  overscroll-behavior: contain;     /* ✅ 防止滚到“空白宇宙” */
-  -webkit-overflow-scrolling: touch;
-}
-
-/* stApp 不要 visible，否则很容易破坏滚动链路 */
-.stApp{
-  min-height: 100vh !important;
-  overflow: hidden !important;
-}
-
-/* 主容器 padding：底部别留太多，避免视觉“空白” */
-.block-container{
-  padding-top: 1.1rem !important;
-  padding-bottom: 0.6rem !important;
-}
-
-/* 隐藏默认 footer（常见空白来源之一） */
-footer{ visibility: hidden; height: 0; }
-
-st.markdown(r"""
-<style>
-/* 只在窄屏（手机/小屏）显示左侧悬浮按钮 */
+/* Only show the floating sidebar button on mobile/small screens */
 @media (max-width: 900px){
   .sidebar-fab{
     position: fixed;
@@ -82,12 +48,12 @@ st.markdown(r"""
     transform: scale(0.98);
   }
 }
-/* 大屏不显示 */
+/* Hide on desktop */
 @media (min-width: 901px){
   .sidebar-fab{ display:none; }
 }
 
-/* 提高 sidebar 层级，避免被盖住 */
+/* Keep sidebar/header above content */
 section[data-testid="stSidebar"]{ z-index: 9998 !important; }
 header[data-testid="stHeader"]{ z-index: 9999 !important; }
 </style>
@@ -98,22 +64,30 @@ header[data-testid="stHeader"]{ z-index: 9999 !important; }
 window.__toggleSidebarMobile = function(){
   const doc = window.parent.document;
 
-  // Streamlit 不同版本按钮的 title/aria 可能不同，所以多兜底几种
+  // Try to find Streamlit's built-in open/close sidebar buttons (varies by version)
   const openBtn =
     doc.querySelector('button[title="Open sidebar"]') ||
     doc.querySelector('button[aria-label="Open sidebar"]') ||
-    doc.querySelector('button[kind="header"]') && Array.from(doc.querySelectorAll('button')).find(b => (b.title||"").toLowerCase().includes("open") && (b.title||"").toLowerCase().includes("sidebar"));
+    Array.from(doc.querySelectorAll("button")).find(b =>
+      ((b.title || "").toLowerCase().includes("open") && (b.title || "").toLowerCase().includes("sidebar")) ||
+      ((b.getAttribute("aria-label") || "").toLowerCase().includes("open") && (b.getAttribute("aria-label") || "").toLowerCase().includes("sidebar"))
+    );
 
   const closeBtn =
     doc.querySelector('button[title="Close sidebar"]') ||
     doc.querySelector('button[aria-label="Close sidebar"]') ||
-    Array.from(doc.querySelectorAll('button')).find(b => (b.title||"").toLowerCase().includes("close") && (b.title||"").toLowerCase().includes("sidebar"));
+    Array.from(doc.querySelectorAll("button")).find(b =>
+      ((b.title || "").toLowerCase().includes("close") && (b.title || "").toLowerCase().includes("sidebar")) ||
+      ((b.getAttribute("aria-label") || "").toLowerCase().includes("close") && (b.getAttribute("aria-label") || "").toLowerCase().includes("sidebar"))
+    );
 
   if (openBtn) openBtn.click();
   else if (closeBtn) closeBtn.click();
 };
 </script>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
 
 /* =============================

@@ -76,6 +76,28 @@ div[data-testid="stCaption"] *{
   text-shadow: none !important;
 }
 
+/* =============================
+   FIX: Restore metric readability
+   ============================= */
+
+/* Metric 容器标题 */
+div[data-testid="stMetric"] label,
+div[data-testid="stMetric"] .stMetricLabel{
+  color: rgba(255,255,255,0.78) !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.8) !important;
+}
+
+/* Metric 数值本体（最重要） */
+div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
+  color: rgba(255,255,255,0.98) !important;   /* 几乎纯白 */
+  font-weight: 600 !important;
+  text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
+}
+
+/* 防止被 .stMarkdown / .card 覆盖 */
+div[data-testid="stMetric"] *{
+  opacity: 1 !important;
+}
 
 
 /* =============================

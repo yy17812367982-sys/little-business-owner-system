@@ -371,8 +371,11 @@ if "outputs" not in st.session_state:
         "open_store_report_md": "",
         "inventory_summary": None,
         "ops_ai_output": None,
-        "finance_ai_output": None
+        "finance_ai_output": None,
+        "ops_report_md": "",
+        "finance_report_md": "",
     }
+
 
 # Top Ask-AI chat
 if "chat_history" not in st.session_state:
@@ -474,6 +477,136 @@ def build_open_store_report_md() -> str:
     md.append(out["final_open_store"].strip() + "\n" if out["final_open_store"] else "Not generated.\n")
 
     return "\n".join(md)
+def ai_report_open_store() -> str:
+    p = st.session_state.profile
+    s = st.session_state.site
+    inv = st.session_state.inventory
+    pr = st.session_state.pricing
+
+    inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
+    inv_df = inv.get("df", None)
+
+    site_score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
+    rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
+
+    prompt = f"""
+You are producing a professional decision report for an SME owner.
+Output MUST be Markdown.
+
+Use ONLY the provided inputs; do not assume outside data.
+
+Report structure:
+# Open-Store Decision Report
+## 1) Executive Summary (3 bullets)
+- Include Overall Score (0-100) and Confidence (Low/Med/High)
+
+## 2) Key Inputs (table)
+- Business, Site, Inventory/Cash, Pricing
+
+## 3) Analysis
+### Site viability
+- cite traffic/competitors/rent/parking + computed site_score={site_score}
+
+### Inventory & cash
+- cite cash_target_days, lead_time_days, seasonality, inventory snapshot
+
+### Pricing
+- cite strategy, cost, competitor_price, target_margin, elasticity
+- include recommended price = {rec_price:.2f}
+
+## 4) Action Plan (10 bullets)
+Group by Site / Inventory&Cash / Pricing.
+Each bullet must include a metric/target or concrete next step.
+
+## 5) Risks & Controls (6 bullets)
+Each bullet must map to an input risk or an operational control.
+
+Inputs:
+Business: {p}
+Site: {s}
+Inventory: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supplier_lead_time_days']}, seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
+Inventory snapshot: {inv_snapshot}
+Inventory table:
+{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
+
+Pricing: {pr}
+"""
+    return ask_ai(prompt, mode="open_store")
+
+
+def ai_report_operations() -> str:
+    inv = st.session_state.inventory
+    pr = st.session_state.pricing
+    inv_df = inv.get("df", None)
+
+    inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
+    ops_ai = st.session_state.outputs.get("ops_ai_output", "")
+
+    prompt = f"""
+You are producing an Operations Report for an SME owner. Output MUST be Markdown.
+
+Use ONLY provided info; do not invent data.
+
+Report structure:
+# Operations Weekly Report
+## 1) This Week Snapshot
+- Inventory snapshot (use provided)
+- Pricing settings (use provided)
+
+## 2) KPI & Red Flags
+- Mention dead stock / stockout risk if implied by snapshot or table
+
+## 3) Action Checklist (12 bullets)
+- Replenishment rules, clearance plan, SOP checks, weekly review loop
+- Each bullet must include: owner + metric/trigger
+
+## 4) AI Advisor Notes (if any)
+- Summarize ops_ai_output if provided (do not quote overly long)
+
+Inputs:
+Inventory controls: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supplier_lead_time_days']}, seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
+Inventory snapshot: {inv_snapshot}
+Inventory table:
+{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
+
+Pricing: strategy={pr['strategy']}, cost={pr['cost']}, competitor_price={pr['competitor_price']},
+target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}
+
+Ops AI output:
+{ops_ai if ops_ai.strip() else '[None]'}
+"""
+    return ask_ai(prompt, mode="operations")
+
+
+def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
+    finance_ai = st.session_state.outputs.get("finance_ai_output", "")
+
+    prompt = f"""
+You are producing a Finance Analysis Report for an SME owner. Output MUST be Markdown.
+
+Focus={focus}
+Style={style}
+User question={question if question.strip() else 'None'}
+
+Report structure:
+# Finance Analysis Report
+## 1) Executive Summary (5 bullets)
+## 2) What the data suggests (tables/bullets)
+- Only compute what you can from provided data excerpts
+
+## 3) Risks & Controls (8 bullets)
+## 4) Action Plan (12 bullets)
+- Each bullet must include owner + metric/target
+
+## 5) Follow-up Questions (5 items)
+
+User documents (excerpts):
+{doc_text}
+
+Previous AI output (if any):
+{finance_ai if finance_ai.strip() else '[None]'}
+"""
+    return ask_ai(prompt, mode="finance")
 
 def read_uploaded_to_text(files) -> str:
     """
@@ -521,6 +654,39 @@ with st.sidebar:
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
     st.caption("v5.1 Prominent Suites")
+# =========================================================
+# Sidebar: Suite switcher (CRITICAL)
+# =========================================================
+st.markdown("### " + t("功能集合", "Suites"))
+
+suite_label = st.radio(
+    "",
+    options=[
+        t("开店（决策流）", "Open a Store"),
+        t("运营（跑起来）", "Operations"),
+        t("财务（分析）", "Finance"),
+    ],
+    index={
+        "open_store": 0,
+        "operations": 1,
+        "finance": 2
+    }.get(st.session_state.active_suite, 0)
+)
+
+mapping = {
+    t("开店（决策流）", "Open a Store"): "open_store",
+    t("运营（跑起来）", "Operations"): "operations",
+    t("财务（分析）", "Finance"): "finance",
+}
+new_suite = mapping[suite_label]
+
+if new_suite != st.session_state.active_suite:
+    st.session_state.active_suite = new_suite
+    # 可选：切回开店时把 wizard 置回 1
+    # if new_suite == "open_store": st.session_state.open_step = 1
+    st.rerun()
+
+st.markdown("---")
 
 
 # =========================================================
@@ -888,27 +1054,36 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
             with st.expander(t("上一次输出", "Last output"), expanded=False):
                 st.write(st.session_state.outputs["final_open_store"])
 
-        st.divider()
-        st.subheader(t("可交付物：报告", "Deliverable: Report"))
+                st.divider()
+        st.subheader(t("可交付物：AI 报告", "Deliverable: AI Report"))
 
-        colA, colB = st.columns([1, 1])
+        colA, colB, colC = st.columns([1, 1, 2])
+
         with colA:
-            if st.button(t("生成报告（Markdown）", "Generate Report (Markdown)"), use_container_width=True):
-                st.session_state.outputs["open_store_report_md"] = build_open_store_report_md()
+            if st.button(t("生成 AI 报告", "Generate AI Report"), use_container_width=True):
+                with st.spinner(t("生成报告中…", "Generating report...")):
+                    report_md = ai_report_open_store()
+                st.session_state.outputs["open_store_report_md"] = report_md
                 st.rerun()
+
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""
                 st.rerun()
 
-        if st.session_state.outputs["open_store_report_md"]:
-            st.text_area(t("报告预览", "Report Preview"), st.session_state.outputs["open_store_report_md"], height=420)
+        with colC:
+            st.caption(t("说明：报告会基于你前面选择的业务画像/选址/库存/定价生成，不依赖你是否点过“最终分析”。",
+                         "Note: Report uses your inputs across steps; independent from the final analysis button."))
+
+        if st.session_state.outputs.get("open_store_report_md", ""):
+            st.text_area(t("报告预览", "Report Preview"), st.session_state.outputs["open_store_report_md"], height=520)
             st.download_button(
-                label=t("下载 report.md", "Download report.md"),
+                label=t("下载 open_store_report.md", "Download open_store_report.md"),
                 data=st.session_state.outputs["open_store_report_md"],
                 file_name="open_store_report.md",
                 mime="text/markdown"
             )
+
 
 
 # =========================================================
@@ -1007,6 +1182,29 @@ def render_operations():
             st.session_state.outputs["ops_ai_output"] = out
             st.write(out)
 
+    st.divider()
+    st.subheader(t("可交付物：运营报告（AI）", "Deliverable: Operations Report (AI)"))
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button(t("生成运营报告", "Generate Ops Report"), type="primary", use_container_width=True):
+            with st.spinner(t("生成中…", "Generating...")):
+                st.session_state.outputs["ops_report_md"] = ai_report_operations()
+            st.rerun()
+    with col2:
+        if st.button(t("清空运营报告", "Clear Ops Report"), use_container_width=True):
+            st.session_state.outputs["ops_report_md"] = ""
+            st.rerun()
+
+    if "ops_report_md" in st.session_state.outputs and st.session_state.outputs["ops_report_md"]:
+        st.text_area(t("运营报告预览", "Ops Report Preview"), st.session_state.outputs["ops_report_md"], height=520)
+        st.download_button(
+            label=t("下载 operations_report.md", "Download operations_report.md"),
+            data=st.session_state.outputs["ops_report_md"],
+            file_name="operations_report.md",
+            mime="text/markdown"
+        )
+
 
 # =========================================================
 # Suite 3: Financial Analysis (upload docs + AI guidance)
@@ -1074,6 +1272,36 @@ Return:
             out = ask_ai(prompt, mode="finance")
         st.session_state.outputs["finance_ai_output"] = out
         st.write(out)
+
+    st.divider()
+    st.subheader(t("可交付物：财务报告（AI）", "Deliverable: Finance Report (AI)"))
+
+    colA, colB = st.columns([1, 1])
+    with colA:
+        if st.button(t("生成财务报告", "Generate Finance Report"), type="primary", use_container_width=True):
+            doc_text = read_uploaded_to_text(files) if files else "[No files uploaded]"
+            with st.spinner(t("生成中…", "Generating...")):
+                st.session_state.outputs["finance_report_md"] = ai_report_finance(
+                    doc_text=doc_text,
+                    focus=focus,
+                    style=style,
+                    question=question
+                )
+            st.rerun()
+
+    with colB:
+        if st.button(t("清空财务报告", "Clear Finance Report"), use_container_width=True):
+            st.session_state.outputs["finance_report_md"] = ""
+            st.rerun()
+
+    if st.session_state.outputs.get("finance_report_md", ""):
+        st.text_area(t("财务报告预览", "Finance Report Preview"), st.session_state.outputs["finance_report_md"], height=520)
+        st.download_button(
+            label=t("下载 finance_report.md", "Download finance_report.md"),
+            data=st.session_state.outputs["finance_report_md"],
+            file_name="finance_report.md",
+            mime="text/markdown"
+        )
 
 
 # =========================================================

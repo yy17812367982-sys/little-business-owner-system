@@ -91,7 +91,7 @@ div[data-testid="stMetric"] .stMetricLabel{
 
 /* Metric 数值本体（最重要） */
 div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
-  color: rgba(255,255,255,0.98) !important;   /* 几乎纯白 */
+  color: rgba(255,255,255,0.98) !important;
   font-weight: 600 !important;
   text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
 }
@@ -100,7 +100,6 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
 div[data-testid="stMetric"] *{
   opacity: 1 !important;
 }
-
 
 /* =============================
    Typography: improve contrast
@@ -166,15 +165,11 @@ div[data-baseweb="select"] *{
 
 /* =============================
    Dropdown (Selectbox/Multiselect): 白底 + 黑字 + hover 不透明
-   ✅ 修复你说的“鼠标放上去透明/移开变白”的问题
    ============================= */
-
-/* popover 外层允许透明（无所谓） */
 div[data-baseweb="popover"]{
   background: transparent !important;
 }
 
-/* ✅ 真正的菜单层：强制白底，永远不透明 */
 div[data-baseweb="menu"],
 div[role="listbox"]{
   background: #ffffff !important;
@@ -185,26 +180,22 @@ div[role="listbox"]{
   backdrop-filter: none !important;
 }
 
-/* ✅ 菜单内部：统一黑字 */
 div[data-baseweb="menu"] *,
 div[role="listbox"] *{
   color: #111 !important;
   text-shadow: none !important;
 }
 
-/* ✅ 每个选项：默认透明背景（显示白底），hover/选中明确给浅灰底 */
 div[data-baseweb="menu"] div[role="option"],
 div[role="listbox"] div[role="option"]{
   background: transparent !important;
 }
 
-/* hover */
 div[data-baseweb="menu"] div[role="option"]:hover,
 div[role="listbox"] div[role="option"]:hover{
   background: #f2f3f5 !important;
 }
 
-/* aria-selected（选中态） */
 div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
 div[role="listbox"] div[role="option"][aria-selected="true"]{
   background: #e9eefc !important;
@@ -423,26 +414,46 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 
 # =========================================================
 # ✅ Geocoding (Nominatim) — Address -> Lat/Lon (multi candidates)
+#   关键修复：
+#   1) 使用可联系 UA + email（你提供的邮箱）
+#   2) 不吞错误：返回 debug 信息
+#   3) 节流：避免频繁触发限流
 # =========================================================
+NOMINATIM_CONTACT_EMAIL = "yy17812367982@gmail.com"
+NOMINATIM_UA = f"ProjectB-SME-BI-Platform/1.0 (contact: {NOMINATIM_CONTACT_EMAIL})"
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def geocode_nominatim_candidates(query: str, limit: int = 5):
     q = (query or "").strip()
     if not q:
-        return []
+        return [], {"ok": False, "err": "empty query"}
 
-    url = (
-        "https://nominatim.openstreetmap.org/search?"
-        f"q={quote(q)}&format=json&addressdetails=1&limit={int(limit)}"
-    )
-    headers = {
-        # ⚠️ 建议你改成自己的邮箱，Nominatim 明确要求 UA 可联系
-        "User-Agent": "ProjectB-SME-BI-Platform/1.0 (contact: your_email@example.com)"
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": q,
+        "format": "json",
+        "addressdetails": 1,
+        "limit": int(limit),
+        "email": NOMINATIM_CONTACT_EMAIL,   # ✅ 强烈建议提供
+        "accept-language": "en",
+        "countrycodes": "us"                # 可选：你这里主要是美国地址，减少歧义
     }
+    headers = {"User-Agent": NOMINATIM_UA}
+
+    # ✅ 简单节流：缓存之外的首次调用也避免瞬时连发
+    time.sleep(1.05)
 
     try:
-        r = requests.get(url, headers=headers, timeout=8)
+        r = requests.get(url, params=params, headers=headers, timeout=12)
+        debug = {
+            "ok": True,
+            "status": r.status_code,
+            "final_url": r.url,
+            "text_head": (r.text[:240] if isinstance(r.text, str) else "")
+        }
         r.raise_for_status()
         data = r.json()
+
         out = []
         for d in data:
             out.append({
@@ -450,9 +461,10 @@ def geocode_nominatim_candidates(query: str, limit: int = 5):
                 "lat": float(d["lat"]),
                 "lon": float(d["lon"]),
             })
-        return out
-    except Exception:
-        return []
+        debug["count"] = len(out)
+        return out, debug
+    except Exception as e:
+        return [], {"ok": False, "err": str(e), "query": q}
 
 
 # =========================================================
@@ -528,6 +540,16 @@ if "outputs" not in st.session_state:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+# ✅ Step2 地图搜索控制：避免每次 rerun 都打 Nominatim（很容易 429）
+if "site_geocode_submit_id" not in st.session_state:
+    st.session_state.site_geocode_submit_id = 0
+if "site_last_geocode_debug" not in st.session_state:
+    st.session_state.site_last_geocode_debug = {}
+if "site_last_candidates" not in st.session_state:
+    st.session_state.site_last_candidates = []
+if "site_last_query" not in st.session_state:
+    st.session_state.site_last_query = ""
 
 
 # =========================================================
@@ -940,26 +962,47 @@ def render_open_store():
             )
 
         with colB:
-            st.subheader(t("地图预览（输入地址→搜索→定位）", "Map Preview (address → search → locate)"))
+            st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
 
-            # ✅ 搜索 + 多候选
             query = (s.get("address") or "").strip()
-            cands = geocode_nominatim_candidates(query, limit=6)
+
+            # ✅ 只有点击按钮才触发 geocode，避免每次 rerun 都请求导致 429/403
+            cbtn1, cbtn2, _ = st.columns([1, 1, 6])
+            with cbtn1:
+                if st.button(t("🔎 搜索定位", "🔎 Search / Locate"), use_container_width=True):
+                    st.session_state.site_geocode_submit_id += 1
+                    st.session_state.site_last_query = query
+
+                    cands, dbg = geocode_nominatim_candidates(query, limit=6)
+                    st.session_state.site_last_candidates = cands
+                    st.session_state.site_last_geocode_debug = dbg
+
+            with cbtn2:
+                if st.button(t("清空定位结果", "Clear Results"), use_container_width=True):
+                    st.session_state.site_last_candidates = []
+                    st.session_state.site_last_geocode_debug = {}
+                    st.session_state.site_last_query = ""
+
+            # 使用“上一次搜索结果”
+            cands = st.session_state.site_last_candidates
+            dbg = st.session_state.site_last_geocode_debug
+
+            # Debug 面板：关键！否则你永远不知道是 403/429 还是 timeout
+            with st.expander(t("地理编码调试信息（建议保留，用来排查 403/429）", "Geocode Debug (keep for troubleshooting)"), expanded=False):
+                st.write(dbg)
 
             if not cands:
-                st.warning(t("没搜到该地址。建议补全：门牌号 + 街道 + 城市 + 州/国家。",
-                             "No results. Try a more complete query: street number + street + city + state/country."))
+                st.warning(t("未定位到结果。请先点「搜索定位」。如果仍无结果，请补全：门牌号 + 街道 + 城市 + 州/国家。",
+                             "No results yet. Click “Search/Locate”. If still none, use: street number + street + city + state/country."))
                 base_lat, base_lon = 40.7590, -73.8290
                 st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
                 st.caption(t("当前显示兜底位置（演示）。", "Fallback demo location is shown."))
             else:
                 labels = [c["display_name"] for c in cands]
-                default_idx = 0
-
                 picked = st.selectbox(
                     t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
                     labels,
-                    index=default_idx
+                    index=0
                 )
                 chosen = cands[labels.index(picked)]
                 lat, lon = chosen["lat"], chosen["lon"]
@@ -972,8 +1015,8 @@ def render_open_store():
                     s["address"] = chosen.get("display_name", s["address"])
                     st.rerun()
 
-            st.caption(t("说明：这里用 OpenStreetMap 的 Nominatim 做地理编码；不是 POI 统计。",
-                         "Note: Geocoding uses OpenStreetMap Nominatim; POI stats not included."))
+            st.caption(t("说明：这里使用 OpenStreetMap 的 Nominatim 做地理编码（只负责地址→坐标）；不是 POI 统计。",
+                         "Note: Geocoding uses OpenStreetMap Nominatim (address → coordinates); POI stats not included."))
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []

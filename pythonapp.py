@@ -15,7 +15,7 @@ import math
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="expanded"  # ✅ 手机先收起，避免遮挡。桌面端也可点左上角展开
+    initial_sidebar_state="collapsed"
 )
 
 # =========================================================
@@ -56,6 +56,66 @@ div[data-testid="stAppViewContainer"]{
 /* 隐藏默认 footer（常见空白来源之一） */
 footer{ visibility: hidden; height: 0; }
 
+st.markdown(r"""
+<style>
+/* 只在窄屏（手机/小屏）显示左侧悬浮按钮 */
+@media (max-width: 900px){
+  .sidebar-fab{
+    position: fixed;
+    left: 10px;
+    top: 12px;
+    z-index: 10000;
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(0,0,0,0.35);
+    color: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 40px;
+    text-align: center;
+    user-select: none;
+  }
+  .sidebar-fab:active{
+    transform: scale(0.98);
+  }
+}
+/* 大屏不显示 */
+@media (min-width: 901px){
+  .sidebar-fab{ display:none; }
+}
+
+/* 提高 sidebar 层级，避免被盖住 */
+section[data-testid="stSidebar"]{ z-index: 9998 !important; }
+header[data-testid="stHeader"]{ z-index: 9999 !important; }
+</style>
+
+<div class="sidebar-fab" onclick="window.__toggleSidebarMobile()" title="Menu">☰</div>
+
+<script>
+window.__toggleSidebarMobile = function(){
+  const doc = window.parent.document;
+
+  // Streamlit 不同版本按钮的 title/aria 可能不同，所以多兜底几种
+  const openBtn =
+    doc.querySelector('button[title="Open sidebar"]') ||
+    doc.querySelector('button[aria-label="Open sidebar"]') ||
+    doc.querySelector('button[kind="header"]') && Array.from(doc.querySelectorAll('button')).find(b => (b.title||"").toLowerCase().includes("open") && (b.title||"").toLowerCase().includes("sidebar"));
+
+  const closeBtn =
+    doc.querySelector('button[title="Close sidebar"]') ||
+    doc.querySelector('button[aria-label="Close sidebar"]') ||
+    Array.from(doc.querySelectorAll('button')).find(b => (b.title||"").toLowerCase().includes("close") && (b.title||"").toLowerCase().includes("sidebar"));
+
+  if (openBtn) openBtn.click();
+  else if (closeBtn) closeBtn.click();
+};
+</script>
+""", unsafe_allow_html=True)
+
+
 /* =============================
    1) Background + overlay (保留你想要的氛围，但不破坏滚动)
    ============================= */
@@ -80,6 +140,8 @@ div[data-testid="stAppViewContainer"]{
   position: relative;
   z-index: 1;
 }
+
+
 
 /* =============================
    2) Transparent areas

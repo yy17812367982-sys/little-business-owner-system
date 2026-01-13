@@ -9,7 +9,6 @@ from google import genai
 import requests
 from urllib.parse import quote
 
-
 # =========================================================
 # Page config + style
 # =========================================================
@@ -91,7 +90,7 @@ div[data-testid="stMetric"] .stMetricLabel{
 
 /* Metric 数值本体（最重要） */
 div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
-  color: rgba(255,255,255,0.98) !important;
+  color: rgba(255,255,255,0.98) !important;   /* 几乎纯白 */
   font-weight: 600 !important;
   text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
 }
@@ -100,6 +99,7 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
 div[data-testid="stMetric"] *{
   opacity: 1 !important;
 }
+
 
 /* =============================
    Typography: improve contrast
@@ -166,9 +166,7 @@ div[data-baseweb="select"] *{
 /* =============================
    Dropdown (Selectbox/Multiselect): 白底 + 黑字 + hover 不透明
    ============================= */
-div[data-baseweb="popover"]{
-  background: transparent !important;
-}
+div[data-baseweb="popover"]{ background: transparent !important; }
 
 div[data-baseweb="menu"],
 div[role="listbox"]{
@@ -257,9 +255,7 @@ div[data-baseweb="tab-list"]{
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
-div[data-baseweb="tab"]{
-  color: rgba(255,255,255,0.95) !important;
-}
+div[data-baseweb="tab"]{ color: rgba(255,255,255,0.95) !important; }
 
 /* =============================
    radio
@@ -282,9 +278,7 @@ button{
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
-button:hover{
-  background: rgba(255,255,255,0.12) !important;
-}
+button:hover{ background: rgba(255,255,255,0.12) !important; }
 
 /* =============================
    custom card
@@ -306,7 +300,6 @@ button:hover{
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================================================
 # Language (default EN, switchable)
 # =========================================================
@@ -319,7 +312,6 @@ def t(zh: str, en: str) -> str:
 def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
     st.rerun()
-
 
 # =========================================================
 # API Key + client (no UI traces)
@@ -334,7 +326,6 @@ if not API_KEY:
     API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 client = genai.Client(api_key=API_KEY) if API_KEY else None
-
 
 # =========================================================
 # AI wrapper: calls Gemini via google-genai (no vendor traces in UI)
@@ -411,61 +402,158 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
         f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
     )
 
-
 # =========================================================
-# ✅ Geocoding (Nominatim) — Address -> Lat/Lon (multi candidates)
-#   关键修复：
-#   1) 使用可联系 UA + email（你提供的邮箱）
-#   2) 不吞错误：返回 debug 信息
-#   3) 节流：避免频繁触发限流
+# ✅ Geocoding: fuzzy queries + multi provider + strong debug
 # =========================================================
 NOMINATIM_CONTACT_EMAIL = "yy17812367982@gmail.com"
 NOMINATIM_UA = f"ProjectB-SME-BI-Platform/1.0 (contact: {NOMINATIM_CONTACT_EMAIL})"
 
+def _normalize_query(q: str) -> str:
+    q = (q or "").strip()
+    q = " ".join(q.split())
+    return q
+
+def _fuzzy_queries(q: str):
+    """
+    生成一组“更宽松”的 query，从严格到宽松依次尝试。
+    目标：用户输入不规范也尽量能搜到。
+    """
+    q0 = _normalize_query(q)
+    if not q0:
+        return []
+
+    variants = []
+    variants.append(q0)
+
+    # 去掉多余标点
+    q1 = q0.replace(",", " ").replace("  ", " ").strip()
+    if q1 != q0:
+        variants.append(q1)
+
+    # 如果用户没写 USA，补一个
+    if "usa" not in q0.lower() and "united states" not in q0.lower():
+        variants.append(q0 + " USA")
+        variants.append(q1 + " USA")
+
+    # 常见“省略州”问题：如果出现 NY 的邮编/城市，但没写 NY
+    if ("watervliet" in q0.lower()) and ("ny" not in q0.lower()):
+        variants.append(q0 + " NY")
+        variants.append(q0 + " New York")
+
+    # 只留数字+关键字（很粗暴但有时候反而能出结果）
+    # 例如：7 Champagne Ct Watervliet 12189
+    tokens = q1.split()
+    nums = [x for x in tokens if any(c.isdigit() for c in x)]
+    words = [x for x in tokens if x.isalpha() or x.lower() in ["ct", "st", "ave", "rd", "dr", "blvd", "ny"]]
+    loose = " ".join((nums + words)[:12]).strip()
+    if loose and loose.lower() != q1.lower():
+        variants.append(loose)
+        if "usa" not in loose.lower():
+            variants.append(loose + " USA")
+
+    # 去重保持顺序
+    seen = set()
+    out = []
+    for v in variants:
+        vv = _normalize_query(v)
+        if vv and vv.lower() not in seen:
+            seen.add(vv.lower())
+            out.append(vv)
+    return out
+
+def _request_json(url: str, params: dict, headers: dict, timeout: int = 12):
+    r = requests.get(url, params=params, headers=headers, timeout=timeout)
+    dbg = {
+        "status": r.status_code,
+        "final_url": r.url,
+        "text_head": (r.text[:260] if isinstance(r.text, str) else ""),
+    }
+    r.raise_for_status()
+    return r.json(), dbg
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
-def geocode_nominatim_candidates(query: str, limit: int = 5):
-    q = (query or "").strip()
+def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
+    q = _normalize_query(query)
     if not q:
         return [], {"ok": False, "err": "empty query"}
 
-    url = "https://nominatim.openstreetmap.org/search"
-    params = {
-        "q": q,
-        "format": "json",
-        "addressdetails": 1,
-        "limit": int(limit),
-        "email": NOMINATIM_CONTACT_EMAIL,   # ✅ 强烈建议提供
-        "accept-language": "en",
-        "countrycodes": "us"                # 可选：你这里主要是美国地址，减少歧义
-    }
     headers = {"User-Agent": NOMINATIM_UA}
 
-    # ✅ 简单节流：缓存之外的首次调用也避免瞬时连发
-    time.sleep(1.05)
+    providers = [
+        {
+            "name": "nominatim",
+            "url": "https://nominatim.openstreetmap.org/search",
+            "build_params": lambda qq: {
+                "q": qq,
+                "format": "json",
+                "addressdetails": 1,
+                "limit": int(limit),
+                "email": NOMINATIM_CONTACT_EMAIL,
+                "accept-language": "en",
+            },
+        },
+        {
+            "name": "maps_co",
+            "url": "https://geocode.maps.co/search",
+            "build_params": lambda qq: {"q": qq},
+        },
+    ]
 
-    try:
-        r = requests.get(url, params=params, headers=headers, timeout=12)
-        debug = {
-            "ok": True,
-            "status": r.status_code,
-            "final_url": r.url,
-            "text_head": (r.text[:240] if isinstance(r.text, str) else "")
-        }
-        r.raise_for_status()
-        data = r.json()
+    queries = _fuzzy_queries(q)
+    # 轻微节流，避免连续点导致限流/403/429
+    time.sleep(0.8)
 
-        out = []
-        for d in data:
-            out.append({
-                "display_name": d.get("display_name", ""),
-                "lat": float(d["lat"]),
-                "lon": float(d["lon"]),
-            })
-        debug["count"] = len(out)
-        return out, debug
-    except Exception as e:
-        return [], {"ok": False, "err": str(e), "query": q}
+    last_debug = {"ok": False, "err": "no attempt"}
+    for qq in queries:
+        for p in providers:
+            try:
+                params = p["build_params"](qq)
+                data, dbg = _request_json(p["url"], params=params, headers=headers, timeout=12)
 
+                out = []
+                if p["name"] == "nominatim":
+                    if isinstance(data, list):
+                        for d in data[:limit]:
+                            if "lat" in d and "lon" in d:
+                                out.append({
+                                    "display_name": d.get("display_name", ""),
+                                    "lat": float(d["lat"]),
+                                    "lon": float(d["lon"]),
+                                })
+                else:
+                    if isinstance(data, list):
+                        for d in data[:limit]:
+                            lat = d.get("lat")
+                            lon = d.get("lon")
+                            name = d.get("display_name") or d.get("label") or ""
+                            if lat and lon:
+                                out.append({
+                                    "display_name": name,
+                                    "lat": float(lat),
+                                    "lon": float(lon),
+                                })
+
+                last_debug = {
+                    "ok": True,
+                    "provider": p["name"],
+                    "query_used": qq,
+                    "count": len(out),
+                    **dbg,
+                }
+
+                if out:
+                    return out, last_debug
+
+            except Exception as e:
+                last_debug = {
+                    "ok": False,
+                    "provider": p["name"],
+                    "query_used": qq,
+                    "err": str(e),
+                }
+                continue
+
+    return [], last_debug
 
 # =========================================================
 # State init
@@ -541,16 +629,13 @@ if "outputs" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ✅ Step2 地图搜索控制：避免每次 rerun 都打 Nominatim（很容易 429）
-if "site_geocode_submit_id" not in st.session_state:
-    st.session_state.site_geocode_submit_id = 0
-if "site_last_geocode_debug" not in st.session_state:
-    st.session_state.site_last_geocode_debug = {}
+# geocode session state
 if "site_last_candidates" not in st.session_state:
     st.session_state.site_last_candidates = []
+if "site_last_geocode_debug" not in st.session_state:
+    st.session_state.site_last_geocode_debug = {}
 if "site_last_query" not in st.session_state:
     st.session_state.site_last_query = ""
-
 
 # =========================================================
 # Helpers
@@ -734,7 +819,6 @@ def read_uploaded_to_text(files) -> str:
             chunks.append(f"## {f.name}\n[Failed to parse: {e}]\n")
     return "\n".join(chunks)
 
-
 # =========================================================
 # Sidebar (✅ Suites moved to TOP)
 # =========================================================
@@ -782,8 +866,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.2 Geocoding Enabled")
-
+    st.caption("v5.2 Geocoding (Fuzzy + Dual Provider)")
 
 # =========================================================
 # Header + Top Ask AI
@@ -884,7 +967,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
                         unsafe_allow_html=True
                     )
 
-
 # =========================================================
 # Suite 1: Open a Store
 # =========================================================
@@ -948,7 +1030,7 @@ def render_open_store():
         colA, colB = st.columns([1, 2])
 
         with colA:
-            s["address"] = st.text_input(t("地址", "Address"), s["address"])
+            s["address"] = st.text_input(t("地址（支持模糊）", "Address (fuzzy supported)"), s["address"])
             s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0],
                                             index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
             s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
@@ -966,57 +1048,78 @@ def render_open_store():
 
             query = (s.get("address") or "").strip()
 
-            # ✅ 只有点击按钮才触发 geocode，避免每次 rerun 都请求导致 429/403
-            cbtn1, cbtn2, _ = st.columns([1, 1, 6])
-            with cbtn1:
-                if st.button(t("🔎 搜索定位", "🔎 Search / Locate"), use_container_width=True):
-                    st.session_state.site_geocode_submit_id += 1
-                    st.session_state.site_last_query = query
+            # ✅ 手动坐标兜底
+            with st.expander(t("手动输入坐标（兜底）", "Manual Lat/Lon (fallback)"), expanded=False):
+                manual_lat = st.text_input(t("纬度 lat", "Latitude"), value="", key="manual_lat")
+                manual_lon = st.text_input(t("经度 lon", "Longitude"), value="", key="manual_lon")
+                use_manual = st.checkbox(t("使用手动坐标", "Use manual coordinates"), value=False, key="use_manual_coords")
 
-                    cands, dbg = geocode_nominatim_candidates(query, limit=6)
+            b1, b2, _ = st.columns([1.2, 1.2, 6.0])
+            with b1:
+                if st.button(t("🔎 搜索定位", "🔎 Search / Locate"), use_container_width=True):
+                    st.session_state.site_last_query = query
+                    cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
                     st.session_state.site_last_candidates = cands
                     st.session_state.site_last_geocode_debug = dbg
-
-            with cbtn2:
+            with b2:
                 if st.button(t("清空定位结果", "Clear Results"), use_container_width=True):
                     st.session_state.site_last_candidates = []
                     st.session_state.site_last_geocode_debug = {}
                     st.session_state.site_last_query = ""
 
-            # 使用“上一次搜索结果”
             cands = st.session_state.site_last_candidates
             dbg = st.session_state.site_last_geocode_debug
 
-            # Debug 面板：关键！否则你永远不知道是 403/429 还是 timeout
-            with st.expander(t("地理编码调试信息（建议保留，用来排查 403/429）", "Geocode Debug (keep for troubleshooting)"), expanded=False):
+            # ✅ 强制摘要（不用展开 expander）
+            if dbg:
+                if dbg.get("ok"):
+                    st.info(
+                        f"Geocode OK | provider={dbg.get('provider')} | count={dbg.get('count')} | query_used={dbg.get('query_used')}"
+                    )
+                else:
+                    st.error(
+                        f"Geocode FAIL | provider={dbg.get('provider')} | query_used={dbg.get('query_used')} | err={dbg.get('err')}"
+                    )
+            else:
+                st.warning(t("还没请求。请点「搜索定位」。", "No request yet. Click “Search/Locate”."))
+
+            with st.expander(t("地理编码调试信息（建议保留，用来排查 403/429/timeout）", "Geocode Debug (keep for troubleshooting)"), expanded=False):
                 st.write(dbg)
 
-            if not cands:
-                st.warning(t("未定位到结果。请先点「搜索定位」。如果仍无结果，请补全：门牌号 + 街道 + 城市 + 州/国家。",
-                             "No results yet. Click “Search/Locate”. If still none, use: street number + street + city + state/country."))
-                base_lat, base_lon = 40.7590, -73.8290
-                st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-                st.caption(t("当前显示兜底位置（演示）。", "Fallback demo location is shown."))
+            # ✅ 手动坐标优先
+            if use_manual:
+                try:
+                    lat = float((manual_lat or "").strip())
+                    lon = float((manual_lon or "").strip())
+                    st.caption(t(f"已使用手动坐标：{lat:.6f}, {lon:.6f}", f"Using manual coords: {lat:.6f}, {lon:.6f}"))
+                    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+                except Exception:
+                    st.error(t("手动坐标格式不对，请输入数字。", "Manual lat/lon invalid. Please enter numbers."))
             else:
-                labels = [c["display_name"] for c in cands]
-                picked = st.selectbox(
-                    t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
-                    labels,
-                    index=0
-                )
-                chosen = cands[labels.index(picked)]
-                lat, lon = chosen["lat"], chosen["lon"]
+                if not cands:
+                    st.warning(t("没有匹配结果。你可以尝试更短的输入（比如：'7 Champagne Ct 12189'）。",
+                                 "No matches. Try a shorter input (e.g., '7 Champagne Ct 12189')."))
+                    base_lat, base_lon = 40.7590, -73.8290
+                    st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
+                    st.caption(t("当前显示兜底位置（演示）。", "Fallback demo location is shown."))
+                else:
+                    labels = [c["display_name"] for c in cands]
+                    picked = st.selectbox(
+                        t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
+                        labels,
+                        index=0
+                    )
+                    chosen = cands[labels.index(picked)]
+                    lat, lon = chosen["lat"], chosen["lon"]
 
-                st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
-                st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+                    st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
+                    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
 
-                # （可选）把选中的 display_name 回写到 address，防止你输入“简写地址”但后续报告里太模糊
-                if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
-                    s["address"] = chosen.get("display_name", s["address"])
-                    st.rerun()
+                    if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
+                        s["address"] = chosen.get("display_name", s["address"])
+                        st.rerun()
 
-            st.caption(t("说明：这里使用 OpenStreetMap 的 Nominatim 做地理编码（只负责地址→坐标）；不是 POI 统计。",
-                         "Note: Geocoding uses OpenStreetMap Nominatim (address → coordinates); POI stats not included."))
+            st.caption(t("说明：这里是地址地理编码（Geocoding），不是 POI/店铺统计。", "Note: This is geocoding (address → coords), not POI counting."))
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []
@@ -1200,7 +1303,6 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
                 mime="text/markdown"
             )
 
-
 # =========================================================
 # Suite 2: Operations
 # =========================================================
@@ -1320,7 +1422,6 @@ def render_operations():
             mime="text/markdown"
         )
 
-
 # =========================================================
 # Suite 3: Finance
 # =========================================================
@@ -1417,7 +1518,6 @@ Return:
             file_name="finance_report.md",
             mime="text/markdown"
         )
-
 
 # =========================================================
 # Router by suite

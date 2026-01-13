@@ -17,7 +17,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
+# ✅ 关键修复：所有 CSS 必须在 st.markdown("""...""") 的三引号字符串里
+# ✅ 你之前报错的根因：把一段以 /* ... */ 开头的 CSS 粘贴到了三引号外面
+st.markdown(
+    """
 <style>
 /* 背景 */
 .stApp{
@@ -43,26 +46,15 @@ section[data-testid="stSidebar"]{
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* 标题文字统一白（不要用 div 全覆盖，误伤太多） */
+/* 标题文字统一白（别用 div 全覆盖太狠，会误伤很多组件，这里缩窄点） */
 h1,h2,h3,h4,p,label,span{
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-/* 你在代码里用到了 pill，这里补一下 */
-.pill{
-  display:inline-block;
-  padding: 4px 10px;
-  margin-right: 8px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.25);
-  border: 1px solid rgba(255,255,255,0.14);
-  backdrop-filter: blur(10px);
-}
+/* ===== BaseWeb/Streamlit 控件全透明玻璃化 ===== */
 
-/* ===== BaseWeb/Streamlit 控件玻璃化 ===== */
-
-/* 输入类外壳（selectbox、multiselect、number、text、textarea等） */
+/* 所有输入类外壳（selectbox、multiselect、number、text、textarea等） */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
 div[data-baseweb="select"],
@@ -77,7 +69,7 @@ div[data-baseweb="base-input"] > div{
   box-shadow: none !important;
 }
 
-/* input / textarea 本体透明 */
+/* 真正的 input / textarea 本体透明 */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
@@ -174,7 +166,7 @@ div[data-testid="stHorizontalBlock"]{
   background: transparent !important;
 }
 
-/* expander */
+/* expander：把那条白色标题栏干掉 */
 details, summary{
   background: rgba(0,0,0,0.20) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -183,7 +175,7 @@ details, summary{
 }
 summary{ padding: 8px 12px !important; }
 
-/* dataframe/table */
+/* dataframe/table 背景也不要白 */
 div[data-testid="stDataFrame"]{
   background: rgba(0,0,0,0.20) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -195,7 +187,7 @@ div[data-testid="stDataFrame"] *{
   color:#fff !important;
 }
 
-/* metric */
+/* metric 卡片透明 */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
@@ -203,7 +195,7 @@ div[data-testid="stMetric"]{
   backdrop-filter: blur(10px);
 }
 
-/* tabs */
+/* tabs 顶部条透明 */
 div[data-baseweb="tab-list"]{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -214,7 +206,7 @@ div[data-baseweb="tab"]{
   color:#fff !important;
 }
 
-/* radio */
+/* radio 透明 */
 div[role="radiogroup"] label{
   background: rgba(0,0,0,0.22) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -223,7 +215,7 @@ div[role="radiogroup"] label{
   backdrop-filter: blur(10px);
 }
 
-/* 按钮玻璃（注意：全局 button 会影响所有按钮；先留着） */
+/* 按钮玻璃 */
 button{
   background: rgba(0,0,0,0.25) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -235,7 +227,7 @@ button:hover{
   background: rgba(255,255,255,0.12) !important;
 }
 
-/* 自定义 card */
+/* 自定义 card 玻璃 */
 .card{
   background: rgba(0,0,0,0.22);
   border: 1px solid rgba(255,255,255,0.12);
@@ -245,83 +237,25 @@ button:hover{
   backdrop-filter: blur(10px);
 }
 
+/* pill (step badge) */
+.pill{
+  display:inline-block;
+  padding: 4px 10px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.12);
+  color:#fff;
+  font-size: 12px;
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar{ width:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 </style>
-""", unsafe_allow_html=True)
-
-
-
-/* =============================
-   Fix 1: Selectbox / Multiselect dropdown white panels
-   ============================= */
-
-/* BaseWeb menu 容器（下拉白底的罪魁祸首之一） */
-div[data-baseweb="menu"],
-div[data-baseweb="menu"] *{
-  background: transparent !important;
-  color: #fff !important;
-}
-
-/* BaseWeb popover（下拉浮层的外壳，有时也是白的） */
-div[data-baseweb="popover"]{
-  background: rgba(0,0,0,0.60) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  backdrop-filter: blur(14px);
-}
-
-/* listbox 里面的 ul / li */
-div[role="listbox"] ul,
-div[role="listbox"] li{
-  background: transparent !important;
-  color: #fff !important;
-}
-
-/* option hover 再强化一次 */
-div[role="option"]:hover,
-div[data-baseweb="menu"] li:hover{
-  background: rgba(255,255,255,0.10) !important;
-}
-
-/* =============================
-   Fix 2: File uploader white dropzone
-   ============================= */
-
-/* stFileUploader 整体容器透明 */
-div[data-testid="stFileUploader"]{
-  background: rgba(0,0,0,0.20) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(12px);
-}
-
-/* dropzone 内部白底区域（不同版本 Streamlit 结构会有差异，多写几个兜底） */
-div[data-testid="stFileUploader"] section,
-div[data-testid="stFileUploader"] section *{
-  background: transparent !important;
-  color: #fff !important;
-}
-
-/* 上传组件里的按钮（Browse files）保持玻璃风格 */
-div[data-testid="stFileUploader"] button{
-  background: rgba(0,0,0,0.25) !important;
-  border: 1px solid rgba(255,255,255,0.16) !important;
-  color:#fff !important;
-  border-radius: 14px !important;
-}
-
-/* =============================
-   Fix 3: 还有一些“白底卡片/容器”兜底
-   ============================= */
-div[data-testid="stForm"],
-div[data-testid="stExpander"],
-div[data-testid="stVerticalBlock"],
-div[data-testid="stHorizontalBlock"]{
-  background: transparent !important;
-}
-
-
+""",
+    unsafe_allow_html=True
+)
 
 
 # =========================================================
@@ -367,14 +301,9 @@ Rules:
 - If user requests sensitive/illegal help, refuse briefly and offer safe alternatives.
 """
 
-# 你可以按需调整优先级：越靠前越先尝试
-# =========================================================
-# Model routing (Pro-first with fallback)
-# =========================================================
-# 你可以在这里调整优先级：越靠前越先尝试
 MODEL_CANDIDATES_PRO = [
-    "gemini-3-pro-preview",  # 最强，但通常需要 Paid（Free tier Not available）
-    "gemini-2.5-pro",        # 强推理/代码；Free tier 有但额度/速率会卡
+    "gemini-3-pro-preview",
+    "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
 ]
@@ -382,16 +311,18 @@ MODEL_CANDIDATES_PRO = [
 MODEL_CANDIDATES_FAST = [
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
-    "gemini-2.5-pro",        # fast 模式兜底也可以试试 pro
+    "gemini-2.5-pro",
 ]
 
-# UI: 让你在侧边栏一键选择“追求最强 / 追求速度”
 if "ai_quality" not in st.session_state:
     st.session_state.ai_quality = "pro"  # pro / fast
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:
-        return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。", "AI service is not configured (missing GEMINI_API_KEY or client).")
+        return t(
+            "AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
+            "AI service is not configured (missing GEMINI_API_KEY or client)."
+        )
 
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
@@ -402,11 +333,9 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
-    # 选择候选模型列表
     models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
 
     last_err = None
-    # 每个模型给 2 次机会（主要为 429/配额抖动）
     for model_name in models:
         for attempt in range(2):
             try:
@@ -422,25 +351,19 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
                 msg = str(e)
                 last_err = f"{model_name}: {msg}"
 
-                # 常见：限流/配额/资源不足 → 稍等重试，然后换模型
                 if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
                     time.sleep(1.2 + random.random())
                     continue
 
-                # 某些模型在 Free tier 直接不可用/权限不够 → 直接换下一个
                 if ("Not available" in msg) or ("PERMISSION_DENIED" in msg) or ("403" in msg):
                     break
 
-                # 其它异常：也换下一个模型
                 break
 
-    # 全部失败：给用户一个“可操作”的报错方向
     return t(
         f"AI 暂时不可用。可能原因：免费额度/限流、或所选模型需要开通 Paid。最后错误：{last_err}",
         f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
     )
-
-
 
 
 # =========================================================
@@ -449,7 +372,6 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
 if "active_suite" not in st.session_state:
     st.session_state.active_suite = "open_store"  # open_store / operations / finance
 
-# Sidebar username behavior
 if "username" not in st.session_state:
     st.session_state.username = ""
 if "register_msg" not in st.session_state:
@@ -459,11 +381,9 @@ def on_username_submit():
     name = (st.session_state.username or "").strip()
     st.session_state.register_msg = t("目前不可注册。", "Currently unavailable to register.") if name else ""
 
-# Open-store wizard step
 if "open_step" not in st.session_state:
     st.session_state.open_step = 1  # 1..4
 
-# Data buckets
 if "profile" not in st.session_state:
     st.session_state.profile = {
         "business_type": "Auto Parts Store",
@@ -511,15 +431,12 @@ if "outputs" not in st.session_state:
         "final_open_store": None,
         "open_store_report_md": "",
         "inventory_summary": None,
-        "ops_ai_output": "",          # ✅ 改成字符串
-        "ops_report_md": "",          # ✅ 新增：运营报告
+        "ops_ai_output": "",
+        "ops_report_md": "",
         "finance_ai_output": "",
-        "finance_report_md": ""       # ✅ 可选：财务报告
+        "finance_report_md": ""
     }
 
-
-
-# Top Ask-AI chat
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []  # list[{"role":"user/ai","text":...}]
 
@@ -529,21 +446,33 @@ if "chat_history" not in st.session_state:
 # =========================================================
 def score_from_inputs_site(traffic: int, competitors: int, rent_level: str, parking: str) -> int:
     score = 55
-    if traffic >= 40000: score += 10
-    elif traffic >= 25000: score += 6
-    else: score += 2
+    if traffic >= 40000:
+        score += 10
+    elif traffic >= 25000:
+        score += 6
+    else:
+        score += 2
 
-    if competitors <= 6: score += 12
-    elif competitors <= 12: score += 6
-    else: score -= 6
+    if competitors <= 6:
+        score += 12
+    elif competitors <= 12:
+        score += 6
+    else:
+        score -= 6
 
-    if rent_level == "Low": score += 8
-    elif rent_level == "Medium": score += 3
-    else: score -= 6
+    if rent_level == "Low":
+        score += 8
+    elif rent_level == "Medium":
+        score += 3
+    else:
+        score -= 6
 
-    if parking == "High": score += 6
-    elif parking == "Medium": score += 2
-    else: score -= 4
+    if parking == "High":
+        score += 6
+    elif parking == "Medium":
+        score += 2
+    else:
+        score -= 4
 
     return int(max(0, min(100, score)))
 
@@ -563,62 +492,6 @@ def inventory_health(df: pd.DataFrame) -> dict:
         "dead_value": dead_value
     }
 
-def build_open_store_report_md() -> str:
-    p = st.session_state.profile
-    s = st.session_state.site
-    inv = st.session_state.inventory
-    pr = st.session_state.pricing
-    out = st.session_state.outputs
-
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    md = []
-    md.append("# Open a Store — Decision Report\n")
-    md.append(f"- Generated: {now}\n")
-
-    md.append("## Business Profile\n")
-    md.append(f"- Type: {p['business_type']}\n")
-    md.append(f"- Stage: {p['stage']}\n")
-    md.append(f"- City: {p['city']}\n")
-    md.append(f"- Budget: ${p['budget']:,.0f}\n")
-    md.append(f"- Target customer: {p['target_customer']}\n")
-    md.append(f"- Differentiator: {p['differentiator']}\n")
-    if p["notes"].strip():
-        md.append(f"- Notes: {p['notes'].strip()}\n")
-
-    md.append("\n## Site\n")
-    md.append(f"- Address: {s['address']}\n")
-    md.append(f"- Radius: {s['radius_miles']} miles\n")
-    md.append(f"- Traffic: {s['traffic']}\n")
-    md.append(f"- Competitors: {s['competitors']}\n")
-    md.append(f"- Parking: {s['parking']} | Rent: {s['rent_level']}\n")
-    if s["risk_flags"]:
-        md.append(f"- Risk flags: {', '.join(s['risk_flags'])}\n")
-
-    md.append("\n## Inventory & Cash\n")
-    if inv["df"] is None:
-        md.append("- Inventory data: Not provided\n")
-    else:
-        md.append(f"- Cash target: {inv['cash_target_days']} days\n")
-        md.append(f"- Lead time: {inv['supplier_lead_time_days']} days\n")
-        md.append(f"- Seasonality: {inv['seasonality']}\n")
-        if inv["notes"].strip():
-            md.append(f"- Notes: {inv['notes'].strip()}\n")
-        if out["inventory_summary"]:
-            md.append(f"- Snapshot: {out['inventory_summary']}\n")
-
-    md.append("\n## Pricing\n")
-    md.append(f"- Strategy: {pr['strategy']}\n")
-    md.append(f"- Cost: ${pr['cost']}\n")
-    md.append(f"- Target margin: {pr['target_margin']}%\n")
-    md.append(f"- Competitor price: ${pr['competitor_price']}\n")
-    md.append(f"- Elasticity: {pr['elasticity']}\n")
-    if pr["notes"].strip():
-        md.append(f"- Notes: {pr['notes'].strip()}\n")
-
-    md.append("\n## Final Output\n")
-    md.append(out["final_open_store"].strip() + "\n" if out["final_open_store"] else "Not generated.\n")
-
-    return "\n".join(md)
 def ai_report_open_store() -> str:
     p = st.session_state.profile
     s = st.session_state.site
@@ -675,12 +548,10 @@ Pricing: {pr}
 """
     return ask_ai(prompt, mode="open_store")
 
-
 def ai_report_operations() -> str:
     out = st.session_state.outputs
 
     ops_ai = out.get("ops_ai_output", "")
-    # 关键：确保是字符串，且可 strip
     if ops_ai is None:
         ops_ai = ""
     elif not isinstance(ops_ai, str):
@@ -714,8 +585,6 @@ Inventory table:
 """
     return ask_ai(prompt, mode="operations")
 
-
-
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
     finance_ai = st.session_state.outputs.get("finance_ai_output", "")
 
@@ -747,10 +616,6 @@ Previous AI output (if any):
     return ask_ai(prompt, mode="finance")
 
 def read_uploaded_to_text(files) -> str:
-    """
-    Convert user uploaded documents into plain text summary for AI prompt.
-    Supports: CSV/XLSX/TXT/MD (simple). PDFs not handled here.
-    """
     chunks = []
     for f in files:
         name = f.name.lower()
@@ -772,7 +637,7 @@ def read_uploaded_to_text(files) -> str:
 
 
 # =========================================================
-# Sidebar (language + username + status only)
+# Sidebar (language + username + suites)
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
@@ -792,39 +657,34 @@ with st.sidebar:
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
     st.caption("v5.1 Prominent Suites")
-# =========================================================
-# Sidebar: Suite switcher (CRITICAL)
-# =========================================================
-st.markdown("### " + t("功能集合", "Suites"))
 
-suite_label = st.radio(
-    "",
-    options=[
-        t("开店（决策流）", "Open a Store"),
-        t("运营（跑起来）", "Operations"),
-        t("财务（分析）", "Finance"),
-    ],
-    index={
-        "open_store": 0,
-        "operations": 1,
-        "finance": 2
-    }.get(st.session_state.active_suite, 0)
-)
+    st.markdown("---")
+    st.markdown("### " + t("功能集合", "Suites"))
 
-mapping = {
-    t("开店（决策流）", "Open a Store"): "open_store",
-    t("运营（跑起来）", "Operations"): "operations",
-    t("财务（分析）", "Finance"): "finance",
-}
-new_suite = mapping[suite_label]
+    suite_label = st.radio(
+        "",
+        options=[
+            t("开店（决策流）", "Open a Store"),
+            t("运营（跑起来）", "Operations"),
+            t("财务（分析）", "Finance"),
+        ],
+        index={
+            "open_store": 0,
+            "operations": 1,
+            "finance": 2
+        }.get(st.session_state.active_suite, 0)
+    )
 
-if new_suite != st.session_state.active_suite:
-    st.session_state.active_suite = new_suite
-    # 可选：切回开店时把 wizard 置回 1
-    # if new_suite == "open_store": st.session_state.open_step = 1
-    st.rerun()
+    mapping = {
+        t("开店（决策流）", "Open a Store"): "open_store",
+        t("运营（跑起来）", "Operations"): "operations",
+        t("财务（分析）", "Finance"): "finance",
+    }
+    new_suite = mapping[suite_label]
 
-st.markdown("---")
+    if new_suite != st.session_state.active_suite:
+        st.session_state.active_suite = new_suite
+        st.rerun()
 
 
 # =========================================================
@@ -832,11 +692,10 @@ st.markdown("---")
 # =========================================================
 st.title("Project B: SME BI Platform")
 
-# ---- state for top entry ----
 if "show_top_chat" not in st.session_state:
-    st.session_state.show_top_chat = False  # 默认不展示对话，避免影响观感
+    st.session_state.show_top_chat = False
 if "top_chat_collapsed" not in st.session_state:
-    st.session_state.top_chat_collapsed = True  # 默认折叠
+    st.session_state.top_chat_collapsed = True
 if "top_submit_id" not in st.session_state:
     st.session_state.top_submit_id = 0
 if "last_handled_submit_id" not in st.session_state:
@@ -844,17 +703,14 @@ if "last_handled_submit_id" not in st.session_state:
 if "clear_top_ask_ai" not in st.session_state:
     st.session_state.clear_top_ask_ai = False
 if "top_last_status" not in st.session_state:
-    st.session_state.top_last_status = ""  # "ready" / ""
+    st.session_state.top_last_status = ""
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
-    # 清空输入：必须在 widget 创建之后做（避免 StreamlitAPIException）
-    # 这里用 dict 写法更稳
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
 
-    # --- Input + send (use form to avoid duplicate submissions) ---
     with st.form("top_ai_form", clear_on_submit=False):
         colA, colB = st.columns([3, 1])
         with colA:
@@ -869,7 +725,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         with colB:
             submitted = st.form_submit_button(t("发送", "Send"), use_container_width=True)
 
-    # --- Handle submit safely (no direct assignment to widget key in same run) ---
     if submitted:
         st.session_state.top_submit_id += 1
 
@@ -878,7 +733,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
         q = (st.session_state.get("top_ask_ai") or "").strip()
         if q:
-            # 只 append 一次，避免重复刷屏
             st.session_state.chat_history.append({"role": "user", "text": q})
 
             mode = st.session_state.active_suite
@@ -887,17 +741,13 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
             st.session_state.chat_history.append({"role": "ai", "text": ans})
 
-            # 标记：下次 rerun 再清空输入框
             st.session_state.clear_top_ask_ai = True
-
-            # 提交后：不直接展开对话，保持页面干净
             st.session_state.top_last_status = "ready"
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
 
             st.rerun()
 
-    # --- Status & controls (minimal footprint) ---
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
 
     with c1:
@@ -920,18 +770,13 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
             st.session_state.top_last_status = ""
             st.rerun()
 
-    # 右侧状态提示：不占地方但告诉你“有回答了”
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
 
-    # --- Render conversation only when user wants it ---
     if st.session_state.show_top_chat and st.session_state.chat_history:
         with st.expander(t("对话记录", "Conversation"), expanded=not st.session_state.top_chat_collapsed):
-
-            # 只展示最近 6 条，避免太长影响观感
             recent = st.session_state.chat_history[-6:]
-
             st.markdown("---")
 
             for m in recent:
@@ -955,7 +800,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
                         f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>",
                         unsafe_allow_html=True
                     )
-
 
 
 # =========================================================
@@ -987,9 +831,9 @@ def render_open_store():
             st.session_state.open_step = min(4, st.session_state.open_step + 1)
             st.rerun()
     with nav3:
-        st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。", "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
+        st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
+                     "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
 
-    # ---- Step 1
     if st.session_state.open_step == 1:
         p = st.session_state.profile
         st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
@@ -1016,17 +860,18 @@ def render_open_store():
         p["notes"] = st.text_area(
             t("备注（可选）", "Notes (optional)"),
             p["notes"],
-            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
+            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等",
+                          "Constraints, hours, staffing, services, etc.")
         )
 
-    # ---- Step 2
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         st.subheader(t("第 2 步：选址检查", "Step 2: Site Check"))
         colA, colB = st.columns([1, 2])
         with colA:
             s["address"] = st.text_input(t("地址", "Address"), s["address"])
-            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
+            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0],
+                                            index=[0.5, 1.0, 3.0].index(s["radius_miles"]))
             s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
             s["competitors"] = st.number_input(t("竞品数量（估计）", "Competitors (estimated)"), min_value=0, value=int(s["competitors"]), step=1)
             s["parking"] = st.selectbox(t("停车便利", "Parking"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["parking"]))
@@ -1041,13 +886,17 @@ def render_open_store():
             base_lat, base_lon = 40.7590, -73.8290
             map_data = pd.DataFrame({"lat": [base_lat + np.random.randn()/2000], "lon": [base_lon + np.random.randn()/2000]})
             st.map(map_data, zoom=14)
-            st.caption(t("当前是演示点位：后续可接真实地理编码与 POI 统计。", "Demo marker only. Replace with real geocoding + POI counts later."))
+            st.caption(t("当前是演示点位：后续可接真实地理编码与 POI 统计。",
+                         "Demo marker only. Replace with real geocoding + POI counts later."))
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []
-        if s["competitors"] > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
-        if s["rent_level"] == "High": risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
-        if s["parking"] == "Low": risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
+        if s["competitors"] > 15:
+            risk_flags.append(t("竞品密度偏高", "High competitive density"))
+        if s["rent_level"] == "High":
+            risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
+        if s["parking"] == "Low":
+            risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
         s["risk_flags"] = risk_flags
 
         c1, c2, c3 = st.columns(3)
@@ -1059,7 +908,6 @@ def render_open_store():
         else:
             st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
 
-    # ---- Step 3 (data + metrics only)
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
         st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash (no AI here)"))
@@ -1068,9 +916,11 @@ def render_open_store():
         with col1:
             inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
             inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
-            inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"], index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+            inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
+                                             index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
-            inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"], placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+            inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
+                                        placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -1116,7 +966,6 @@ def render_open_store():
             with st.expander(t("查看缺货风险明细", "View stockout-risk details")):
                 st.dataframe(health["stockout_items"], use_container_width=True)
 
-    # ---- Step 4 (pricing + final AI + report)
     else:
         pr = st.session_state.pricing
         st.subheader(t("第 4 步：定价 & 一键总分析", "Step 4: Pricing & One-click Final Analysis"))
@@ -1133,8 +982,10 @@ def render_open_store():
 
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
-            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(pr["elasticity"]))
-            pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"], placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
+                                           index=["Low","Medium","High"].index(pr["elasticity"]))
+            pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
+                                      placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
@@ -1146,7 +997,7 @@ def render_open_store():
             p = st.session_state.profile
             s = st.session_state.site
             inv = st.session_state.inventory
-            inv_df = inv["df"]
+            inv_df = inv.get("df")
             inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
 
             prompt = f"""
@@ -1177,7 +1028,7 @@ Inventory: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supp
 seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
 Inventory snapshot: {inv_snapshot}
 Inventory table:
-{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
+{inv_df.to_string(index=False) if isinstance(inv_df, pd.DataFrame) else 'Not provided'}
 
 Pricing: strategy={pr['strategy']}, cost={pr['cost']}, competitor_price={pr['competitor_price']},
 target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['notes'] if pr['notes'].strip() else 'None'}
@@ -1192,7 +1043,7 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
             with st.expander(t("上一次输出", "Last output"), expanded=False):
                 st.write(st.session_state.outputs["final_open_store"])
 
-                st.divider()
+        st.divider()
         st.subheader(t("可交付物：AI 报告", "Deliverable: AI Report"))
 
         colA, colB, colC = st.columns([1, 1, 2])
@@ -1221,7 +1072,6 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
                 file_name="open_store_report.md",
                 mime="text/markdown"
             )
-
 
 
 # =========================================================
@@ -1290,15 +1140,22 @@ def render_operations():
 
         col1, col2 = st.columns([1, 1])
         with col1:
-            pr["strategy"] = st.selectbox(t("定价策略", "Strategy"), ["Competitive", "Value-based", "Premium", "Penetration"],
-                                         index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]),
-                                         key="ops_strategy")
+            pr["strategy"] = st.selectbox(
+                t("定价策略", "Strategy"),
+                ["Competitive", "Value-based", "Premium", "Penetration"],
+                index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]),
+                key="ops_strategy"
+            )
             pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr["cost"]), step=1.0, key="ops_cost")
             pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr["competitor_price"]), step=1.0, key="ops_comp")
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
-            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                           index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
+            pr["elasticity"] = st.selectbox(
+                t("需求弹性", "Demand Elasticity"),
+                ["Low", "Medium", "High"],
+                index=["Low","Medium","High"].index(pr["elasticity"]),
+                key="ops_elasticity"
+            )
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")
@@ -1334,7 +1191,7 @@ def render_operations():
             st.session_state.outputs["ops_report_md"] = ""
             st.rerun()
 
-    if "ops_report_md" in st.session_state.outputs and st.session_state.outputs["ops_report_md"]:
+    if st.session_state.outputs.get("ops_report_md"):
         st.text_area(t("运营报告预览", "Ops Report Preview"), st.session_state.outputs["ops_report_md"], height=520)
         st.download_button(
             label=t("下载 operations_report.md", "Download operations_report.md"),
@@ -1363,7 +1220,8 @@ def render_finance():
 
     question = st.text_area(
         t("你希望重点分析什么？", "What should we focus on?"),
-        placeholder=t("例如：现金流是否健康？成本哪里可降？毛利目标是否合理？", "E.g., is cash flow healthy? where to cut costs? is margin target realistic?")
+        placeholder=t("例如：现金流是否健康？成本哪里可降？毛利目标是否合理？",
+                      "E.g., is cash flow healthy? where to cut costs? is margin target realistic?")
     )
 
     col1, col2 = st.columns([1, 1])

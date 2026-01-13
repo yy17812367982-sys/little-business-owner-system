@@ -19,6 +19,104 @@ st.set_page_config(
     initial_sidebar_state="collapsed"  # ✅ 手机上默认不弹出
 )
 
+# =========================================================
+# Mobile-first nav (replace sidebar on phones)
+# =========================================================
+if "scroll_to" not in st.session_state:
+    st.session_state.scroll_to = None
+
+def _do_scroll(where: str):
+    st.session_state.scroll_to = where
+    st.rerun()
+
+def _scroll_js(where: str) -> str:
+    # Streamlit iframe 里，window.parent 才是页面本体
+    if where == "top":
+        return "<script>window.parent.scrollTo({top:0,left:0,behavior:'smooth'});</script>"
+    if where == "bottom":
+        return "<script>window.parent.scrollTo({top:document.body.scrollHeight,left:0,behavior:'smooth'});</script>"
+    return ""
+
+def go_home():
+    # ✅ 回到主页：你可以定义“主页=Open a Store Step1”
+    st.session_state.active_suite = "open_store"
+    st.session_state.open_step = 1
+    _do_scroll("top")
+
+def switch_suite(suite: str):
+    st.session_state.active_suite = suite
+    _do_scroll("top")
+
+# 顶部“固定导航”容器（手机体验会像 App）
+nav1, nav2, nav3, nav4 = st.columns([1.1, 1.2, 1.2, 1.2])
+
+with nav1:
+    if st.button("🏠 Home", use_container_width=True):
+        go_home()
+
+with nav2:
+    # “菜单”放在主页面里，手机不靠 sidebar
+    st.session_state._open_menu = st.session_state.get("_open_menu", False)
+    if st.button("☰ Menu", use_container_width=True):
+        st.session_state._open_menu = not st.session_state._open_menu
+        st.rerun()
+
+with nav3:
+    if st.button("⬆ Top", use_container_width=True):
+        _do_scroll("top")
+
+with nav4:
+    if st.button("⬇ Bottom", use_container_width=True):
+        _do_scroll("bottom")
+
+# 主页面菜单（手机端用它替代 sidebar）
+if st.session_state.get("_open_menu", False):
+    st.markdown("<div class='nav-panel'>", unsafe_allow_html=True)
+
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        st.markdown("### Navigation")
+    with c2:
+        if st.button("✖ Close", use_container_width=True):
+            st.session_state._open_menu = False
+            st.rerun()
+
+    # Suites（统一入口）
+    suite = st.session_state.get("active_suite", "open_store")
+    opt = st.radio(
+        "Suites",
+        options=["open_store", "operations", "finance"],
+        index={"open_store":0, "operations":1, "finance":2}.get(suite, 0),
+        format_func=lambda x: {
+            "open_store": "Open a Store",
+            "operations": "Operations",
+            "finance": "Finance"
+        }[x]
+    )
+    if opt != suite:
+        switch_suite(opt)
+
+    # 语言切换（把你原来的 toggle_language 复用）
+    if st.button("🌐 Switch Language", use_container_width=True):
+        toggle_language()
+
+    # 你想要的“一键到底”也在菜单里给一份
+    cc1, cc2 = st.columns(2)
+    with cc1:
+        if st.button("⬆ Back to Top", use_container_width=True):
+            _do_scroll("top")
+    with cc2:
+        if st.button("⬇ Go Bottom", use_container_width=True):
+            _do_scroll("bottom")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ✅ 在页面渲染后执行滚动
+if st.session_state.scroll_to:
+    components.html(_scroll_js(st.session_state.scroll_to), height=0)
+    st.session_state.scroll_to = None
+
+
 st.markdown(r"""
 <style>
 /* =============================
@@ -296,6 +394,46 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
 """, unsafe_allow_html=True)
+
+/* =============================
+   Mobile: hide native Streamlit sidebar completely
+   - 手机端不要让它盖住内容
+   ============================= */
+@media (max-width: 900px){
+  section[data-testid="stSidebar"]{
+    display: none !important;
+  }
+  /* 也把左上角那个 sidebar 的小折叠控件干掉（避免误触） */
+  button[kind="header"]{
+    display: none !important;
+  }
+}
+
+/* =============================
+   Top nav unified style
+   ============================= */
+div[data-testid="stHorizontalBlock"] button{
+  border-radius: 14px !important;
+}
+
+/* menu panel style */
+.nav-panel{
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 12px 12px;
+  margin: 10px 0 16px 0;
+  backdrop-filter: blur(6px);
+}
+
+/* ✅ 继续压掉帧：手机端彻底关 blur（iOS/Android 都吃不消） */
+@media (max-width: 900px){
+  .nav-panel,
+  .card,
+  section[data-testid="stSidebar"]{
+    backdrop-filter: none !important;
+  }
+}
 
 
 # =========================================================

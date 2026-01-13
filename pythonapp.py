@@ -402,11 +402,21 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
         f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
     )
 
+
 # =========================================================
 # ✅ Geocoding: fuzzy queries + multi provider + strong debug
+#   FIX: maps.co may require API key -> skip if missing
 # =========================================================
+import os
+import time
+import random
+import requests
+
 NOMINATIM_CONTACT_EMAIL = "yy17812367982@gmail.com"
 NOMINATIM_UA = f"ProjectB-SME-BI-Platform/1.0 (contact: {NOMINATIM_CONTACT_EMAIL})"
+
+# ✅ 可选：如果你自己有 maps.co key，放环境变量 MAPSCO_API_KEY
+MAPSCO_API_KEY = os.getenv("MAPSCO_API_KEY", "").strip()
 
 def _normalize_query(q: str) -> str:
     q = (q or "").strip()
@@ -414,34 +424,24 @@ def _normalize_query(q: str) -> str:
     return q
 
 def _fuzzy_queries(q: str):
-    """
-    生成一组“更宽松”的 query，从严格到宽松依次尝试。
-    目标：用户输入不规范也尽量能搜到。
-    """
     q0 = _normalize_query(q)
     if not q0:
         return []
 
-    variants = []
-    variants.append(q0)
+    variants = [q0]
 
-    # 去掉多余标点
     q1 = q0.replace(",", " ").replace("  ", " ").strip()
     if q1 != q0:
         variants.append(q1)
 
-    # 如果用户没写 USA，补一个
     if "usa" not in q0.lower() and "united states" not in q0.lower():
         variants.append(q0 + " USA")
         variants.append(q1 + " USA")
 
-    # 常见“省略州”问题：如果出现 NY 的邮编/城市，但没写 NY
     if ("watervliet" in q0.lower()) and ("ny" not in q0.lower()):
         variants.append(q0 + " NY")
         variants.append(q0 + " New York")
 
-    # 只留数字+关键字（很粗暴但有时候反而能出结果）
-    # 例如：7 Champagne Ct Watervliet 12189
     tokens = q1.split()
     nums = [x for x in tokens if any(c.isdigit() for c in x)]
     words = [x for x in tokens if x.isalpha() or x.lower() in ["ct", "st", "ave", "rd", "dr", "blvd", "ny"]]
@@ -451,7 +451,6 @@ def _fuzzy_queries(q: str):
         if "usa" not in loose.lower():
             variants.append(loose + " USA")
 
-    # 去重保持顺序
     seen = set()
     out = []
     for v in variants:
@@ -478,32 +477,38 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
         return [], {"ok": False, "err": "empty query"}
 
     headers = {"User-Agent": NOMINATIM_UA}
-
-    providers = [
-        {
-            "name": "nominatim",
-            "url": "https://nominatim.openstreetmap.org/search",
-            "build_params": lambda qq: {
-                "q": qq,
-                "format": "json",
-                "addressdetails": 1,
-                "limit": int(limit),
-                "email": NOMINATIM_CONTACT_EMAIL,
-                "accept-language": "en",
-            },
-        },
-        {
-            "name": "maps_co",
-            "url": "https://geocode.maps.co/search",
-            "build_params": lambda qq: {"q": qq},
-        },
-    ]
-
     queries = _fuzzy_queries(q)
-    # 轻微节流，避免连续点导致限流/403/429
+
+    # ✅ 轻微节流：避免连续点导致 Nominatim 429/403
     time.sleep(0.8)
 
+    providers = []
+
+    # --- Provider 1: Nominatim (recommended) ---
+    providers.append({
+        "name": "nominatim",
+        "url": "https://nominatim.openstreetmap.org/search",
+        "build_params": lambda qq: {
+            "q": qq,
+            "format": "json",
+            "addressdetails": 1,
+            "limit": int(limit),
+            "email": NOMINATIM_CONTACT_EMAIL,
+            "accept-language": "en",
+        },
+    })
+
+    # --- Provider 2: maps.co (OPTIONAL; requires key on many setups) ---
+    # ✅ 没 key 就不加入 providers，避免你看到 401
+    if MAPSCO_API_KEY:
+        providers.append({
+            "name": "maps_co",
+            "url": "https://geocode.maps.co/search",
+            "build_params": lambda qq: {"q": qq, "api_key": MAPSCO_API_KEY},
+        })
+
     last_debug = {"ok": False, "err": "no attempt"}
+
     for qq in queries:
         for p in providers:
             try:
@@ -521,6 +526,7 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
                                     "lon": float(d["lon"]),
                                 })
                 else:
+                    # maps.co
                     if isinstance(data, list):
                         for d in data[:limit]:
                             lat = d.get("lat")
@@ -551,9 +557,14 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
                     "query_used": qq,
                     "err": str(e),
                 }
+
+                # ✅ 如果 Nominatim 被 429 限流，稍等再继续（同 provider 的下一轮会继续）
+                if "429" in str(e) or "Too Many Requests" in str(e):
+                    time.sleep(1.2 + random.random())
                 continue
 
     return [], last_debug
+
 
 # =========================================================
 # State init

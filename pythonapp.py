@@ -50,7 +50,7 @@ div[data-testid="stAppViewContainer"]{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
   background-size:cover;
   background-position:center;
-  background-attachment:fixed;
+  background-attachment:scroll;
 }
 
 /* Dark overlay: fixed, but does NOT capture scroll */

@@ -14,7 +14,7 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed",  # ✅ 桌面端默认收起
+    initial_sidebar_state="collapsed",
 )
 
 # =========================================================
@@ -22,15 +22,12 @@ st.set_page_config(
 # =========================================================
 st.markdown(r"""
 <style>
-/* ========= Base background ========= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
   background-size:cover;
   background-position:center;
-  background-attachment:fixed; /* desktop ok */
+  background-attachment:fixed;
 }
-
-/* Dark overlay */
 .stApp::before{
   content:"";
   position: fixed;
@@ -39,45 +36,34 @@ st.markdown(r"""
   pointer-events: none;
   z-index: 0;
 }
-
-/* Ensure content above overlay */
 div[data-testid="stAppViewContainer"]{
   position: relative;
   z-index: 1;
 }
-
-/* Padding: kill bottom empty area */
 .block-container{
   padding-top: 1.0rem !important;
   padding-bottom: 0.2rem !important;
 }
-
-/* Hide footer to avoid extra whitespace */
 footer{ display:none !important; }
 
-/* ========= Typography ========= */
 div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
-
 .stMarkdown p{
   color: rgba(255,255,255,0.75) !important;
   text-shadow: none !important;
 }
-
 a, a *{
   color: rgba(180,220,255,0.95) !important;
 }
 
-/* ========= Sidebar glass (desktop) ========= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.42) !important;
   backdrop-filter: blur(12px);
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* ========= Inputs glass ========= */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
 div[data-baseweb="select"],
@@ -90,20 +76,17 @@ div[data-baseweb="base-input"] > div{
   backdrop-filter: blur(10px);
   box-shadow: none !important;
 }
-
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
 }
-
 .stTextInput input::placeholder,
 .stTextArea textarea::placeholder{
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* Dropdown menu */
 div[data-baseweb="menu"],
 div[role="listbox"]{
   background: #ffffff !important;
@@ -118,7 +101,6 @@ div[role="listbox"] *{
   text-shadow: none !important;
 }
 
-/* Buttons */
 button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -128,7 +110,6 @@ button{
 }
 button:hover{ background: rgba(255,255,255,0.12) !important; }
 
-/* Card */
 .card{
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
@@ -140,7 +121,6 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
   text-shadow: none !important;
 }
 
-/* DataFrame */
 div[data-testid="stDataFrame"]{
   background: rgba(0,0,0,0.28) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -148,12 +128,8 @@ div[data-testid="stDataFrame"]{
   backdrop-filter: blur(10px);
 }
 
-/* ========= Mobile: hide sidebar (avoid overlay), reduce heavy effects ========= */
 @media (max-width: 900px){
-  /* Hide sidebar completely on mobile to prevent covering content */
   section[data-testid="stSidebar"]{ display:none !important; }
-
-  /* Reduce jank on mobile */
   .stApp{ background-attachment: scroll !important; }
   .card,
   div[data-testid="stMetric"],
@@ -286,15 +262,12 @@ def _fuzzy_queries(q: str):
     if not q0:
         return []
     variants = [q0]
-
     q1 = q0.replace(",", " ").replace("  ", " ").strip()
     if q1 != q0:
         variants.append(q1)
-
     if "usa" not in q0.lower() and "united states" not in q0.lower():
         variants.append(q0 + " USA")
         variants.append(q1 + " USA")
-
     tokens = q1.split()
     nums = [x for x in tokens if any(c.isdigit() for c in x)]
     words = [x for x in tokens if x.isalpha() or x.lower() in ["ct", "st", "ave", "rd", "dr", "blvd", "ny"]]
@@ -303,7 +276,6 @@ def _fuzzy_queries(q: str):
         variants.append(loose)
         if "usa" not in loose.lower():
             variants.append(loose + " USA")
-
     seen = set()
     out = []
     for v in variants:
@@ -324,11 +296,9 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
     q = _normalize_query(query)
     if not q:
         return [], {"ok": False, "err": "empty query"}
-
     headers = {"User-Agent": NOMINATIM_UA}
     queries = _fuzzy_queries(q)
     time.sleep(0.3)
-
     providers = [{
         "name": "nominatim",
         "url": "https://nominatim.openstreetmap.org/search",
@@ -338,22 +308,18 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
             "accept-language": "en",
         },
     }]
-
     if MAPSCO_API_KEY:
         providers.append({
             "name": "maps_co",
             "url": "https://geocode.maps.co/search",
             "build_params": lambda qq: {"q": qq, "api_key": MAPSCO_API_KEY},
         })
-
     last_debug = {"ok": False, "err": "no attempt"}
-
     for qq in queries:
         for p in providers:
             try:
                 params = p["build_params"](qq)
                 data, dbg = _request_json(p["url"], params=params, headers=headers, timeout=12)
-
                 out = []
                 if isinstance(data, list):
                     for d in data[:limit]:
@@ -362,21 +328,18 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
                         name = d.get("display_name") or d.get("label") or ""
                         if lat and lon:
                             out.append({"display_name": name, "lat": float(lat), "lon": float(lon)})
-
                 last_debug = {"ok": True, "provider": p["name"], "query_used": qq, "count": len(out), **dbg}
                 if out:
                     return out, last_debug
-
             except Exception as e:
                 last_debug = {"ok": False, "provider": p["name"], "query_used": qq, "err": str(e)}
                 if "429" in str(e) or "Too Many Requests" in str(e):
                     time.sleep(1.2 + random.random())
                 continue
-
     return [], last_debug
 
 # =========================================================
-# Overpass: competitor & traffic estimation (robust)
+# Overpass helpers
 # =========================================================
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -430,7 +393,6 @@ def _overpass_post(query: str, timeout: int = 35):
     headers = {"User-Agent": NOMINATIM_UA}
     last_dbg = {"ok": False, "err": "no attempt"}
     body = query.encode("utf-8")
-
     for ep in OVERPASS_ENDPOINTS:
         time.sleep(0.15 + random.random() * 0.25)
         try:
@@ -443,14 +405,11 @@ def _overpass_post(query: str, timeout: int = 35):
                 if resp.status_code in (400, 401, 403):
                     return None, last_dbg
                 continue
-
             data = resp.json()
             return data, {"ok": True, "endpoint": ep, "status": resp.status_code}
-
         except Exception as e:
             last_dbg = {"ok": False, "endpoint": ep, "err": str(e)}
             continue
-
     return None, last_dbg
 
 @st.cache_data(show_spinner=False, ttl=6 * 3600)
@@ -458,7 +417,6 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
     r = int(_miles_to_meters(radius_miles))
     filters = _business_to_competitor_osm_filters(business_type)
     parts = [f'nwr{f}(around:{r},{lat},{lon});' for f in filters]
-
     query = f"""
     [out:json][timeout:25];
     (
@@ -469,10 +427,8 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
     data, dbg = _overpass_post(query, timeout=40)
     if data is None:
         return {"ok": False, "count": None, "sample": [], "debug": dbg}
-
     elements = data.get("elements", []) or []
     seen = set((e.get("type"), e.get("id")) for e in elements if e.get("type") and e.get("id"))
-
     sample = []
     for e in elements[:8]:
         tags = e.get("tags", {}) or {}
@@ -483,7 +439,6 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
                 kind = f"{k}={tags.get(k)}"
                 break
         sample.append({"name": name, "kind": kind})
-
     return {"ok": True, "count": len(seen), "sample": sample, "debug": dbg}
 
 @st.cache_data(show_spinner=False, ttl=6 * 3600)
@@ -499,14 +454,12 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
     data, dbg = _overpass_post(query, timeout=40)
     if data is None:
         return {"ok": False, "roads_count": None, "proxy_score": None, "traffic_est": None, "debug": dbg}
-
     elements = data.get("elements", []) or []
     weights = {
         "motorway": 10.0, "trunk": 8.0, "primary": 6.0, "secondary": 4.0,
         "tertiary": 2.5, "residential": 1.0, "unclassified": 1.0,
         "service": 0.6, "living_street": 0.5,
     }
-
     score = 0.0
     cnt = 0
     for e in elements:
@@ -516,7 +469,6 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
             continue
         score += weights.get(hw, 0.8)
         cnt += 1
-
     traffic_est = int(_clamp(1000 + score * 120, 1000, 50000))
     return {"ok": True, "roads_count": cnt, "proxy_score": round(score, 2), "traffic_est": traffic_est, "debug": dbg}
 
@@ -525,10 +477,8 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
 # =========================================================
 if "active_suite" not in st.session_state:
     st.session_state.active_suite = "open_store"
-
 if "open_step" not in st.session_state:
     st.session_state.open_step = 1
-
 if "profile" not in st.session_state:
     st.session_state.profile = {
         "business_type": "Auto Parts Store",
@@ -539,7 +489,6 @@ if "profile" not in st.session_state:
         "city": "New York",
         "notes": ""
     }
-
 if "site" not in st.session_state:
     st.session_state.site = {
         "address": "39-01 Main St, Flushing, NY 11354",
@@ -551,7 +500,6 @@ if "site" not in st.session_state:
         "foot_traffic_source": "Mixed (Transit + Street)",
         "risk_flags": []
     }
-
 if "inventory" not in st.session_state:
     st.session_state.inventory = {
         "df": None,
@@ -560,7 +508,6 @@ if "inventory" not in st.session_state:
         "seasonality": "Winter",
         "notes": ""
     }
-
 if "pricing" not in st.session_state:
     st.session_state.pricing = {
         "strategy": "Competitive",
@@ -570,7 +517,6 @@ if "pricing" not in st.session_state:
         "elasticity": "Medium",
         "notes": ""
     }
-
 if "outputs" not in st.session_state:
     st.session_state.outputs = {
         "final_open_store": None,
@@ -581,10 +527,8 @@ if "outputs" not in st.session_state:
         "finance_ai_output": "",
         "finance_report_md": ""
     }
-
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-
 if "site_geo" not in st.session_state:
     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
@@ -596,19 +540,15 @@ def score_from_inputs_site(traffic: int, competitors: int, rent_level: str, park
     if traffic >= 40000: score += 10
     elif traffic >= 25000: score += 6
     else: score += 2
-
     if competitors <= 6: score += 12
     elif competitors <= 12: score += 6
     else: score -= 6
-
     if rent_level == "Low": score += 8
     elif rent_level == "Medium": score += 3
     else: score -= 6
-
     if parking == "High": score += 6
     elif parking == "Medium": score += 2
     else: score -= 4
-
     return int(max(0, min(100, score)))
 
 def inventory_health(df: pd.DataFrame) -> dict:
@@ -642,7 +582,7 @@ def read_uploaded_to_text(files) -> str:
     return "\n".join(chunks)
 
 # =========================================================
-# Sidebar (DESKTOP only; mobile hidden by CSS)
+# Sidebar (desktop only; mobile hidden by CSS)
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
@@ -667,10 +607,10 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("v6.0 Mobile Nav + Smooth Scroll")
+    st.caption("v6.1 Fix f-string backslash")
 
 # =========================================================
-# TOP NAV (always visible; mobile-friendly)
+# TOP NAV
 # =========================================================
 st.title("Project B: SME BI Platform")
 
@@ -722,13 +662,14 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
 
     if st.session_state.chat_history:
         st.markdown("---")
+        ai_label = t("Yangyu 的 AI", "Yangyu's AI")  # ✅ 关键修复：不在 f-string {} 里写反斜杠
         for m in st.session_state.chat_history[-6:]:
             role = m.get("role")
             txt = (m.get("text") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             if role == "user":
                 st.markdown(f"<div class='card'><b>{t('你', 'You')}:</b><br>{txt}</div>", unsafe_allow_html=True)
             else:
-                st.markdown(f"<div class='card'><b>{t('Yangyu 的 AI', 'Yangyu\\'s AI')}:</b><br>{txt}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card'><b>{ai_label}:</b><br>{txt}</div>", unsafe_allow_html=True)
 
 # =========================================================
 # Suite 1: Open Store
@@ -756,7 +697,6 @@ def render_open_store():
         st.caption(t("提示：手机端不使用侧边栏，避免遮挡；顶部导航统一入口。",
                      "Tip: On mobile we avoid sidebar overlay; use top navigation."))
 
-    # Step 1
     if st.session_state.open_step == 1:
         p = st.session_state.profile
         st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
@@ -781,7 +721,6 @@ def render_open_store():
             p["differentiator"] = st.text_input(t("差异化", "Differentiator"), p["differentiator"])
         p["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), p["notes"])
 
-    # Step 2
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         p = st.session_state.profile
@@ -878,7 +817,6 @@ def render_open_store():
         else:
             st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
 
-    # Step 3
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
         st.subheader(t("第 3 步：库存与现金", "Step 3: Inventory & Cash"))
@@ -919,19 +857,14 @@ def render_open_store():
 
         st.metric(t("库存总价值", "Total Inventory Value"), f"${health['total_value']:,.0f}")
         st.metric(t("滞销库存价值", "Dead Stock Value"), f"${health['dead_value']:,.0f}")
-
-        dead_n = len(health["dead_items"])
-        stockout_n = len(health["stockout_items"])
         st.session_state.outputs["inventory_summary"] = (
             f"total_value=${health['total_value']:,.0f}; dead_value=${health['dead_value']:,.0f}; "
-            f"dead_items={dead_n}; stockout_risk_items={stockout_n}"
+            f"dead_items={len(health['dead_items'])}; stockout_risk_items={len(health['stockout_items'])}"
         )
 
-    # Step 4
     else:
         pr = st.session_state.pricing
         st.subheader(t("第 4 步：定价", "Step 4: Pricing"))
-
         col1, col2 = st.columns([1, 1])
         with col1:
             pr["strategy"] = st.selectbox(
@@ -947,7 +880,6 @@ def render_open_store():
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
                                            index=["Low","Medium","High"].index(pr["elasticity"]))
             pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"])
-
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
 
@@ -978,7 +910,6 @@ def render_operations():
             if uploaded is not None:
                 inv["df"] = pd.read_csv(uploaded)
                 st.rerun()
-
         if inv["df"] is None:
             st.info(t("请先加载或上传库存数据。", "Load/upload inventory data first."))
         else:

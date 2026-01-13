@@ -21,7 +21,30 @@ st.set_page_config(
 st.markdown(r"""
 <style>
 /* =============================
-   Background + Readability overlay
+   0) HARD FIX: never lock scrolling
+   ============================= */
+html, body{
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Streamlit outer containers must remain scrollable */
+div[data-testid="stAppViewContainer"]{
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Do NOT force stApp to 100vh or hidden overflow */
+.stApp{
+  height: auto !important;
+  overflow-y: visible !important;
+}
+
+/* =============================
+   1) Background + overlay (safe)
    ============================= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
@@ -30,7 +53,7 @@ st.markdown(r"""
   background-attachment:fixed;
 }
 
-/* ✅ 全局暗色遮罩：解决“字看不清” */
+/* Dark overlay: fixed, but does NOT capture scroll */
 .stApp::before{
   content:"";
   position: fixed;
@@ -40,15 +63,18 @@ st.markdown(r"""
   z-index: 0;
 }
 
-/* 主体内容在遮罩之上 */
+/* Content above overlay */
 div[data-testid="stAppViewContainer"]{
   position: relative;
   z-index: 1;
 }
 
+/* main padding */
 .block-container{ padding-top: 1.1rem; }
 
-/* 统一：把“白底区域”都变透明 */
+/* =============================
+   2) Transparent "white areas"
+   ============================= */
 div[data-testid="stAppViewContainer"],
 div[data-testid="stMain"],
 div[data-testid="stHeader"],
@@ -57,15 +83,15 @@ div[data-testid="stToolbar"]{
 }
 
 /* =============================
-   Improve readability for subtitles / helper text
+   3) Typography / readability
    ============================= */
-div[data-testid="stCaption"],
-div[data-testid="stCaption"] *{
-  color: rgba(255,255,255,0.55) !important;
-  text-shadow: none !important;
+div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
+  color:#fff !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
 
-.card{
+div[data-testid="stCaption"],
+div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important;
   text-shadow: none !important;
 }
@@ -75,39 +101,12 @@ div[data-testid="stCaption"] *{
   text-shadow: none !important;
 }
 
-/* =============================
-   FIX: Restore metric readability
-   ============================= */
-div[data-testid="stMetric"] label,
-div[data-testid="stMetric"] .stMetricLabel{
-  color: rgba(255,255,255,0.78) !important;
-  text-shadow: 0 0 6px rgba(0,0,0,0.8) !important;
-}
-
-div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
-  color: rgba(255,255,255,0.98) !important;
-  font-weight: 600 !important;
-  text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
-}
-
-div[data-testid="stMetric"] *{
-  opacity: 1 !important;
-}
-
-/* =============================
-   Typography
-   ============================= */
-div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
-  color:#fff !important;
-  text-shadow: 0 0 6px rgba(0,0,0,0.65);
-}
-
 a, a *{
   color: rgba(180,220,255,0.95) !important;
 }
 
 /* =============================
-   Sidebar glass
+   4) Sidebar glass
    ============================= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.42) !important;
@@ -116,7 +115,7 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   Inputs: glass on dark background
+   5) Inputs: glass on dark
    ============================= */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
@@ -143,7 +142,7 @@ div[data-baseweb="base-input"] > div{
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* selectbox 当前值 */
+/* selectbox current value */
 div[data-baseweb="select"] *{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
@@ -151,7 +150,7 @@ div[data-baseweb="select"] *{
 }
 
 /* =============================
-   Dropdown: 白底 + 黑字
+   6) Dropdown menu: white bg + dark text
    ============================= */
 div[data-baseweb="popover"]{ background: transparent !important; }
 
@@ -187,7 +186,7 @@ div[role="listbox"] div[role="option"][aria-selected="true"]{
 }
 
 /* =============================
-   File uploader
+   7) File uploader
    ============================= */
 div[data-testid="stFileUploader"]{
   background: rgba(0,0,0,0.26) !important;
@@ -210,7 +209,7 @@ div[data-testid="stFileUploader"] button{
 }
 
 /* =============================
-   DataFrame
+   8) DataFrame
    ============================= */
 div[data-testid="stDataFrame"]{
   background: rgba(0,0,0,0.28) !important;
@@ -224,7 +223,7 @@ div[data-testid="stDataFrame"] *{
 }
 
 /* =============================
-   metric
+   9) Metric (restore readability)
    ============================= */
 div[data-testid="stMetric"]{
   background: rgba(0,0,0,0.30) !important;
@@ -232,9 +231,22 @@ div[data-testid="stMetric"]{
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
+div[data-testid="stMetric"] label,
+div[data-testid="stMetric"] .stMetricLabel{
+  color: rgba(255,255,255,0.78) !important;
+  text-shadow: 0 0 6px rgba(0,0,0,0.8) !important;
+}
+div[data-testid="stMetric"] div[data-testid="stMetricValue"]{
+  color: rgba(255,255,255,0.98) !important;
+  font-weight: 600 !important;
+  text-shadow: 0 0 10px rgba(0,0,0,0.85) !important;
+}
+div[data-testid="stMetric"] *{
+  opacity: 1 !important;
+}
 
 /* =============================
-   tabs
+   10) Tabs / radio / buttons
    ============================= */
 div[data-baseweb="tab-list"]{
   background: rgba(0,0,0,0.30) !important;
@@ -244,9 +256,6 @@ div[data-baseweb="tab-list"]{
 }
 div[data-baseweb="tab"]{ color: rgba(255,255,255,0.95) !important; }
 
-/* =============================
-   radio
-   ============================= */
 div[role="radiogroup"] label{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -255,9 +264,6 @@ div[role="radiogroup"] label{
   backdrop-filter: blur(10px);
 }
 
-/* =============================
-   buttons
-   ============================= */
 button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -268,7 +274,7 @@ button{
 button:hover{ background: rgba(255,255,255,0.12) !important; }
 
 /* =============================
-   custom card
+   11) Custom card
    ============================= */
 .card{
   background: rgba(0,0,0,0.32);
@@ -277,15 +283,19 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
   padding: 14px 16px;
   margin: 8px 0;
   backdrop-filter: blur(10px);
+  color: rgba(255,255,255,0.85) !important;
+  text-shadow: none !important;
 }
 
 /* =============================
-   scrollbar
+   12) Scrollbar style (safe)
    ============================= */
-::-webkit-scrollbar{ width:6px; }
+::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
+::-webkit-scrollbar-track{ background: transparent; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # =========================================================
 # Language

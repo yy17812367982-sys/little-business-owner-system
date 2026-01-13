@@ -1221,83 +1221,127 @@ def render_open_store():
                 index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
             )
 
-        with colB:
-            st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
+with colB:
+    st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
 
-            query = (s.get("address") or "").strip()
+    # --- state for site result ---
+    if "site_geo" not in st.session_state:
+        st.session_state.site_geo = {
+            "status": "idle",   # idle / ok / fail
+            "cands": [],
+            "picked_idx": 0,
+            "debug": {}
+        }
 
-            # ✅ 手动坐标兜底
-            with st.expander(t("手动输入坐标（兜底）", "Manual Lat/Lon (fallback)"), expanded=False):
-                manual_lat = st.text_input(t("纬度 lat", "Latitude"), value="", key="manual_lat")
-                manual_lon = st.text_input(t("经度 lon", "Longitude"), value="", key="manual_lon")
-                use_manual = st.checkbox(t("使用手动坐标", "Use manual coordinates"), value=False, key="use_manual_coords")
+    s = st.session_state.site
+    p = st.session_state.profile
 
-            b1, b2, _ = st.columns([1.2, 1.2, 6.0])
-            with b1:
-                if st.button(t("🔎 搜索定位", "🔎 Search / Locate"), use_container_width=True):
-                    st.session_state.site_last_query = query
-                    cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
-                    st.session_state.site_last_candidates = cands
-                    st.session_state.site_last_geocode_debug = dbg
-            with b2:
-                if st.button(t("清空定位结果", "Clear Results"), use_container_width=True):
-                    st.session_state.site_last_candidates = []
-                    st.session_state.site_last_geocode_debug = {}
-                    st.session_state.site_last_query = ""
+    # buttons
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        do_search = st.button("🔎 " + t("Search / Locate", "Search / Locate"), use_container_width=True)
+    with b2:
+        do_clear = st.button(t("Clear Results", "Clear Results"), use_container_width=True)
 
-            cands = st.session_state.site_last_candidates
-            dbg = st.session_state.site_last_geocode_debug
+    if do_clear:
+        st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
+        s.pop("lat", None)
+        s.pop("lon", None)
+        s.pop("competitors_debug", None)
+        s.pop("traffic_debug", None)
+        st.rerun()
 
-            # ✅ 强制摘要（不用展开 expander）
-            if dbg:
-                if dbg.get("ok"):
-                    st.info(
-                        f"Geocode OK | provider={dbg.get('provider')} | count={dbg.get('count')} | query_used={dbg.get('query_used')}"
-                    )
-                else:
-                    st.error(
-                        f"Geocode FAIL | provider={dbg.get('provider')} | query_used={dbg.get('query_used')} | err={dbg.get('err')}"
-                    )
-            else:
-                st.warning(t("还没请求。请点「搜索定位」。", "No request yet. Click “Search/Locate”."))
+    # run search
+    if do_search:
+        query = (s.get("address") or "").strip()
 
-            with st.expander(t("地理编码调试信息（建议保留，用来排查 403/429/timeout）", "Geocode Debug (keep for troubleshooting)"), expanded=False):
-                st.write(dbg)
+        # 用你已经写好的 geocode 函数（如果你按我之前方案改了，是 geocode_candidates_multi_fuzzy）
+        # 如果你还在用老的 geocode_nominatim_candidates，就把下一行替换成：
+        # cands = geocode_nominatim_candidates(query, limit=6)
+        cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
 
-            # ✅ 手动坐标优先
-            if use_manual:
-                try:
-                    lat = float((manual_lat or "").strip())
-                    lon = float((manual_lon or "").strip())
-                    st.caption(t(f"已使用手动坐标：{lat:.6f}, {lon:.6f}", f"Using manual coords: {lat:.6f}, {lon:.6f}"))
-                    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
-                except Exception:
-                    st.error(t("手动坐标格式不对，请输入数字。", "Manual lat/lon invalid. Please enter numbers."))
-            else:
-                if not cands:
-                    st.warning(t("没有匹配结果。你可以尝试更短的输入（比如：'7 Champagne Ct 12189'）。",
-                                 "No matches. Try a shorter input (e.g., '7 Champagne Ct 12189')."))
-                    base_lat, base_lon = 40.7590, -73.8290
-                    st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-                    st.caption(t("当前显示兜底位置（演示）。", "Fallback demo location is shown."))
-                else:
-                    labels = [c["display_name"] for c in cands]
-                    picked = st.selectbox(
-                        t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
-                        labels,
-                        index=0
-                    )
-                    chosen = cands[labels.index(picked)]
-                    lat, lon = chosen["lat"], chosen["lon"]
+        st.session_state.site_geo["cands"] = cands
+        st.session_state.site_geo["debug"] = dbg
+        st.session_state.site_geo["status"] = "ok" if cands else "fail"
+        st.session_state.site_geo["picked_idx"] = 0
+        st.rerun()
 
-                    st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
-                    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+    # render result
+    geo = st.session_state.site_geo
+    cands = geo.get("cands", []) or []
 
-                    if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
-                        s["address"] = chosen.get("display_name", s["address"])
-                        st.rerun()
+    if geo.get("status") == "idle":
+        st.info(t("还没有搜索结果。请点击「Search/Locate」。", "No results yet. Click “Search/Locate”."))
+        base_lat, base_lon = 40.7590, -73.8290
+        st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
 
-            st.caption(t("说明：这里是地址地理编码（Geocoding），不是 POI/店铺统计。", "Note: This is geocoding (address → coords), not POI counting."))
+    elif not cands:
+        st.warning(t("没搜到该地址。建议输入更短/更模糊的关键词，例如：'7 Champagne Ct 12189'。",
+                     "No matches. Try shorter input, e.g., '7 Champagne Ct 12189'."))
+        base_lat, base_lon = 40.7590, -73.8290
+        st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
+
+    else:
+        labels = [c["display_name"] for c in cands]
+        idx = int(geo.get("picked_idx", 0))
+        idx = max(0, min(idx, len(labels) - 1))
+
+        picked = st.selectbox(
+            t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
+            labels,
+            index=idx,
+            key="site_pick_label"
+        )
+        chosen = cands[labels.index(picked)]
+        lat, lon = chosen["lat"], chosen["lon"]
+
+        # store coords
+        s["lat"] = float(lat)
+        s["lon"] = float(lon)
+
+        st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
+        st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
+
+        # normalized address
+        if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
+            s["address"] = chosen.get("display_name", s["address"])
+            st.rerun()
+
+        # auto estimate competitors + traffic
+        st.divider()
+        e1, e2 = st.columns([1, 1])
+        with e1:
+            if st.button(t("自动估算竞品&交通", "Auto-estimate competitors & traffic"), use_container_width=True):
+                bt = p.get("business_type", "Other")
+                rad = float(s.get("radius_miles", 1.0))
+
+                comp = estimate_competitors_overpass(lat, lon, rad, bt)
+                s["competitors"] = int(comp["count"])
+                s["competitors_debug"] = comp
+
+                tp = estimate_traffic_proxy_overpass(lat, lon, rad)
+                s["traffic"] = int(tp["traffic_est"])
+                s["traffic_debug"] = tp
+
+                st.rerun()
+
+        with e2:
+            if st.button(t("清空估算结果", "Clear estimates"), use_container_width=True):
+                s.pop("competitors_debug", None)
+                s.pop("traffic_debug", None)
+                st.rerun()
+
+    # debug
+    with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
+        st.write(geo.get("debug", {}))
+
+    with st.expander(t("估算调试信息（可选）", "Estimation Debug (optional)"), expanded=False):
+        st.write("competitors_debug =", s.get("competitors_debug", None))
+        st.write("traffic_debug =", s.get("traffic_debug", None))
+
+    st.caption(t("说明：地图=地理编码（地址→坐标）；竞品/交通=基于 OSM 的近似估算。",
+                 "Note: Map is geocoding (address→coords). Competitors/traffic are OSM-based estimates."))
+
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []

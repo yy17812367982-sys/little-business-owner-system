@@ -73,7 +73,11 @@ div[data-testid="stAppViewContainer"]{
 }
 
 /* main padding */
-.block-container{ padding-top: 1.0rem; }
+.block-container{
+  padding-top: 1.0rem !important;
+  padding-bottom: 0.2rem !important;  /* ✅ 关键：砍掉底部空白 */
+}
+
 
 /* =============================
    2) Transparent "white areas"

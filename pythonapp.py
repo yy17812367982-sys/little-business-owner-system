@@ -565,6 +565,173 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
 
     return [], last_debug
 
+# =========================================================
+# ✅ POI / Competitor estimation (OSM Overpass)
+# ✅ Traffic proxy estimation (road-class weighted)
+# =========================================================
+import math
+import requests
+
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
+def _miles_to_meters(mi: float) -> float:
+    return float(mi) * 1609.344
+
+def _clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+def _business_to_competitor_osm_filters(business_type: str):
+    """
+    返回一个 Overpass QL 中使用的过滤条件列表。
+    你可以按自己的业态继续扩展。
+    """
+    bt = (business_type or "").lower()
+
+    # 汽配店/修车相关
+    if "auto" in bt:
+        return [
+            '["shop"="car_parts"]',
+            '["shop"="tyres"]',
+            '["shop"="car_repair"]',
+            '["amenity"="car_wash"]',
+            '["amenity"="fuel"]'
+        ]
+
+    # 便利店
+    if "convenience" in bt:
+        return [
+            '["shop"="convenience"]',
+            '["shop"="supermarket"]',
+            '["shop"="grocery"]'
+        ]
+
+    # 咖啡/餐饮
+    if "coffee" in bt:
+        return [
+            '["amenity"="cafe"]',
+            '["shop"="coffee"]',
+            '["amenity"="fast_food"]'
+        ]
+    if "restaurant" in bt:
+        return [
+            '["amenity"="restaurant"]',
+            '["amenity"="fast_food"]',
+            '["amenity"="cafe"]'
+        ]
+
+    # 美业
+    if "beauty" in bt or "salon" in bt:
+        return [
+            '["shop"="beauty"]',
+            '["shop"="hairdresser"]',
+            '["amenity"="spa"]'
+        ]
+
+    # 兜底：一些通用商业点
+    return [
+        '["shop"]',
+        '["amenity"="restaurant"]',
+        '["amenity"="cafe"]'
+    ]
+
+@st.cache_data(show_spinner=False, ttl=6*3600)
+def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, business_type: str):
+    r = int(_miles_to_meters(radius_miles))
+    filters = _business_to_competitor_osm_filters(business_type)
+
+    # 用 nwr: node/way/relation 都算
+    parts = []
+    for f in filters:
+        parts.append(f'nwr{f}(around:{r},{lat},{lon});')
+
+    query = f"""
+    [out:json][timeout:20];
+    (
+      {"".join(parts)}
+    );
+    out center;
+    """
+
+    headers = {"User-Agent": NOMINATIM_UA}
+    resp = requests.post(OVERPASS_URL, data=query.encode("utf-8"), headers=headers, timeout=25)
+    resp.raise_for_status()
+    data = resp.json()
+    elements = data.get("elements", [])
+
+    # 去重（OSM id + type）
+    seen = set()
+    for e in elements:
+        seen.add((e.get("type"), e.get("id")))
+
+    # 给你返回 count + 一些样本（用于debug）
+    sample = []
+    for e in elements[:8]:
+        tags = e.get("tags", {}) or {}
+        name = tags.get("name", "")
+        kind = None
+        for k in ["shop", "amenity"]:
+            if k in tags:
+                kind = f"{k}={tags.get(k)}"
+                break
+        sample.append({"name": name, "kind": kind})
+
+    return {"count": len(seen), "sample": sample}
+
+@st.cache_data(show_spinner=False, ttl=6*3600)
+def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float):
+    """
+    OSM 没有真实 traffic count，这里用道路等级做 proxy：
+    motorway/trunk/primary/secondary/tertiary 等按权重累加。
+    """
+    r = int(_miles_to_meters(radius_miles))
+
+    query = f"""
+    [out:json][timeout:20];
+    (
+      way["highway"](around:{r},{lat},{lon});
+    );
+    out tags;
+    """
+
+    headers = {"User-Agent": NOMINATIM_UA}
+    resp = requests.post(OVERPASS_URL, data=query.encode("utf-8"), headers=headers, timeout=25)
+    resp.raise_for_status()
+    data = resp.json()
+    elements = data.get("elements", [])
+
+    weights = {
+        "motorway": 10.0,
+        "trunk": 8.0,
+        "primary": 6.0,
+        "secondary": 4.0,
+        "tertiary": 2.5,
+        "residential": 1.0,
+        "unclassified": 1.0,
+        "service": 0.6,
+        "living_street": 0.5,
+    }
+
+    score = 0.0
+    cnt = 0
+    for e in elements:
+        tags = e.get("tags", {}) or {}
+        hw = tags.get("highway")
+        if not hw:
+            continue
+        w = weights.get(hw, 0.8)
+        score += w
+        cnt += 1
+
+    # 把 proxy score 映射到你 slider 的 1000~50000
+    # 这个映射是经验参数：你可以按使用感受再调
+    traffic_est = int(_clamp(1000 + score * 120, 1000, 50000))
+
+    return {
+        "roads_count": cnt,
+        "proxy_score": round(score, 2),
+        "traffic_est": traffic_est
+    }
+
 
 # =========================================================
 # State init

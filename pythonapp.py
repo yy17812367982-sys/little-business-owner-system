@@ -60,24 +60,22 @@ div[data-testid="stToolbar"]{
    Improve readability for subtitles / helper text
    ============================= */
 
-/* st.caption / 说明性文字 */
 div[data-testid="stCaption"],
 div[data-testid="stCaption"] *{
-  color: rgba(255,255,255,0.78) !important;
+  color: rgba(255,255,255,0.55) !important;
   text-shadow: none !important;
 }
 
-/* card 内的说明文字 */
 .card{
-  color: rgba(255,255,255,0.88) !important;
+  color: rgba(255,255,255,0.55) !important;
   text-shadow: none !important;
 }
 
-/* markdown 里那种“这一套功能做什么”的灰字说明 */
 .stMarkdown p{
-  color: rgba(255,255,255,0.82) !important;
+  color: rgba(255,255,255,0.58) !important;
   text-shadow: none !important;
 }
+
 
 
 /* =============================

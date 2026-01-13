@@ -17,18 +17,35 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ✅ 关键修复：所有 CSS 必须在 st.markdown("""...""") 的三引号字符串里
-# ✅ 你之前报错的根因：把一段以 /* ... */ 开头的 CSS 粘贴到了三引号外面
-st.markdown(
-    """
+# ✅ 所有 CSS 必须放在字符串里（否则会 SyntaxError）
+st.markdown(r"""
 <style>
-/* 背景 */
+/* =============================
+   Background + Readability overlay
+   ============================= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
   background-size:cover;
   background-position:center;
   background-attachment:fixed;
 }
+
+/* ✅ 全局暗色遮罩：解决“字看不清” */
+.stApp::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.52);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 主体内容在遮罩之上 */
+div[data-testid="stAppViewContainer"]{
+  position: relative;
+  z-index: 1;
+}
+
 .block-container{ padding-top: 1.1rem; }
 
 /* 统一：把“白底区域”都变透明 */
@@ -39,64 +56,70 @@ div[data-testid="stToolbar"]{
   background: transparent !important;
 }
 
-/* 侧边栏玻璃 */
+/* =============================
+   Typography: improve contrast
+   ============================= */
+h1,h2,h3,h4{
+  color: rgba(255,255,255,0.96) !important;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.75);
+}
+p, label, span, li, div, small{
+  color: rgba(255,255,255,0.90) !important;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.70);
+}
+a, a *{
+  color: rgba(180,220,255,0.95) !important;
+}
+
+/* =============================
+   Sidebar glass
+   ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.35) !important;
-  backdrop-filter: blur(10px);
+  background: rgba(0,0,0,0.42) !important;
+  backdrop-filter: blur(12px);
   border-right: 1px solid rgba(255,255,255,0.10);
 }
 
-/* 标题文字统一白（别用 div 全覆盖太狠，会误伤很多组件，这里缩窄点） */
-h1,h2,h3,h4,p,label,span{
-  color:#fff !important;
-  text-shadow: 0 0 6px rgba(0,0,0,0.65);
-}
-
-/* ===== BaseWeb/Streamlit 控件全透明玻璃化 ===== */
-
-/* 所有输入类外壳（selectbox、multiselect、number、text、textarea等） */
+/* ===== 关键：BaseWeb/Streamlit 控件全透明玻璃化 ===== */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
 div[data-baseweb="select"],
 div[data-baseweb="textarea"],
 div[data-baseweb="popover"],
+div[data-baseweb="menu"],
 div[data-baseweb="input"] > div,
 div[data-baseweb="base-input"] > div{
-  background: rgba(0,0,0,0.28) !important;
+  background: rgba(0,0,0,0.33) !important;
   border: 1px solid rgba(255,255,255,0.14) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
   box-shadow: none !important;
 }
 
-/* 真正的 input / textarea 本体透明 */
+/* input/textarea 本体透明 */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
   background: transparent !important;
-  color: #fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
 /* placeholder */
 .stTextInput input::placeholder,
 .stTextArea textarea::placeholder{
-  color: rgba(255,255,255,0.45) !important;
+  color: rgba(255,255,255,0.50) !important;
 }
 
-/* selectbox 当前值那一条（避免白块） */
+/* selectbox 当前值那一条 */
 div[data-baseweb="select"] *{
   background: transparent !important;
-  color: #fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
-/* =============================
-   Fix 1: Selectbox / Multiselect dropdown white panels
-   ============================= */
-
-/* 下拉菜单弹层外壳（popover/menu）玻璃化 */
+/* 下拉菜单弹层（popover/menu）玻璃化 */
 div[data-baseweb="popover"],
 div[data-baseweb="menu"]{
-  background: rgba(0,0,0,0.60) !important;
+  background: rgba(0,0,0,0.70) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   backdrop-filter: blur(14px);
 }
@@ -104,122 +127,93 @@ div[data-baseweb="menu"]{
 /* menu 内部子元素不要白底 */
 div[data-baseweb="menu"] *{
   background: transparent !important;
-  color: #fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
 /* listbox 兜底 */
 div[role="listbox"]{
-  background: rgba(0,0,0,0.60) !important;
+  background: rgba(0,0,0,0.70) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   backdrop-filter: blur(14px);
 }
 div[role="listbox"] ul,
 div[role="listbox"] li{
   background: transparent !important;
-  color: #fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
-/* option */
-div[role="option"]{
-  background: transparent !important;
-  color:#fff !important;
-}
+/* option hover */
 div[role="option"]:hover,
 div[data-baseweb="menu"] li:hover{
-  background: rgba(255,255,255,0.10) !important;
+  background: rgba(255,255,255,0.12) !important;
 }
 
-/* =============================
-   Fix 2: File uploader white dropzone
-   ============================= */
+/* File uploader */
 div[data-testid="stFileUploader"]{
-  background: rgba(0,0,0,0.20) !important;
+  background: rgba(0,0,0,0.26) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(12px);
 }
-
-/* dropzone 内部白底区域（多写几种结构兜底） */
 div[data-testid="stFileUploader"] section,
 div[data-testid="stFileUploader"] section *,
 div[data-testid="stFileUploader"] [data-testid="stFileDropzone"],
 div[data-testid="stFileUploader"] [data-testid="stFileDropzone"] *{
   background: transparent !important;
-  color: #fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
-
-/* 上传组件里的按钮 */
 div[data-testid="stFileUploader"] button{
-  background: rgba(0,0,0,0.25) !important;
+  background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
-  color:#fff !important;
+  color: rgba(255,255,255,0.95) !important;
   border-radius: 14px !important;
 }
 
-/* =============================
-   Fix 3: 一些“白底卡片/容器”兜底
-   ============================= */
-div[data-testid="stForm"],
-div[data-testid="stExpander"],
-div[data-testid="stVerticalBlock"],
-div[data-testid="stHorizontalBlock"]{
-  background: transparent !important;
-}
-
-/* expander：把那条白色标题栏干掉 */
-details, summary{
-  background: rgba(0,0,0,0.20) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(10px);
-}
-summary{ padding: 8px 12px !important; }
-
-/* dataframe/table 背景也不要白 */
+/* DataFrame */
 div[data-testid="stDataFrame"]{
-  background: rgba(0,0,0,0.20) !important;
+  background: rgba(0,0,0,0.28) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
 div[data-testid="stDataFrame"] *{
   background: transparent !important;
-  color:#fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
-/* metric 卡片透明 */
+/* metric */
 div[data-testid="stMetric"]{
-  background: rgba(0,0,0,0.22) !important;
+  background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
 
-/* tabs 顶部条透明 */
+/* tabs */
 div[data-baseweb="tab-list"]{
-  background: rgba(0,0,0,0.22) !important;
+  background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
 div[data-baseweb="tab"]{
-  color:#fff !important;
+  color: rgba(255,255,255,0.95) !important;
 }
 
-/* radio 透明 */
+/* radio */
 div[role="radiogroup"] label{
-  background: rgba(0,0,0,0.22) !important;
+  background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
   border-radius: 12px !important;
   padding: 6px 10px !important;
   backdrop-filter: blur(10px);
 }
 
-/* 按钮玻璃 */
+/* buttons */
 button{
-  background: rgba(0,0,0,0.25) !important;
+  background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
-  color:#fff !important;
+  color: rgba(255,255,255,0.95) !important;
   border-radius: 14px !important;
   backdrop-filter: blur(10px);
 }
@@ -227,9 +221,9 @@ button:hover{
   background: rgba(255,255,255,0.12) !important;
 }
 
-/* 自定义 card 玻璃 */
+/* custom card */
 .card{
-  background: rgba(0,0,0,0.22);
+  background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
   padding: 14px 16px;
@@ -237,25 +231,11 @@ button:hover{
   backdrop-filter: blur(10px);
 }
 
-/* pill (step badge) */
-.pill{
-  display:inline-block;
-  padding: 4px 10px;
-  margin-right: 8px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.22);
-  border: 1px solid rgba(255,255,255,0.12);
-  color:#fff;
-  font-size: 12px;
-}
-
-/* 滚动条 */
+/* scrollbar */
 ::-webkit-scrollbar{ width:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 </style>
-""",
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 
 # =========================================================
@@ -319,10 +299,7 @@ if "ai_quality" not in st.session_state:
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:
-        return t(
-            "AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
-            "AI service is not configured (missing GEMINI_API_KEY or client)."
-        )
+        return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。", "AI service is not configured (missing GEMINI_API_KEY or client).")
 
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
@@ -438,7 +415,7 @@ if "outputs" not in st.session_state:
     }
 
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []  # list[{"role":"user/ai","text":...}]
+    st.session_state.chat_history = []
 
 
 # =========================================================
@@ -446,33 +423,21 @@ if "chat_history" not in st.session_state:
 # =========================================================
 def score_from_inputs_site(traffic: int, competitors: int, rent_level: str, parking: str) -> int:
     score = 55
-    if traffic >= 40000:
-        score += 10
-    elif traffic >= 25000:
-        score += 6
-    else:
-        score += 2
+    if traffic >= 40000: score += 10
+    elif traffic >= 25000: score += 6
+    else: score += 2
 
-    if competitors <= 6:
-        score += 12
-    elif competitors <= 12:
-        score += 6
-    else:
-        score -= 6
+    if competitors <= 6: score += 12
+    elif competitors <= 12: score += 6
+    else: score -= 6
 
-    if rent_level == "Low":
-        score += 8
-    elif rent_level == "Medium":
-        score += 3
-    else:
-        score -= 6
+    if rent_level == "Low": score += 8
+    elif rent_level == "Medium": score += 3
+    else: score -= 6
 
-    if parking == "High":
-        score += 6
-    elif parking == "Medium":
-        score += 2
-    else:
-        score -= 4
+    if parking == "High": score += 6
+    elif parking == "Medium": score += 2
+    else: score -= 4
 
     return int(max(0, min(100, score)))
 
@@ -491,6 +456,62 @@ def inventory_health(df: pd.DataFrame) -> dict:
         "stockout_items": stockout,
         "dead_value": dead_value
     }
+
+def build_open_store_report_md() -> str:
+    p = st.session_state.profile
+    s = st.session_state.site
+    inv = st.session_state.inventory
+    pr = st.session_state.pricing
+    out = st.session_state.outputs
+
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    md = []
+    md.append("# Open a Store — Decision Report\n")
+    md.append(f"- Generated: {now}\n")
+
+    md.append("## Business Profile\n")
+    md.append(f"- Type: {p['business_type']}\n")
+    md.append(f"- Stage: {p['stage']}\n")
+    md.append(f"- City: {p['city']}\n")
+    md.append(f"- Budget: ${p['budget']:,.0f}\n")
+    md.append(f"- Target customer: {p['target_customer']}\n")
+    md.append(f"- Differentiator: {p['differentiator']}\n")
+    if p["notes"].strip():
+        md.append(f"- Notes: {p['notes'].strip()}\n")
+
+    md.append("\n## Site\n")
+    md.append(f"- Address: {s['address']}\n")
+    md.append(f"- Radius: {s['radius_miles']} miles\n")
+    md.append(f"- Traffic: {s['traffic']}\n")
+    md.append(f"- Competitors: {s['competitors']}\n")
+    md.append(f"- Parking: {s['parking']} | Rent: {s['rent_level']}\n")
+    if s["risk_flags"]:
+        md.append(f"- Risk flags: {', '.join(s['risk_flags'])}\n")
+
+    md.append("\n## Inventory & Cash\n")
+    if inv["df"] is None:
+        md.append("- Inventory data: Not provided\n")
+    else:
+        md.append(f"- Cash target: {inv['cash_target_days']} days\n")
+        md.append(f"- Lead time: {inv['supplier_lead_time_days']} days\n")
+        md.append(f"- Seasonality: {inv['seasonality']}\n")
+        if inv["notes"].strip():
+            md.append(f"- Notes: {inv['notes'].strip()}\n")
+        if out["inventory_summary"]:
+            md.append(f"- Snapshot: {out['inventory_summary']}\n")
+
+    md.append("\n## Pricing\n")
+    md.append(f"- Strategy: {pr['strategy']}\n")
+    md.append(f"- Cost: ${pr['cost']}\n")
+    md.append(f"- Target margin: {pr['target_margin']}%\n")
+    md.append(f"- Competitor price: ${pr['competitor_price']}\n")
+    md.append(f"- Elasticity: {pr['elasticity']}\n")
+    if pr["notes"].strip():
+        md.append(f"- Notes: {pr['notes'].strip()}\n")
+
+    md.append("\n## Final Output\n")
+    md.append(out["final_open_store"].strip() + "\n" if out["final_open_store"] else "Not generated.\n")
+    return "\n".join(md)
 
 def ai_report_open_store() -> str:
     p = st.session_state.profile
@@ -548,9 +569,9 @@ Pricing: {pr}
 """
     return ask_ai(prompt, mode="open_store")
 
+
 def ai_report_operations() -> str:
     out = st.session_state.outputs
-
     ops_ai = out.get("ops_ai_output", "")
     if ops_ai is None:
         ops_ai = ""
@@ -580,10 +601,12 @@ Return Markdown.
 ## KPIs (8)
 ## Next 14 Days Action Plan (owner/metric)
 ## Data Gaps
+
 Inventory table:
 {inv_table}
 """
     return ask_ai(prompt, mode="operations")
+
 
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
     finance_ai = st.session_state.outputs.get("finance_ai_output", "")
@@ -615,6 +638,7 @@ Previous AI output (if any):
 """
     return ask_ai(prompt, mode="finance")
 
+
 def read_uploaded_to_text(files) -> str:
     chunks = []
     for f in files:
@@ -637,30 +661,14 @@ def read_uploaded_to_text(files) -> str:
 
 
 # =========================================================
-# Sidebar (language + username + suites)
+# Sidebar (✅ Suites moved to TOP)
 # =========================================================
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
     st.markdown("---")
 
-    st.image("https://cdn-icons-png.flaticon.com/512/2362/2362378.png", width=48)
-
-    st.text_input(
-        t("用户名", "Username"),
-        key="username",
-        placeholder=t("输入用户名", "Enter a username"),
-        on_change=on_username_submit
-    )
-    if st.session_state.register_msg:
-        st.warning(st.session_state.register_msg)
-
-    st.markdown("---")
-    st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.1 Prominent Suites")
-
-    st.markdown("---")
+    # ✅ Suites moved here (top)
     st.markdown("### " + t("功能集合", "Suites"))
-
     suite_label = st.radio(
         "",
         options=[
@@ -681,14 +689,30 @@ with st.sidebar:
         t("财务（分析）", "Finance"): "finance",
     }
     new_suite = mapping[suite_label]
-
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
         st.rerun()
 
+    st.markdown("---")
+
+    st.image("https://cdn-icons-png.flaticon.com/512/2362/2362378.png", width=48)
+
+    st.text_input(
+        t("用户名", "Username"),
+        key="username",
+        placeholder=t("输入用户名", "Enter a username"),
+        on_change=on_username_submit
+    )
+    if st.session_state.register_msg:
+        st.warning(st.session_state.register_msg)
+
+    st.markdown("---")
+    st.success(t("🟢 系统在线", "🟢 System Online"))
+    st.caption("v5.1 Prominent Suites")
+
 
 # =========================================================
-# Header + Top Ask AI (landing feature)
+# Header + Top Ask AI
 # =========================================================
 st.title("Project B: SME BI Platform")
 
@@ -706,7 +730,6 @@ if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
-
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
@@ -717,10 +740,8 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
             user_q = st.text_input(
                 t("你想问什么？", "Ask anything..."),
                 key="top_ask_ai",
-                placeholder=t(
-                    "例如：这个地址适合开店吗？我该怎么降库存？",
-                    "E.g., Is this site viable? How do I reduce dead stock?"
-                )
+                placeholder=t("例如：这个地址适合开店吗？我该怎么降库存？",
+                              "E.g., Is this site viable? How do I reduce dead stock?")
             )
         with colB:
             submitted = st.form_submit_button(t("发送", "Send"), use_container_width=True)
@@ -730,38 +751,30 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
     if submitted and st.session_state.top_submit_id != st.session_state.last_handled_submit_id:
         st.session_state.last_handled_submit_id = st.session_state.top_submit_id
-
         q = (st.session_state.get("top_ask_ai") or "").strip()
         if q:
             st.session_state.chat_history.append({"role": "user", "text": q})
-
             mode = st.session_state.active_suite
             with st.spinner(t("分析中…", "Analyzing...")):
                 ans = ask_ai(q, mode=mode)
-
             st.session_state.chat_history.append({"role": "ai", "text": ans})
-
             st.session_state.clear_top_ask_ai = True
             st.session_state.top_last_status = "ready"
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
-
             st.rerun()
 
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
-
     with c1:
         if st.button(t("展示", "Show"), use_container_width=True):
             st.session_state.show_top_chat = True
             st.session_state.top_chat_collapsed = False
             st.rerun()
-
     with c2:
         if st.button(t("收起", "Hide"), use_container_width=True):
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
             st.rerun()
-
     with c3:
         if st.button(t("清空", "Clear"), use_container_width=True):
             st.session_state.chat_history = []
@@ -769,7 +782,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
             st.session_state.top_chat_collapsed = True
             st.session_state.top_last_status = ""
             st.rerun()
-
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
@@ -778,17 +790,14 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         with st.expander(t("对话记录", "Conversation"), expanded=not st.session_state.top_chat_collapsed):
             recent = st.session_state.chat_history[-6:]
             st.markdown("---")
-
             for m in recent:
                 role = m.get("role", "")
                 text = (m.get("text") or "")
-
                 safe_text = (
                     text.replace("&", "&amp;")
                         .replace("<", "&lt;")
                         .replace(">", "&gt;")
                 )
-
                 if role == "user":
                     st.markdown(
                         f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_text}</div>",
@@ -803,7 +812,7 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
 
 
 # =========================================================
-# Suite 1: Open a Store (wizard inside)
+# Suite 1: Open a Store
 # =========================================================
 def render_open_store():
     st.header(t("开店（决策流）", "Open a Store (Decision Flow)"))
@@ -814,11 +823,7 @@ def render_open_store():
         t("库存与现金", "Inventory & Cash"),
         t("定价 & 总结", "Pricing & Summary")
     ]
-    st.write(
-        f"<span class='pill'>{t('步骤', 'Step')} {st.session_state.open_step}/4</span>"
-        f"<span class='pill'>{step_titles[st.session_state.open_step-1]}</span>",
-        unsafe_allow_html=True
-    )
+    st.write(f"{t('步骤', 'Step')} {st.session_state.open_step}/4 — {step_titles[st.session_state.open_step-1]}")
     st.progress(st.session_state.open_step / 4.0)
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])
@@ -860,8 +865,7 @@ def render_open_store():
         p["notes"] = st.text_area(
             t("备注（可选）", "Notes (optional)"),
             p["notes"],
-            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等",
-                          "Constraints, hours, staffing, services, etc.")
+            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
         )
 
     elif st.session_state.open_step == 2:
@@ -886,23 +890,20 @@ def render_open_store():
             base_lat, base_lon = 40.7590, -73.8290
             map_data = pd.DataFrame({"lat": [base_lat + np.random.randn()/2000], "lon": [base_lon + np.random.randn()/2000]})
             st.map(map_data, zoom=14)
-            st.caption(t("当前是演示点位：后续可接真实地理编码与 POI 统计。",
-                         "Demo marker only. Replace with real geocoding + POI counts later."))
+            st.caption(t("当前是演示点位：后续可接真实地理编码与 POI 统计。", "Demo marker only. Replace with real geocoding + POI counts later."))
 
         score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
         risk_flags = []
-        if s["competitors"] > 15:
-            risk_flags.append(t("竞品密度偏高", "High competitive density"))
-        if s["rent_level"] == "High":
-            risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
-        if s["parking"] == "Low":
-            risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
+        if s["competitors"] > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
+        if s["rent_level"] == "High": risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
+        if s["parking"] == "Low": risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
         s["risk_flags"] = risk_flags
 
         c1, c2, c3 = st.columns(3)
         c1.metric(t("选址评分", "Site Score"), score)
         c2.metric(t("竞品数", "Competitors"), s["competitors"])
         c3.metric(t("流量", "Traffic"), s["traffic"])
+
         if risk_flags:
             st.warning(t("风险提示：", "Risk flags: ") + "，".join(risk_flags))
         else:
@@ -920,7 +921,7 @@ def render_open_store():
                                              index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
             inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                        placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+                                       placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -935,7 +936,8 @@ def render_open_store():
                 inv["df"] = pd.DataFrame(data)
                 st.rerun()
         with cB:
-            uploaded = st.file_uploader(t("上传 CSV（Item,Stock,Cost,Monthly_Sales）", "Upload CSV (Item,Stock,Cost,Monthly_Sales)"), type=["csv"])
+            uploaded = st.file_uploader(t("上传 CSV（Item,Stock,Cost,Monthly_Sales）", "Upload CSV (Item,Stock,Cost,Monthly_Sales)"),
+                                        type=["csv"])
             if uploaded is not None:
                 inv["df"] = pd.read_csv(uploaded)
                 st.rerun()
@@ -997,7 +999,7 @@ def render_open_store():
             p = st.session_state.profile
             s = st.session_state.site
             inv = st.session_state.inventory
-            inv_df = inv.get("df")
+            inv_df = inv["df"]
             inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
 
             prompt = f"""
@@ -1028,7 +1030,7 @@ Inventory: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supp
 seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
 Inventory snapshot: {inv_snapshot}
 Inventory table:
-{inv_df.to_string(index=False) if isinstance(inv_df, pd.DataFrame) else 'Not provided'}
+{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
 
 Pricing: strategy={pr['strategy']}, cost={pr['cost']}, competitor_price={pr['competitor_price']},
 target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['notes'] if pr['notes'].strip() else 'None'}
@@ -1042,10 +1044,9 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
         if st.session_state.outputs["final_open_store"]:
             with st.expander(t("上一次输出", "Last output"), expanded=False):
                 st.write(st.session_state.outputs["final_open_store"])
+                st.divider()
 
-        st.divider()
         st.subheader(t("可交付物：AI 报告", "Deliverable: AI Report"))
-
         colA, colB, colC = st.columns([1, 1, 2])
 
         with colA:
@@ -1075,7 +1076,7 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
 
 
 # =========================================================
-# Suite 2: Operations (daily running)
+# Suite 2: Operations
 # =========================================================
 def render_operations():
     st.header(t("运营（帮助企业跑起来）", "Operations (Run the business)"))
@@ -1140,22 +1141,15 @@ def render_operations():
 
         col1, col2 = st.columns([1, 1])
         with col1:
-            pr["strategy"] = st.selectbox(
-                t("定价策略", "Strategy"),
-                ["Competitive", "Value-based", "Premium", "Penetration"],
-                index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]),
-                key="ops_strategy"
-            )
+            pr["strategy"] = st.selectbox(t("定价策略", "Strategy"), ["Competitive", "Value-based", "Premium", "Penetration"],
+                                         index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]),
+                                         key="ops_strategy")
             pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr["cost"]), step=1.0, key="ops_cost")
             pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr["competitor_price"]), step=1.0, key="ops_comp")
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
-            pr["elasticity"] = st.selectbox(
-                t("需求弹性", "Demand Elasticity"),
-                ["Low", "Medium", "High"],
-                index=["Low","Medium","High"].index(pr["elasticity"]),
-                key="ops_elasticity"
-            )
+            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
+                                           index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")
@@ -1191,7 +1185,7 @@ def render_operations():
             st.session_state.outputs["ops_report_md"] = ""
             st.rerun()
 
-    if st.session_state.outputs.get("ops_report_md"):
+    if st.session_state.outputs.get("ops_report_md", ""):
         st.text_area(t("运营报告预览", "Ops Report Preview"), st.session_state.outputs["ops_report_md"], height=520)
         st.download_button(
             label=t("下载 operations_report.md", "Download operations_report.md"),
@@ -1202,7 +1196,7 @@ def render_operations():
 
 
 # =========================================================
-# Suite 3: Financial Analysis (upload docs + AI guidance)
+# Suite 3: Finance
 # =========================================================
 def render_finance():
     st.header(t("财务分析（上传资料 → AI 指导）", "Financial Analysis (Upload docs → AI guidance)"))
@@ -1220,8 +1214,7 @@ def render_finance():
 
     question = st.text_area(
         t("你希望重点分析什么？", "What should we focus on?"),
-        placeholder=t("例如：现金流是否健康？成本哪里可降？毛利目标是否合理？",
-                      "E.g., is cash flow healthy? where to cut costs? is margin target realistic?")
+        placeholder=t("例如：现金流是否健康？成本哪里可降？毛利目标是否合理？", "E.g., is cash flow healthy? where to cut costs? is margin target realistic?")
     )
 
     col1, col2 = st.columns([1, 1])

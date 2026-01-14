@@ -14,20 +14,21 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"  # 默认折叠
+    initial_sidebar_state="collapsed"
 )
 
 # =========================================================
-# UI: CSS + JS (FIXED VERSION)
-# 修正点：
-# 1. 删除了上下箭头按钮
-# 2. 修复手机端侧边栏点击无效的问题 (JS 增强)
+# UI: CSS Only (Native Button Styling)
+# 修正说明：
+# 1. 移除了自定义 HTML/JS 按钮，彻底解决“按钮消失”和“点击无效”问题。
+# 2. 强制显示 Streamlit 原生 Sidebar 按钮，并用 CSS 把它美化成“玻璃质感”。
+# 3. 手机端/PC端 通用，不会再被遮挡。
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Scrolling & Layout
+   0) Global Reset & Scroll
    ============================= */
 html, body{
   height: auto !important;
@@ -48,8 +49,8 @@ div[data-testid="stAppViewContainer"]{
 }
 
 .block-container{
-  padding-top: 1.1rem;
-  padding-bottom: 2.2rem !important;
+  padding-top: 2rem !important; /* 留出一点顶部空间给Header */
+  padding-bottom: 3rem !important;
 }
 
 /* =============================
@@ -62,6 +63,7 @@ div[data-testid="stAppViewContainer"]{
   background-attachment:fixed;
 }
 
+/* Dark overlay */
 .stApp::before{
   content:"";
   position: fixed;
@@ -76,6 +78,7 @@ div[data-testid="stAppViewContainer"]{
   z-index: 1;
 }
 
+/* Transparent Containers */
 div[data-testid="stAppViewContainer"],
 div[data-testid="stMain"],
 div[data-testid="stHeader"],
@@ -90,98 +93,108 @@ div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
-
-div[data-testid="stCaption"],
-div[data-testid="stCaption"] *{
+div[data-testid="stCaption"], div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important;
   text-shadow: none !important;
 }
-
 .stMarkdown p{
   color: rgba(255,255,255,0.65) !important;
   text-shadow: none !important;
 }
-
-a, a *{
-  color: rgba(180,220,255,0.95) !important;
-}
+a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
-   3) Sidebar glass
+   3) Sidebar Styling
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.42) !important;
-  backdrop-filter: blur(12px);
+  background: rgba(0,0,0,0.65) !important; /* 深一点的玻璃背景 */
+  backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
-  z-index: 9998 !important;
-}
-header[data-testid="stHeader"]{
-  z-index: 9999 !important;
+  z-index: 99999 !important;
 }
 
 /* =============================
-   4) Inputs glass
+   ★ KEY FIX: Style the NATIVE Sidebar Button ★
+   不再使用自定义JS注入，直接美化原生按钮，保证手机/PC都不消失
    ============================= */
-div[data-baseweb="input"],
-div[data-baseweb="base-input"],
-div[data-baseweb="select"],
-div[data-baseweb="textarea"],
-div[data-baseweb="input"] > div,
-div[data-baseweb="base-input"] > div{
-  background: rgba(0,0,0,0.33) !important;
-  border: 1px solid rgba(255,255,255,0.14) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(10px);
-  box-shadow: none !important;
+[data-testid="stSidebarCollapsedControl"] {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0,0,0,0.35) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(6px);
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    margin-top: 0.2rem; /* 微调位置 */
+    transition: all 0.2s;
+    z-index: 1000002 !important; /* 确保在最上层 */
 }
 
-.stTextInput input,
-.stNumberInput input,
-.stTextArea textarea{
+[data-testid="stSidebarCollapsedControl"]:hover {
+    background-color: rgba(255,255,255,0.15) !important;
+    border-color: rgba(255,255,255,0.4) !important;
+    transform: scale(1.05);
+}
+
+/* 同样美化展开后的“关闭”按钮（在侧边栏内部） */
+[data-testid="stSidebarExpandedControl"] {
+    color: #ffffff !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* 让 Header 透明但允许点击下层元素（除了按钮区） */
+header[data-testid="stHeader"] {
+    pointer-events: none !important;
+    background: transparent !important;
+}
+/* 恢复 Header 内部按钮的点击事件 */
+header[data-testid="stHeader"] > div {
+    pointer-events: auto !important;
+}
+
+/* =============================
+   4) Inputs Glass Effect
+   ============================= */
+div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
+div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
+  background: rgba(0,0,0,0.33) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(8px);
+}
+.stTextInput input, .stNumberInput input, .stTextArea textarea {
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
 }
-
-.stTextInput input::placeholder,
-.stTextArea textarea::placeholder{
+.stTextInput input::placeholder, .stTextArea textarea::placeholder {
   color: rgba(255,255,255,0.50) !important;
 }
 
 /* =============================
-   5) Dropdown
+   5) Dropdown Menus (White)
    ============================= */
-div[data-baseweb="popover"]{ background: transparent !important; }
-
-div[data-baseweb="menu"],
-div[role="listbox"]{
+div[data-baseweb="menu"], div[role="listbox"] {
   background: #ffffff !important;
-  border: 1px solid rgba(0,0,0,0.18) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 12px 34px rgba(0,0,0,0.28) !important;
-  overflow: hidden !important;
-  backdrop-filter: none !important;
+  border-radius: 8px !important;
 }
-
-div[data-baseweb="menu"] *,
-div[role="listbox"] *{
-  color: #111 !important;
-  text-shadow: none !important;
+div[data-baseweb="menu"] *, div[role="listbox"] * {
+  color: #111 !important; text-shadow: none !important;
 }
-
-div[data-baseweb="menu"] div[role="option"]:hover,
-div[role="listbox"] div[role="option"]:hover{
-  background: #f2f3f5 !important;
+div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover {
+  background: #f0f2f6 !important;
 }
-
-div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
-div[role="listbox"] div[role="option"][aria-selected="true"]{
-  background: #e9eefc !important;
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"] {
+  background: #e6efff !important;
 }
 
 /* =============================
-   6) Card
+   6) Cards & Buttons
    ============================= */
-.card{
+.card {
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
@@ -191,95 +204,22 @@ div[role="listbox"] div[role="option"][aria-selected="true"]{
   color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
 }
-
-/* =============================
-   7) Buttons unify
-   ============================= */
-button{
+button {
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
   color: rgba(255,255,255,0.95) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(10px);
+  border-radius: 10px !important;
+  backdrop-filter: blur(8px);
 }
-button:hover{ background: rgba(255,255,255,0.12) !important; }
+button:hover { background: rgba(255,255,255,0.15) !important; }
 
 /* =============================
-   8) Floating controls (Menu Only)
-   ============================= */
-.fab{
-  position: fixed;
-  left: 12px;
-  top: 12px;
-  z-index: 9999999 !important; /* Ensure it's above everything */
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(0,0,0,0.35);
-  color: rgba(255,255,255,0.95);
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-  font-size: 20px;
-  line-height: 42px;
-  text-align: center;
-  user-select: none;
-  transition: transform 0.1s;
-}
-.fab:active{ transform: scale(0.92); }
-
-/* Hide fab on desktop if you prefer native button, 
-   but keeping it ensures style consistency */
-@media (min-width: 901px){
-  .fab{ left: 16px; }
-}
-
-/* =============================
-   9) Scrollbar
+   7) Scrollbar
    ============================= */
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
-
-<div class="fab menu" onclick="window.__toggleSidebar()" title="Menu">☰</div>
-
-<script>
-window.__toggleSidebar = function(){
-  // 1. 尝试在当前文档找（PC端常见）
-  let doc = window.document;
-  let btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-  
-  // 2. 如果没找到，尝试在父文档找（iframe嵌入/某些部署环境）
-  if (!btn && window.parent) {
-    try {
-        doc = window.parent.document;
-        btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-    } catch(e) {
-        // 跨域保护可能会阻止访问 parent，忽略错误
-    }
-  }
-
-  // 3. 如果还是没找到，可能侧边栏已经展开了，我们找"关闭"按钮（以便toggle）
-  if (!btn) {
-    btn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
-  }
-
-  // 4. 执行点击
-  if (btn) {
-    btn.click();
-  } else {
-    // 最后的保底：如果所有 ID 都变了，尝试找 aria-label
-    // 注意：手机端收起状态下，这个按钮可能很小或者隐藏，需要强制触发
-    const allBtns = Array.from(doc.querySelectorAll("button"));
-    const fuzzyBtn = allBtns.find(b => {
-        const label = (b.getAttribute("aria-label") || "").toLowerCase();
-        return label.includes("sidebar") || label.includes("侧边栏");
-    });
-    if(fuzzyBtn) fuzzyBtn.click();
-  }
-};
-</script>
 """,
     unsafe_allow_html=True
 )

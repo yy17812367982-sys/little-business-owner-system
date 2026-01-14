@@ -77,9 +77,11 @@ div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100v
   background-attachment:fixed;
 }
 .stApp::before{
-  content:""; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.52); pointer-events: none; z-index: 0;
+  ...
+  background: rgba(0,0,0,0.38);
+  ...
 }
+
 div[data-testid="stAppViewContainer"]{ position: relative; z-index: 1; }
 div[data-testid="stAppViewContainer"], div[data-testid="stMain"],
 div[data-testid="stHeader"], div[data-testid="stToolbar"]{
@@ -95,7 +97,7 @@ div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
 div[data-testid="stCaption"], div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important; text-shadow: none !important;
 }
-.stMarkdown p{ color: rgba(255,255,255,0.65) !important; text-shadow: none !important; }
+.stMarkdown p{ color: rgba(255,255,255,0.90) !important; text-shadow: 0 0 6px rgba(0,0,0,0.55) !important; }
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
@@ -223,13 +225,13 @@ div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
 div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
 
 .card{
-  background: rgba(0,0,0,0.32);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.50);
+  border: 1px solid rgba(255,255,255,0.16);
   border-radius: 16px;
   padding: 14px 16px;
   margin: 8px 0;
   backdrop-filter: blur(10px);
-  color: rgba(255,255,255,0.90) !important;
+  color: rgba(255,255,255,0.95) !important;
   text-shadow: none !important;
 }
 
@@ -321,15 +323,33 @@ def toggle_language():
 # =========================================================
 # ✅ AskAI: query-param toggle bridge (stable click)
 # =========================================================
-params = st.experimental_get_query_params()
-if "askai_toggle" in params:
-    # toggle open/close
+# =========================================================
+# ✅ AskAI: query-param toggle bridge (stable)
+# =========================================================
+def _get_query_params():
+    # Streamlit 新旧版本兼容
+    try:
+        # 新版：st.query_params 是 dict-like
+        return dict(st.query_params)
+    except Exception:
+        return st.experimental_get_query_params()
+
+def _clear_query_params():
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
+
+params = _get_query_params()
+
+# 只要出现 askai=1 就切换面板
+if params.get("askai") is not None知道:
     st.session_state.top_ai_open = not st.session_state.get("top_ai_open", False)
     if st.session_state.top_ai_open:
         st.session_state.show_top_chat = True
-    # clear param to avoid looping
-    st.experimental_set_query_params()
+    _clear_query_params()
     st.rerun()
+
 
 # =========================================================
 # API Key + client
@@ -1027,20 +1047,13 @@ with st.sidebar:
 # =========================================================
 st.title("SME BI Platform")
 
-# ✅ 这个是“真悬浮按钮”，不依赖 st.button DOM
 st.markdown(
     """
-<div class="askai-fab"
-     onclick="(function(){
-        const url = new URL(window.location.href);
-        url.searchParams.set('askai_toggle', Date.now().toString());
-        window.location.href = url.toString();
-     })()">
-  ✨ ASK AI
-</div>
+<a class="askai-fab" href="?askai=1">✨ ASK AI</a>
 """,
     unsafe_allow_html=True
 )
+
 
 # —— Ask AI 功能区（保持你原逻辑）
 if st.session_state.top_ai_open:

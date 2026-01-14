@@ -5,11 +5,12 @@ import os
 import time
 import random
 from datetime import datetime
-from google import genai
 import requests
+# 确保你安装了 google-genai 库: pip install google-genai
+from google import genai
 
 # =========================================================
-# Page config
+# Page config (必须是第一个 Streamlit 命令)
 # =========================================================
 st.set_page_config(
     page_title="Project B: SME BI Platform",
@@ -19,9 +20,6 @@ st.set_page_config(
 
 # =========================================================
 # UI: CSS Only (Native Button Transformation)
-# 核心逻辑：
-# 不再创建假按钮，而是把 Streamlit 那个原生按钮“整容”成你要的样子。
-# ✅ 关键修复：让内部 button 覆盖整个“Menu 框”，整块都能点。
 # =========================================================
 st.markdown(
     r"""
@@ -86,13 +84,6 @@ header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* =========================================================
-   ✅ 修复点：让“Menu 框”整块都可点
-   - 事件绑定在内部 button 上，外层撑大不等于可点击区域变大
-   - 所以：让内部 button absolute + inset:0 铺满整个框
-   - 再让 ::after 的文字 pointer-events:none，避免挡点击
-   ========================================================= */
-
 /* 2) 改造原生打开按钮容器（外观 + 尺寸） */
 [data-testid="stSidebarCollapsedControl"]{
     position: fixed !important;
@@ -113,9 +104,6 @@ header[data-testid="stHeader"] > div {
     cursor: pointer !important;
     transition: all 0.2s ease;
     overflow: hidden !important;
-
-    /* 关键：给内部绝对定位 button 一个参照 */
-    position: fixed !important;
 }
 
 /* ✅ 真正的点击体：内部 button 铺满整个框 */
@@ -170,17 +158,9 @@ header[data-testid="stHeader"] > div {
 /* =============================
    ★ 彻底隐藏多余元素 ★
    ============================= */
-
-/* 1) 彻底隐藏展开侧边栏后的关闭按钮 (<) */
 [data-testid="stSidebarExpandedControl"]{
     display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
 }
-
-/* 2) 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
     display: none !important;
 }
@@ -252,18 +232,36 @@ def toggle_language():
     st.rerun()
 
 # =========================================================
-# API Key + client
+# API Key + client (★ 关键修复位置)
 # =========================================================
-API_KEY = ""
-try:
-    API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-except Exception:
-    API_KEY = ""
 
-if not API_KEY:
-    API_KEY = os.getenv("GEMINI_API_KEY", "")
+# 1. 安全获取 Key
+def get_api_key():
+    # 优先检查 secrets
+    try:
+        if "GEMINI_API_KEY" in st.secrets:
+            return st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        pass
+    # 其次检查环境变量
+    return os.getenv("GEMINI_API_KEY", "")
 
-client = genai.Client(api_key=API_KEY) if API_KEY else None
+API_KEY = get_api_key()
+
+# 2. 使用 cache_resource 防止重复初始化导致的 SessionInfo 错误
+@st.cache_resource
+def get_genai_client(api_key):
+    if not api_key:
+        return None
+    try:
+        return genai.Client(api_key=api_key)
+    except Exception as e:
+        print(f"Error initializing Client: {e}")
+        return None
+
+# 初始化 Client (单例模式)
+# 注意：不要在全局直接 client = genai.Client(...)
+client_instance = get_genai_client(API_KEY)
 
 SYSTEM_POLICY = """
 You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
@@ -277,23 +275,25 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
-    "gemini-3-pro-preview",
-    "gemini-2.5-pro",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
+    "gemini-2.0-pro-exp-02-05", 
+    "gemini-1.5-pro",
+    "gemini-2.0-flash-exp",
 ]
 
 MODEL_CANDIDATES_FAST = [
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-pro",
 ]
 
 if "ai_quality" not in st.session_state:
     st.session_state.ai_quality = "pro"
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
-    if not API_KEY or not client:
+    # 每次调用时获取缓存的 client
+    current_client = get_genai_client(API_KEY)
+
+    if not API_KEY or not current_client:
         return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
                  "AI service is not configured (missing GEMINI_API_KEY or client).")
 
@@ -312,7 +312,8 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
     for model_name in models:
         for _ in range(2):
             try:
-                resp = client.models.generate_content(model=model_name, contents=prompt)
+                # 注意：根据 SDK 版本，调用方法可能是 models.generate_content 或 chat.send_message
+                resp = current_client.models.generate_content(model=model_name, contents=prompt)
                 text = getattr(resp, "text", None)
                 if text and str(text).strip():
                     return text
@@ -1238,10 +1239,10 @@ def render_open_store():
             inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
             inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
             inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
-                                            index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+                                              index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
             inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                     placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+                                        placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -1306,9 +1307,9 @@ def render_open_store():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                          index=["Low","Medium","High"].index(pr["elasticity"]))
+                                            index=["Low","Medium","High"].index(pr["elasticity"]))
             pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
-                                     placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+                                       placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
@@ -1475,7 +1476,7 @@ def render_operations():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                          index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
+                                            index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")

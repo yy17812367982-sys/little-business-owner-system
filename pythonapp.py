@@ -991,6 +991,7 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
+st.markdown("<div class='askai-badge'>✨ ASK AI</div>", unsafe_allow_html=True)
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False

@@ -1012,7 +1012,64 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
-st.markdown("<div class='askai-badge'>✨ ASK AI</div>", unsafe_allow_html=True)
+import streamlit.components.v1 as components
+
+components.html(
+    """
+    <style>
+      .askai-fab{
+        display:inline-flex;
+        align-items:center;
+        gap:10px;
+        padding:10px 16px;
+        border-radius:999px;
+        font-weight:900;
+        letter-spacing:1px;
+        color:rgba(255,255,255,0.98);
+        background:rgba(0,0,0,0.38);
+        border:1px solid rgba(255,255,255,0.28);
+        box-shadow:0 0 22px rgba(120,200,255,0.20);
+        cursor:pointer;
+        user-select:none;
+        animation:askai_float 1.8s ease-in-out infinite;
+      }
+      .askai-fab:hover{
+        background:rgba(0,0,0,0.55);
+        border-color:rgba(255,255,255,0.55);
+        transform:translateY(1px);
+      }
+      @keyframes askai_float{
+        0%{ transform:translateY(0px); }
+        50%{ transform:translateY(-3px); }
+        100%{ transform:translateY(0px); }
+      }
+    </style>
+
+    <div class="askai-fab" id="askaiFab">✨ <span>ASK AI</span></div>
+
+    <script>
+      (function(){
+        const fab = document.getElementById("askaiFab");
+        if(!fab) return;
+
+        fab.addEventListener("click", function(){
+          // 找到页面上第一个 Expander（就是你那个 Ask AI Top Entry）
+          const summary = window.parent.document.querySelector(
+            'div[data-testid="stExpander"] details > summary'
+          );
+
+          if(summary){
+            summary.click(); // 展开/收起
+            // 顺便滚动到它附近（体验更像“入口”）
+            summary.scrollIntoView({behavior:'smooth', block:'start'});
+          }
+        });
+      })();
+    </script>
+    """,
+    height=70
+)
+
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False

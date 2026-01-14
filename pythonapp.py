@@ -18,11 +18,11 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Native Button Styling)
+# UI: CSS Only (Native Button Enhanced)
 # 修正说明：
-# 1. 移除了自定义 HTML/JS 按钮，彻底解决“按钮消失”和“点击无效”问题。
-# 2. 强制显示 Streamlit 原生 Sidebar 按钮，并用 CSS 把它美化成“玻璃质感”。
-# 3. 手机端/PC端 通用，不会再被遮挡。
+# 1. 保持了之前的原生按钮方案，确保手机/PC稳定可用。
+# 2. 【新】为侧边栏开关按钮增加了“呼吸灯”动画，使其更显眼。
+# 3. 【新】为按钮增加了鼠标悬停时的文字提示 (Tooltip)。
 # =========================================================
 st.markdown(
     r"""
@@ -49,7 +49,7 @@ div[data-testid="stAppViewContainer"]{
 }
 
 .block-container{
-  padding-top: 2rem !important; /* 留出一点顶部空间给Header */
+  padding-top: 2rem !important;
   padding-bottom: 3rem !important;
 }
 
@@ -107,51 +107,91 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styling
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.65) !important; /* 深一点的玻璃背景 */
+  background: rgba(0,0,0,0.65) !important;
   backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ KEY FIX: Style the NATIVE Sidebar Button ★
-   不再使用自定义JS注入，直接美化原生按钮，保证手机/PC都不消失
+   ★ KEY FIX: Enhanced Sidebar Button ★
+   增加了动画和文字提示
    ============================= */
+
+/* 定义呼吸灯动画 */
+@keyframes pulse-white {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+    border-color: rgba(255,255,255,0.3);
+  }
+  70% {
+    box-shadow: 0 0 8px 4px rgba(255, 255, 255, 0);
+    border-color: rgba(255,255,255,0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    border-color: rgba(255,255,255,0.3);
+  }
+}
+
+/* 美化原生侧边栏打开按钮 */
 [data-testid="stSidebarCollapsedControl"] {
     display: flex !important;
     align-items: center;
     justify-content: center;
-    background-color: rgba(0,0,0,0.35) !important;
+    background-color: rgba(0,0,0,0.45) !important; /* 稍微深一点 */
     color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
+    border: 1.5px solid rgba(255,255,255,0.3) !important; /* 边框加粗一点 */
     border-radius: 8px !important;
     backdrop-filter: blur(6px);
-    width: 2.5rem !important;
-    height: 2.5rem !important;
-    margin-top: 0.2rem; /* 微调位置 */
-    transition: all 0.2s;
-    z-index: 1000002 !important; /* 确保在最上层 */
+    width: 2.6rem !important; /* 稍微大一点 */
+    height: 2.6rem !important;
+    margin-top: 0.2rem;
+    transition: all 0.2s ease-in-out;
+    z-index: 1000002 !important;
+    /* 应用呼吸动画，无限循环 */
+    animation: pulse-white 2s infinite;
 }
 
+/* 鼠标悬停时的效果 */
 [data-testid="stSidebarCollapsedControl"]:hover {
-    background-color: rgba(255,255,255,0.15) !important;
-    border-color: rgba(255,255,255,0.4) !important;
-    transform: scale(1.05);
+    background-color: rgba(255,255,255,0.25) !important;
+    color: #fff !important;
+    transform: scale(1.08);
+    animation: none; /* 悬停时停止呼吸动画 */
+    border-color: rgba(255,255,255,0.9) !important;
 }
 
-/* 同样美化展开后的“关闭”按钮（在侧边栏内部） */
+/* 添加悬停文字提示 (Tooltip) - 仅电脑端有效 */
+[data-testid="stSidebarCollapsedControl"]:hover::after {
+    content: "打开菜单 / Open Menu"; /* 提示文字 */
+    position: absolute;
+    left: 115%; /* 显示在按钮右侧 */
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,0.85); /* 深色背景 */
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    white-space: nowrap;
+    pointer-events: none; /* 提示框不挡鼠标 */
+    border: 1px solid rgba(255,255,255,0.2);
+    backdrop-filter: blur(4px);
+}
+
+/* 美化展开后的“关闭”按钮 */
 [data-testid="stSidebarExpandedControl"] {
     color: #ffffff !important;
     background: transparent !important;
     border: none !important;
 }
 
-/* 让 Header 透明但允许点击下层元素（除了按钮区） */
+/* Header 交互修正 */
 header[data-testid="stHeader"] {
     pointer-events: none !important;
     background: transparent !important;
 }
-/* 恢复 Header 内部按钮的点击事件 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }

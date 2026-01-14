@@ -345,7 +345,7 @@ def _clear_query_params():
 params = _get_query_params()
 
 # 只要出现 askai=1 就切换面板
-if params.get("askai") is not None知道:
+if params.get("askai") is not None:
     st.session_state.top_ai_open = not st.session_state.get("top_ai_open", False)
     if st.session_state.top_ai_open:
         st.session_state.show_top_chat = True

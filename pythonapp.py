@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import os
@@ -19,34 +18,10 @@ st.set_page_config(
 )
 
 # =========================================================
-# ✅ NEW: collapse sidebar helper (JS click)
-# =========================================================
-def collapse_sidebar():
-    components.html(
-        """
-        <script>
-        (function(){
-          const selectors = [
-            '[data-testid="stSidebarCollapseButton"]',
-            '[data-testid="stSidebarCollapseButton"] button',
-            'button[aria-label="Close sidebar"]',
-            'button[title="Close sidebar"]'
-          ];
-          let btn = null;
-          for (const s of selectors) {
-            btn = window.parent.document.querySelector(s);
-            if (btn) break;
-          }
-          if (btn) btn.click();
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-# =========================================================
 # UI: CSS Only (Native Button Transformation)
+# 核心逻辑：
+# 不再创建假按钮，而是把 Streamlit 那个原生按钮“整容”成你要的样子。
+# ✅ 关键修复：让内部 button 覆盖整个“Menu 框”，整块都能点。
 # =========================================================
 st.markdown(
     r"""
@@ -90,28 +65,36 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.85) !important;
+  background: rgba(0,0,0,0.85) !important; /* 深色背景 */
   backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ 原生按钮整容术 ★
+   ★ 核心：原生按钮整容术 ★
    ============================= */
 
-/* 1. Header 不挡点击 */
+/* 1) 处理 Header，防止它挡住按钮点击 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
     z-index: 1000000 !important;
 }
+/* 必须让 Header 内部的子元素恢复点击，否则原生按钮（就在Header里）会点不到 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 2. 改造原生打开按钮 */
-[data-testid="stSidebarCollapsedControl"] {
+/* =========================================================
+   ✅ 修复点：让“Menu 框”整块都可点
+   - 事件绑定在内部 button 上，外层撑大不等于可点击区域变大
+   - 所以：让内部 button absolute + inset:0 铺满整个框
+   - 再让 ::after 的文字 pointer-events:none，避免挡点击
+   ========================================================= */
+
+/* 2) 改造原生打开按钮容器（外观 + 尺寸） */
+[data-testid="stSidebarCollapsedControl"]{
     position: fixed !important;
     top: 16px !important;
     left: 16px !important;
@@ -124,37 +107,61 @@ header[data-testid="stHeader"] > div {
     border: 1px solid rgba(255,255,255,0.3) !important;
     border-radius: 8px !important;
 
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease;
+    overflow: hidden !important;
+
+    /* 关键：给内部绝对定位 button 一个参照 */
+    position: fixed !important;
+}
+
+/* ✅ 真正的点击体：内部 button 铺满整个框 */
+[data-testid="stSidebarCollapsedControl"] button{
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+
+    /* button 自己透明，但保留点击 */
+    opacity: 0 !important;
+    background: transparent !important;
+    border: none !important;
+
+    pointer-events: auto !important;
+}
+
+/* 3) 隐藏原生按钮内部的 SVG 箭头（双保险） */
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="stSidebarCollapsedControl"] img{
+    display: none !important;
+}
+
+/* 4) 插入我们想要的文字和图标（不吃点击） */
+[data-testid="stSidebarCollapsedControl"]::after{
+    content: "☰ Menu";
+    position: absolute !important;
+    inset: 0 !important;
+
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
 
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease;
-
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* 3. 隐藏原生按钮内部 SVG */
-[data-testid="stSidebarCollapsedControl"] svg,
-[data-testid="stSidebarCollapsedControl"] img {
-    display: none !important;
-}
-
-/* 4. 插入自定义文字 */
-[data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰ Menu";
     color: #ffffff !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     font-family: "Source Sans Pro", sans-serif;
     letter-spacing: 0.5px;
-    display: block !important;
+
+    pointer-events: none !important; /* ✅ 关键：文字不挡点击 */
 }
 
-/* 5. hover */
-[data-testid="stSidebarCollapsedControl"]:hover {
+/* 5) 鼠标悬停效果 */
+[data-testid="stSidebarCollapsedControl"]:hover{
     background-color: rgba(0,0,0,0.8) !important;
     border-color: rgba(255,255,255,0.6) !important;
     transform: translateY(1px);
@@ -164,8 +171,8 @@ header[data-testid="stHeader"] > div {
    ★ 彻底隐藏多余元素 ★
    ============================= */
 
-/* 1. 隐藏展开侧边栏后的关闭按钮 (<) —— 注意：这里不影响我们的 JS 点击关闭按钮（不同控件） */
-[data-testid="stSidebarExpandedControl"] {
+/* 1) 彻底隐藏展开侧边栏后的关闭按钮 (<) */
+[data-testid="stSidebarExpandedControl"]{
     display: none !important;
     width: 0 !important;
     height: 0 !important;
@@ -173,8 +180,8 @@ header[data-testid="stHeader"] > div {
     pointer-events: none !important;
 }
 
-/* 2. 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button {
+/* 2) 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
     display: none !important;
 }
 
@@ -182,29 +189,29 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button {
    4) Other Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
-div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
+div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div{
   background: rgba(0,0,0,0.33) !important;
   border: 1px solid rgba(255,255,255,0.14) !important;
   border-radius: 12px !important;
   backdrop-filter: blur(8px);
 }
-.stTextInput input, .stNumberInput input, .stTextArea textarea {
+.stTextInput input, .stNumberInput input, .stTextArea textarea{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
 }
-.stTextInput input::placeholder, .stTextArea textarea::placeholder {
+.stTextInput input::placeholder, .stTextArea textarea::placeholder{
   color: rgba(255,255,255,0.50) !important;
 }
 
-div[data-baseweb="menu"], div[role="listbox"] {
+div[data-baseweb="menu"], div[role="listbox"]{
   background: #ffffff !important;
   border-radius: 8px !important;
 }
-div[data-baseweb="menu"] *, div[role="listbox"] * { color: #111 !important; text-shadow: none !important; }
-div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover { background: #f0f2f6 !important; }
-div[data-baseweb="menu"] div[role="option"][aria-selected="true"] { background: #e6efff !important; }
+div[data-baseweb="menu"] *, div[role="listbox"] *{ color: #111 !important; text-shadow: none !important; }
+div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
 
-.card {
+.card{
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
@@ -214,14 +221,14 @@ div[data-baseweb="menu"] div[role="option"][aria-selected="true"] { background: 
   color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
 }
-button {
+button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
   color: rgba(255,255,255,0.95) !important;
   border-radius: 10px !important;
   backdrop-filter: blur(8px);
 }
-button:hover { background: rgba(255,255,255,0.15) !important; }
+button:hover{ background: rgba(255,255,255,0.15) !important; }
 
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
@@ -902,7 +909,6 @@ with st.sidebar:
     new_suite = mapping[suite_label]
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
-        collapse_sidebar()  # ✅ NEW: 选中后自动收起 sidebar
         st.rerun()
 
     st.markdown("---")
@@ -1044,6 +1050,7 @@ def render_open_store():
         st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
                      "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
 
+    # Step 1
     if st.session_state.open_step == 1:
         p = st.session_state.profile
         st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
@@ -1073,6 +1080,7 @@ def render_open_store():
             placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
         )
 
+    # Step 2
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         p = st.session_state.profile
@@ -1220,6 +1228,7 @@ def render_open_store():
         else:
             st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
 
+    # Step 3
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
         st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash (no AI here)"))
@@ -1279,6 +1288,7 @@ def render_open_store():
             with st.expander(t("查看缺货风险明细", "View stockout-risk details")):
                 st.dataframe(health["stockout_items"], use_container_width=True)
 
+    # Step 4
     else:
         pr = st.session_state.pricing
         st.subheader(t("第 4 步：定价 & 一键总分析", "Step 4: Pricing & One-click Final Analysis"))

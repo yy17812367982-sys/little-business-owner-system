@@ -14,14 +14,14 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="expanded"  # ✅ 默认折叠，需要靠按钮打开
+    initial_sidebar_state="collapsed"  # 默认折叠
 )
 
 # =========================================================
 # UI: CSS + JS (FIXED VERSION)
 # 修正点：
-# 1. z-index 提高到 999999 防止被遮挡
-# 2. JS 增加中文兼容和 ID 精确查找
+# 1. 删除了上下箭头按钮
+# 2. 修复手机端侧边栏点击无效的问题 (JS 增强)
 # =========================================================
 st.markdown(
     r"""
@@ -205,12 +205,13 @@ button{
 button:hover{ background: rgba(255,255,255,0.12) !important; }
 
 /* =============================
-   8) Floating controls (Fix: Z-index boosted)
+   8) Floating controls (Menu Only)
    ============================= */
 .fab{
   position: fixed;
   left: 12px;
-  z-index: 999999 !important; /* Force on top */
+  top: 12px;
+  z-index: 9999999 !important; /* Ensure it's above everything */
   width: 42px;
   height: 42px;
   border-radius: 14px;
@@ -227,10 +228,8 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 }
 .fab:active{ transform: scale(0.92); }
 
-.fab.menu{ top: 12px; }
-.fab.top{ top: 64px; font-size: 18px; }
-.fab.bottom{ top: 114px; font-size: 18px; }
-
+/* Hide fab on desktop if you prefer native button, 
+   but keeping it ensures style consistency */
 @media (min-width: 901px){
   .fab{ left: 16px; }
 }
@@ -244,48 +243,40 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 </style>
 
 <div class="fab menu" onclick="window.__toggleSidebar()" title="Menu">☰</div>
-<div class="fab top" onclick="window.__scrollTop()" title="Top">↑</div>
-<div class="fab bottom" onclick="window.__scrollBottom()" title="Bottom">↓</div>
 
 <script>
-window.__scrollTop = function(){
-  window.scrollTo({top: 0, behavior: "smooth"});
-};
-window.__scrollBottom = function(){
-  const maxScroll = Math.max(
-    document.body.scrollHeight,
-    document.documentElement.scrollHeight
-  );
-  window.scrollTo({top: maxScroll, behavior: "smooth"});
-};
-
 window.__toggleSidebar = function(){
-  const doc = window.parent.document;
-  
-  // 1. 尝试通过标准 test-id 查找 (最稳)
+  // 1. 尝试在当前文档找（PC端常见）
+  let doc = window.document;
   let btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
   
-  // 2. 如果已经展开，找关闭按钮
+  // 2. 如果没找到，尝试在父文档找（iframe嵌入/某些部署环境）
+  if (!btn && window.parent) {
+    try {
+        doc = window.parent.document;
+        btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+    } catch(e) {
+        // 跨域保护可能会阻止访问 parent，忽略错误
+    }
+  }
+
+  // 3. 如果还是没找到，可能侧边栏已经展开了，我们找"关闭"按钮（以便toggle）
   if (!btn) {
     btn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
   }
-  
-  // 3. 暴力查找：匹配 title 或 aria-label (兼容中文和英文)
-  if (!btn) {
-    const allButtons = Array.from(doc.querySelectorAll("button"));
-    btn = allButtons.find(b => {
-        const t = (b.title || "").toLowerCase();
-        const a = (b.getAttribute("aria-label") || "").toLowerCase();
-        // 匹配 "sidebar" (英) 或 "侧边栏" (中)
-        return t.includes("sidebar") || a.includes("sidebar") || 
-               t.includes("侧边栏") || a.includes("侧边栏");
-    });
-  }
 
+  // 4. 执行点击
   if (btn) {
     btn.click();
   } else {
-    console.warn("Sidebar toggle button not found in DOM.");
+    // 最后的保底：如果所有 ID 都变了，尝试找 aria-label
+    // 注意：手机端收起状态下，这个按钮可能很小或者隐藏，需要强制触发
+    const allBtns = Array.from(doc.querySelectorAll("button"));
+    const fuzzyBtn = allBtns.find(b => {
+        const label = (b.getAttribute("aria-label") || "").toLowerCase();
+        return label.includes("sidebar") || label.includes("侧边栏");
+    });
+    if(fuzzyBtn) fuzzyBtn.click();
   }
 };
 </script>

@@ -14,7 +14,7 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"  # ✅ mobile default collapsed
+    initial_sidebar_state="expanded"  # ✅ mobile default collapsed
 )
 
 # =========================================================

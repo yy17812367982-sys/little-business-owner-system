@@ -1029,7 +1029,11 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
-with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
+with st.expander(
+    t("问 AI（入口）", "<span class='askai-text'>ASK AI</span>"),
+    expanded=False
+):
+
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""

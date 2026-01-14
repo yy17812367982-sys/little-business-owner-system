@@ -277,31 +277,6 @@ div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
 
-.askai-badge{
-  display: inline-block;
-  padding: 8px 14px;
-  margin: 6px 0 8px 0;
-  border-radius: 999px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: rgba(255,255,255,0.98);
-  background: rgba(0,0,0,0.35);
-  border: 1px solid rgba(255,255,255,0.28);
-  box-shadow: 0 0 22px rgba(120,200,255,0.20);
-  animation: askai_float 1.8s ease-in-out infinite;
-}
-
-@keyframes askai_float{
-  0%   { transform: translateY(0px); }
-  50%  { transform: translateY(-3px); }
-  100% { transform: translateY(0px); }
-}
-
-.askai-wrap div[data-testid="stExpander"] > details > summary{
-  display:none !important;
-}
-
-
 </style>
 """,
     unsafe_allow_html=True
@@ -1016,57 +991,6 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
-import streamlit.components.v1 as components
-
-import streamlit.components.v1 as components
-
-components.html(
-    """
-    <style>
-      .askai-fab{
-        display:inline-flex;
-        align-items:center;
-        gap:8px;
-        padding:10px 16px;
-        border-radius:999px;
-        font-weight:900;
-        letter-spacing:1px;
-        color:#fff;
-        background:rgba(0,0,0,0.45);
-        border:1px solid rgba(255,255,255,0.25);
-        box-shadow:0 0 18px rgba(120,200,255,0.25);
-        cursor:pointer;
-        animation:askai_float 1.8s ease-in-out infinite;
-      }
-      @keyframes askai_float{
-        0%{ transform:translateY(0px); }
-        50%{ transform:translateY(-3px); }
-        100%{ transform:translateY(0px); }
-      }
-    </style>
-
-    <div class="askai-fab" id="askaiFab">✨ ASK AI</div>
-
-    <script>
-      (function(){
-        const fab = document.getElementById("askaiFab");
-        fab.onclick = function(){
-          const summary = window.parent.document.querySelector(
-            '.askai-wrap div[data-testid="stExpander"] details > summary'
-          );
-          if(summary){
-            summary.click();
-            summary.scrollIntoView({behavior:'smooth'});
-          }
-        };
-      })();
-    </script>
-    """,
-    height=60
-)
-
-st.markdown("<div class='askai-wrap'>", unsafe_allow_html=True)
-
 with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
@@ -1123,8 +1047,6 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
-
-st.markdown("</div>", unsafe_allow_html=True)
 
 if st.session_state.show_top_chat and st.session_state.chat_history:
     st.markdown("### " + t("对话记录", "Conversation"))

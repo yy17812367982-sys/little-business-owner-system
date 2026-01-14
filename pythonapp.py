@@ -1,22 +1,57 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import os
 import time
 import random
 from datetime import datetime
-import requests
-# 确保你安装了 google-genai 库: pip install google-genai
 from google import genai
+import requests
 
 # =========================================================
-# Page config (必须是第一个 Streamlit 命令)
+# Page config
 # =========================================================
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# =========================================================
+# ✅ Sidebar collapse helper (SAFE: two-step flag -> execute in main flow)
+# =========================================================
+def collapse_sidebar():
+    components.html(
+        """
+        <script>
+        (function(){
+          const selectors = [
+            '[data-testid="stSidebarCollapseButton"]',
+            '[data-testid="stSidebarCollapseButton"] button',
+            'button[aria-label="Close sidebar"]',
+            'button[title="Close sidebar"]'
+          ];
+          let btn = null;
+          for (const s of selectors) {
+            btn = window.parent.document.querySelector(s);
+            if (btn) break;
+          }
+          if (btn) btn.click();
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+if "_do_collapse_sidebar" not in st.session_state:
+    st.session_state["_do_collapse_sidebar"] = False
+
+# ✅ Only execute collapse in main render flow (avoid SessionInfo init race)
+if st.session_state.get("_do_collapse_sidebar", False):
+    st.session_state["_do_collapse_sidebar"] = False
+    collapse_sidebar()
 
 # =========================================================
 # UI: CSS Only (Native Button Transformation)
@@ -54,8 +89,12 @@ div[data-testid="stHeader"], div[data-testid="stToolbar"]{
 /* =============================
    2) Typography
    ============================= */
-div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){ color:#fff !important; text-shadow: 0 0 6px rgba(0,0,0,0.65); }
-div[data-testid="stCaption"], div[data-testid="stCaption"] *{ color: rgba(255,255,255,0.55) !important; text-shadow: none !important; }
+div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
+  color:#fff !important; text-shadow: 0 0 6px rgba(0,0,0,0.65);
+}
+div[data-testid="stCaption"], div[data-testid="stCaption"] *{
+  color: rgba(255,255,255,0.55) !important; text-shadow: none !important;
+}
 .stMarkdown p{ color: rgba(255,255,255,0.65) !important; text-shadow: none !important; }
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
@@ -63,7 +102,7 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.85) !important; /* 深色背景 */
+  background: rgba(0,0,0,0.85) !important;
   backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
@@ -73,96 +112,78 @@ section[data-testid="stSidebar"]{
    ★ 核心：原生按钮整容术 ★
    ============================= */
 
-/* 1) 处理 Header，防止它挡住按钮点击 */
+/* 1) Header 不挡点击，但内部按钮可点 */
 header[data-testid="stHeader"] {
-    background: transparent !important;
-    pointer-events: none !important;
-    z-index: 1000000 !important;
+  background: transparent !important;
+  pointer-events: none !important;
+  z-index: 1000000 !important;
 }
-/* 必须让 Header 内部的子元素恢复点击，否则原生按钮（就在Header里）会点不到 */
 header[data-testid="stHeader"] > div {
-    pointer-events: auto !important;
+  pointer-events: auto !important;
 }
 
-/* 2) 改造原生打开按钮容器（外观 + 尺寸） */
+/* 2) 改造原生打开按钮（collapsed 控件） */
 [data-testid="stSidebarCollapsedControl"]{
-    position: fixed !important;
-    top: 16px !important;
-    left: 16px !important;
-    z-index: 1000002 !important;
+  position: fixed !important;
+  top: 16px !important;
+  left: 16px !important;
+  z-index: 1000002 !important;
 
-    width: 110px !important;
-    height: 44px !important;
+  width: 110px !important;
+  height: 44px !important;
 
-    background-color: rgba(0,0,0,0.6) !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 8px !important;
+  background-color: rgba(0,0,0,0.6) !important;
+  border: 1px solid rgba(255,255,255,0.3) !important;
+  border-radius: 8px !important;
 
-    display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease;
-    overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease;
+
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
-/* ✅ 真正的点击体：内部 button 铺满整个框 */
-[data-testid="stSidebarCollapsedControl"] button{
-    position: absolute !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-
-    /* button 自己透明，但保留点击 */
-    opacity: 0 !important;
-    background: transparent !important;
-    border: none !important;
-
-    pointer-events: auto !important;
-}
-
-/* 3) 隐藏原生按钮内部的 SVG 箭头（双保险） */
+/* 3) 隐藏原生 SVG */
 [data-testid="stSidebarCollapsedControl"] svg,
 [data-testid="stSidebarCollapsedControl"] img{
-    display: none !important;
+  display: none !important;
 }
 
-/* 4) 插入我们想要的文字和图标（不吃点击） */
+/* 4) 插入 Menu 文案 */
 [data-testid="stSidebarCollapsedControl"]::after{
-    content: "☰ Menu";
-    position: absolute !important;
-    inset: 0 !important;
-
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    color: #ffffff !important;
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    font-family: "Source Sans Pro", sans-serif;
-    letter-spacing: 0.5px;
-
-    pointer-events: none !important; /* ✅ 关键：文字不挡点击 */
+  content: "☰ Menu";
+  color: #ffffff !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  font-family: "Source Sans Pro", sans-serif;
+  letter-spacing: 0.5px;
+  display: block !important;
 }
 
-/* 5) 鼠标悬停效果 */
+/* 5) hover */
 [data-testid="stSidebarCollapsedControl"]:hover{
-    background-color: rgba(0,0,0,0.8) !important;
-    border-color: rgba(255,255,255,0.6) !important;
-    transform: translateY(1px);
+  background-color: rgba(0,0,0,0.8) !important;
+  border-color: rgba(255,255,255,0.6) !important;
+  transform: translateY(1px);
 }
 
 /* =============================
-   ★ 彻底隐藏多余元素 ★
+   ★ 隐藏展开侧边栏后的关闭按钮 (<) ★
    ============================= */
 [data-testid="stSidebarExpandedControl"]{
-    display: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
-    display: none !important;
+  display: none !important;
 }
 
 /* =============================
@@ -187,8 +208,11 @@ div[data-baseweb="menu"], div[role="listbox"]{
   background: #ffffff !important;
   border-radius: 8px !important;
 }
-div[data-baseweb="menu"] *, div[role="listbox"] *{ color: #111 !important; text-shadow: none !important; }
-div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
+div[data-baseweb="menu"] *, div[role="listbox"] *{
+  color: #111 !important; text-shadow: none !important;
+}
+div[data-baseweb="menu"] div[role="option"]:hover,
+div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
 div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
 
 .card{
@@ -201,6 +225,7 @@ div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #
   color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
 }
+
 button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
@@ -232,36 +257,18 @@ def toggle_language():
     st.rerun()
 
 # =========================================================
-# API Key + client (★ 关键修复位置)
+# API Key + client
 # =========================================================
+API_KEY = ""
+try:
+    API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+except Exception:
+    API_KEY = ""
 
-# 1. 安全获取 Key
-def get_api_key():
-    # 优先检查 secrets
-    try:
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
-    # 其次检查环境变量
-    return os.getenv("GEMINI_API_KEY", "")
+if not API_KEY:
+    API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-API_KEY = get_api_key()
-
-# 2. 使用 cache_resource 防止重复初始化导致的 SessionInfo 错误
-@st.cache_resource
-def get_genai_client(api_key):
-    if not api_key:
-        return None
-    try:
-        return genai.Client(api_key=api_key)
-    except Exception as e:
-        print(f"Error initializing Client: {e}")
-        return None
-
-# 初始化 Client (单例模式)
-# 注意：不要在全局直接 client = genai.Client(...)
-client_instance = get_genai_client(API_KEY)
+client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 SYSTEM_POLICY = """
 You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
@@ -275,25 +282,23 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
-    "gemini-1.5-pro",          # <--- 把它放第一位，比 2.0-exp 稳得多
-    "gemini-2.0-pro-exp-02-05", 
-    "gemini-2.0-flash-exp",
+    "gemini-3-pro-preview",
+    "gemini-2.5-pro",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
 ]
 
 MODEL_CANDIDATES_FAST = [
-    "gemini-1.5-flash",        # <--- 把这个调到第一位，它最稳
-    "gemini-2.0-flash-exp",
-    "gemini-1.5-pro",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
 ]
 
 if "ai_quality" not in st.session_state:
     st.session_state.ai_quality = "pro"
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
-    # 每次调用时获取缓存的 client
-    current_client = get_genai_client(API_KEY)
-
-    if not API_KEY or not current_client:
+    if not API_KEY or not client:
         return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
                  "AI service is not configured (missing GEMINI_API_KEY or client).")
 
@@ -312,8 +317,7 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
     for model_name in models:
         for _ in range(2):
             try:
-                # 注意：根据 SDK 版本，调用方法可能是 models.generate_content 或 chat.send_message
-                resp = current_client.models.generate_content(model=model_name, contents=prompt)
+                resp = client.models.generate_content(model=model_name, contents=prompt)
                 text = getattr(resp, "text", None)
                 if text and str(text).strip():
                     return text
@@ -910,6 +914,8 @@ with st.sidebar:
     new_suite = mapping[suite_label]
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
+        # ✅ 选中后让 sidebar 自动收回（用 SAFE flag，下一轮主流程执行 collapse）
+        st.session_state["_do_collapse_sidebar"] = True
         st.rerun()
 
     st.markdown("---")
@@ -1239,10 +1245,10 @@ def render_open_store():
             inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
             inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
             inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
-                                              index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+                                            index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
             inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                        placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+                                     placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -1307,9 +1313,9 @@ def render_open_store():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                            index=["Low","Medium","High"].index(pr["elasticity"]))
+                                          index=["Low","Medium","High"].index(pr["elasticity"]))
             pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
-                                       placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+                                     placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
@@ -1476,7 +1482,7 @@ def render_operations():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                            index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
+                                          index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")

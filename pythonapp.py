@@ -14,18 +14,20 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"  # ✅ mobile default collapsed
+    initial_sidebar_state="collapsed"  # ✅ 默认折叠，需要靠按钮打开
 )
 
 # =========================================================
-# UI: CSS + JS (SAFE, ONE BLOCK ONLY)
-# 关键：所有 CSS/JS 都在同一个 markdown 字符串里，避免你再次粘贴炸括号
+# UI: CSS + JS (FIXED VERSION)
+# 修正点：
+# 1. z-index 提高到 999999 防止被遮挡
+# 2. JS 增加中文兼容和 ID 精确查找
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Scrolling: keep page scrollable and avoid "infinite blank"
+   0) Scrolling & Layout
    ============================= */
 html, body{
   height: auto !important;
@@ -33,7 +35,6 @@ html, body{
   overflow-x: hidden !important;
 }
 
-/* Main container must remain scrollable */
 div[data-testid="stAppViewContainer"]{
   height: auto !important;
   min-height: 100vh !important;
@@ -41,20 +42,18 @@ div[data-testid="stAppViewContainer"]{
   overflow-x: hidden !important;
 }
 
-/* Do NOT lock stApp */
 .stApp{
   height: auto !important;
   overflow-y: visible !important;
 }
 
-/* Reduce bottom blank space */
 .block-container{
   padding-top: 1.1rem;
   padding-bottom: 2.2rem !important;
 }
 
 /* =============================
-   1) Background + overlay (keeps your vibe, but no scroll break)
+   1) Background + overlay
    ============================= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
@@ -63,7 +62,6 @@ div[data-testid="stAppViewContainer"]{
   background-attachment:fixed;
 }
 
-/* overlay */
 .stApp::before{
   content:"";
   position: fixed;
@@ -73,13 +71,11 @@ div[data-testid="stAppViewContainer"]{
   z-index: 0;
 }
 
-/* content above overlay */
 div[data-testid="stAppViewContainer"]{
   position: relative;
   z-index: 1;
 }
 
-/* transparent shell */
 div[data-testid="stAppViewContainer"],
 div[data-testid="stMain"],
 div[data-testid="stHeader"],
@@ -88,7 +84,7 @@ div[data-testid="stToolbar"]{
 }
 
 /* =============================
-   2) Typography / readability
+   2) Typography
    ============================= */
 div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
@@ -111,7 +107,7 @@ a, a *{
 }
 
 /* =============================
-   3) Sidebar glass (keep)
+   3) Sidebar glass
    ============================= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.42) !important;
@@ -124,7 +120,7 @@ header[data-testid="stHeader"]{
 }
 
 /* =============================
-   4) Inputs glass (keep)
+   4) Inputs glass
    ============================= */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
@@ -152,7 +148,7 @@ div[data-baseweb="base-input"] > div{
 }
 
 /* =============================
-   5) Dropdown: white bg + dark text
+   5) Dropdown
    ============================= */
 div[data-baseweb="popover"]{ background: transparent !important; }
 
@@ -209,12 +205,12 @@ button{
 button:hover{ background: rgba(255,255,255,0.12) !important; }
 
 /* =============================
-   8) Floating controls: sidebar toggle + top/bottom
+   8) Floating controls (Fix: Z-index boosted)
    ============================= */
 .fab{
   position: fixed;
   left: 12px;
-  z-index: 10000;
+  z-index: 999999 !important; /* Force on top */
   width: 42px;
   height: 42px;
   border-radius: 14px;
@@ -227,14 +223,14 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
   line-height: 42px;
   text-align: center;
   user-select: none;
+  transition: transform 0.1s;
 }
-.fab:active{ transform: scale(0.98); }
+.fab:active{ transform: scale(0.92); }
 
 .fab.menu{ top: 12px; }
 .fab.top{ top: 64px; font-size: 18px; }
 .fab.bottom{ top: 114px; font-size: 18px; }
 
-/* Desktop: still show, but not intrusive */
 @media (min-width: 901px){
   .fab{ left: 16px; }
 }
@@ -266,30 +262,30 @@ window.__scrollBottom = function(){
 window.__toggleSidebar = function(){
   const doc = window.parent.document;
   
-  // 1. 优先尝试通过 data-testid 查找 (不受语言影响，更稳定)
-  // Streamlit 的侧边栏开关按钮通常有特定的 testid
-  let toggleBtn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+  // 1. 尝试通过标准 test-id 查找 (最稳)
+  let btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
   
-  // 如果侧边栏已经是展开状态，想关闭它，或者是新版 Streamlit 的不同 ID
-  if (!toggleBtn) {
-    toggleBtn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
+  // 2. 如果已经展开，找关闭按钮
+  if (!btn) {
+    btn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
   }
-
-  // 2. 如果上面没找到，再使用原来的文本匹配逻辑作为备选 (Fallback)
-  if (!toggleBtn) {
-    toggleBtn = Array.from(doc.querySelectorAll("button")).find(b => {
-      const t = (b.title || "").toLowerCase();
-      const a = (b.getAttribute("aria-label") || "").toLowerCase();
-      // 增加中文匹配，或者只匹配 "sidebar" 
-      return (t.includes("sidebar") || a.includes("sidebar")) || 
-             (t.includes("侧边栏") || a.includes("侧边栏"));
+  
+  // 3. 暴力查找：匹配 title 或 aria-label (兼容中文和英文)
+  if (!btn) {
+    const allButtons = Array.from(doc.querySelectorAll("button"));
+    btn = allButtons.find(b => {
+        const t = (b.title || "").toLowerCase();
+        const a = (b.getAttribute("aria-label") || "").toLowerCase();
+        // 匹配 "sidebar" (英) 或 "侧边栏" (中)
+        return t.includes("sidebar") || a.includes("sidebar") || 
+               t.includes("侧边栏") || a.includes("侧边栏");
     });
   }
 
-  if (toggleBtn) {
-    toggleBtn.click();
+  if (btn) {
+    btn.click();
   } else {
-    console.log("Sidebar toggle button not found.");
+    console.warn("Sidebar toggle button not found in DOM.");
   }
 };
 </script>
@@ -1297,10 +1293,10 @@ def render_open_store():
             inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
             inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
             inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
-                                             index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+                                            index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
         with col2:
             inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                       placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+                                     placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
 
         st.subheader(t("ERP 数据", "ERP Data"))
         cA, cB = st.columns([1, 1])
@@ -1365,9 +1361,9 @@ def render_open_store():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                           index=["Low","Medium","High"].index(pr["elasticity"]))
+                                          index=["Low","Medium","High"].index(pr["elasticity"]))
             pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
-                                      placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+                                     placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
@@ -1534,7 +1530,7 @@ def render_operations():
         with col2:
             pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
             pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                           index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
+                                          index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
         st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")

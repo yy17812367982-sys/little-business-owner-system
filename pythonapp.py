@@ -18,13 +18,13 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Final Click Area Fix)
+# UI: CSS Only (Final Layout & Click Fix)
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Global Reset
+   0) Global Reset & Scroll
    ============================= */
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
@@ -69,72 +69,89 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ 核心修复：Menu 按钮点击范围 ★
+   ★ 终极修复：MENU 按钮点击区域 ★
    ============================= */
 
-/* 让 Header 穿透，不挡鼠标 */
+/* 1. 确保 Header 不挡鼠标 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
     z-index: 1000000 !important;
 }
-/* 恢复 Header 内部按钮的点击 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 1. 改造按钮容器：撑大点击区域 */
+/* 2. Menu 按钮本体：强制撑开宽高 */
 [data-testid="stSidebarCollapsedControl"] {
-    /* 强制允许点击 */
-    pointer-events: auto !important; 
-    z-index: 1000002 !important;
+    /* 关键：给死宽高，确保点击面积 */
+    width: 110px !important;
+    height: 42px !important;
     
-    /* 样式：深色玻璃，去掉原来的灰色块 */
-    background-color: rgba(0,0,0,0.6) !important; 
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 8px !important;
-    color: #ffffff !important;
-    
-    /* 【关键修复】强制设置宽度，确保整个长条都能点 */
+    /* 布局 */
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: auto !important;
-    min-width: 100px !important; /* 强制宽度至少 100px */
-    height: 44px !important;     /* 强制高度 */
-    padding: 0 10px !important;  /* 增加内边距 */
     
+    /* 样式 */
+    background-color: rgba(0,0,0,0.65) !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 8px !important;
+    color: transparent !important; /* 隐藏原生文字颜色 */
+    
+    /* 定位微调 */
     margin-top: 10px !important;
     margin-left: 10px !important;
+    padding: 0 !important;
     
+    z-index: 1000002 !important;
+    cursor: pointer !important;
     transition: transform 0.1s;
 }
 
-/* 2. 隐藏原有的 SVG 图标 (彻底消失，不占位) */
+/* 3. 隐藏原生 SVG 图标 */
 [data-testid="stSidebarCollapsedControl"] svg {
     display: none !important;
 }
 
-/* 3. 插入 "☰ Menu" 文字 */
+/* 4. 添加 "☰ Menu" 文字，居中显示 */
 [data-testid="stSidebarCollapsedControl"]::after {
     content: "☰ Menu"; 
+    color: #ffffff !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     letter-spacing: 1px;
-    color: #ffffff !important;
-    /* 让文字本身不拦截鼠标，点击直接穿透给按钮 */
-    pointer-events: none !important; 
+    
+    /* 确保文字不偏移 */
+    position: relative;
+    top: -1px;
 }
 
-/* 4. 悬停效果 */
+/* 5. 悬停效果 */
 [data-testid="stSidebarCollapsedControl"]:hover {
     background-color: rgba(255,255,255,0.2) !important;
     border-color: rgba(255,255,255,0.8) !important;
     transform: scale(1.02);
 }
 
-/* 5. 彻底隐藏展开后的关闭箭头 (<) */
+/* =============================
+   ★ 终极修复：彻底删掉右侧关闭箭头 (<) ★
+   ============================= */
+
+/* 针对 PC 端展开后的关闭按钮 */
 [data-testid="stSidebarExpandedControl"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* 针对 移动端 Header 里的关闭按钮 */
+section[data-testid="stSidebar"] button[kind="header"] {
+    display: none !important;
+}
+
+/* 双保险：隐藏侧边栏顶部任何可能出现的 SVG 按钮 */
+section[data-testid="stSidebar"] .st-emotion-cache-16txtl3 {
     display: none !important;
 }
 

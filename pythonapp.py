@@ -1048,25 +1048,25 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
 
-    if st.session_state.show_top_chat and st.session_state.chat_history:
-        with st.expander(t("对话记录", "Conversation"), expanded=not st.session_state.top_chat_collapsed):
-            recent = st.session_state.chat_history[-6:]
-            st.markdown("---")
-            for m in recent:
-                role = m.get("role", "")
-                text = (m.get("text") or "")
-                safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                if role == "user":
-                    st.markdown(
-                        "<div class='card'><b>{}</b><br>{}</div>".format(t("你:", "You:"), safe_text),
-                        unsafe_allow_html=True
-                    )
-                else:
-                    ai_label = t("Yangyu 的 AI:", "Yangyu's AI:")
-                    st.markdown(
-                        "<div class='card'><b>{}</b><br>{}</div>".format(ai_label, safe_text),
-                        unsafe_allow_html=True
-                    )
+if st.session_state.show_top_chat and st.session_state.chat_history:
+    st.markdown("### " + t("对话记录", "Conversation"))
+    recent = st.session_state.chat_history[-6:]
+    st.markdown("---")
+    for m in recent:
+        role = m.get("role", "")
+        text = (m.get("text") or "")
+        safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        if role == "user":
+            st.markdown(
+                "<div class='card'><b>{}</b><br>{}</div>".format(t("你:", "You:"), safe_text),
+                unsafe_allow_html=True
+            )
+        else:
+            ai_label = t("Yangyu 的 AI:", "Yangyu's AI:")
+            st.markdown(
+                "<div class='card'><b>{}</b><br>{}</div>".format(ai_label, safe_text),
+                unsafe_allow_html=True
+            )
 
 # =========================================================
 # Suite 1: Open a Store

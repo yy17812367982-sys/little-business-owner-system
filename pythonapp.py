@@ -247,7 +247,50 @@ button:hover{ background: rgba(255,255,255,0.12) !important; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
 
-<div class="fab menu" onclick="window.__toggleSidebar()" title="Menu">☰</div>
+st.markdown(r"""
+<style>
+/* 永远显示菜单按钮 */
+.fab.menu{ display:block !important; }
+
+/* 桌面端：sidebar 永远显示 */
+@media (min-width: 901px){
+  section[data-testid="stSidebar"]{
+    transform: translateX(0) !important;
+    margin-left: 0 !important;
+    visibility: visible !important;
+  }
+}
+
+/* 手机端：默认把 sidebar 推走，但保留按钮 */
+@media (max-width: 900px){
+  section[data-testid="stSidebar"]{
+    transform: translateX(-105%) !important;
+    visibility: hidden !important;
+  }
+  body.sidebar-open section[data-testid="stSidebar"]{
+    transform: translateX(0) !important;
+    visibility: visible !important;
+  }
+}
+</style>
+
+<div class="fab menu" onclick="window.__toggleSidebarHard()" title="Menu">☰</div>
+
+<script>
+window.__toggleSidebarHard = function(){
+  // ✅ 不再依赖 Streamlit 的“Open sidebar”按钮
+  // 直接用 body class 控制 sidebar 的显示/隐藏（CSS 负责动画）
+  const doc = window.parent.document;
+  const body = doc.body;
+  if(body.classList.contains("sidebar-open")){
+    body.classList.remove("sidebar-open");
+  }else{
+    body.classList.add("sidebar-open");
+  }
+};
+</script>
+""", unsafe_allow_html=True)
+
 <div class="fab top" onclick="window.__scrollTop()" title="Top">↑</div>
 <div class="fab bottom" onclick="window.__scrollBottom()" title="Bottom">↓</div>
 

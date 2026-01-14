@@ -18,12 +18,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (The "Phantom Overlay" Method)
-# 修正说明：
-# 1. 创建一个 .custom-visual-menu：只负责显示 "☰ Menu"，没有点击功能。
-# 2. 将原生的 [打开按钮] 变成透明，强行覆盖在 Menu 上。
-# 3. 将原生的 [关闭按钮] 也变成透明，强行覆盖在 Menu 上。
-# 4. 结果：你点 Menu 位置，实际上是在轮流点击原生的开关，实现完美控制。
+# UI: CSS & JS (The "Remote Control" Method)
 # =========================================================
 st.markdown(
     r"""
@@ -34,7 +29,6 @@ st.markdown(
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-/* 顶部留白给 Header */
 .block-container{ padding-top: 4rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
@@ -68,87 +62,86 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.75) !important;
-  backdrop-filter: blur(16px);
+  background: rgba(0,0,0,0.85) !important; /* 更深的背景，突出内容 */
+  backdrop-filter: blur(12px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ 核心方案：透明覆盖层 (Phantom Overlay) ★
+   ★ 核心：隐藏原生按钮 (把它们扔到屏幕外) ★
    ============================= */
 
-/* 1. 视觉层：长得好看的 "☰ Menu" (它是假的，负责给眼睛看) */
-.custom-visual-menu {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    width: 100px;
-    height: 40px;
-    
-    /* 样式 */
-    background-color: rgba(0,0,0,0.6);
-    border: 1px solid rgba(255,255,255,0.35);
-    border-radius: 8px;
-    color: white;
-    
-    /* 布局 */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    
-    font-size: 16px;
-    font-weight: 600;
-    z-index: 1000001; /* 很高，但在原生按钮下面 */
-    pointer-events: none; /* 让鼠标穿透它，去点上面的透明按钮 */
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-}
-
-/* 2. 功能层A：原生的 [打开按钮] -> 变成透明，盖在视觉层上 */
+/* 1. 隐藏原生的“打开”按钮 (那个灰色箭头框) */
 [data-testid="stSidebarCollapsedControl"] {
     position: fixed !important;
-    top: 15px !important;
-    left: 15px !important;
-    width: 100px !important;
-    height: 40px !important;
-    
-    z-index: 1000002 !important; /* 最高层级 */
-    opacity: 0 !important;       /* 完全透明 (隐身) */
-    display: block !important;
-    visibility: visible !important;
-    pointer-events: auto !important; /* 必须能接收点击 */
-    
-    margin: 0 !important;
-    border: none !important;
-    background: red !important; /* 调试用，opacity 0后看不见 */
+    left: -9999px !important; /* 扔出去，但保持渲染 */
+    top: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    visibility: visible !important; /* 必须可见，否则JS可能点不动 */
+    z-index: -1 !important;
 }
 
-/* 3. 功能层B：原生的 [关闭按钮] (<) -> 也变成透明，盖在同一个位置 */
+/* 2. 隐藏原生的“关闭”按钮 (侧边栏展开后的那个 < 号) */
 [data-testid="stSidebarExpandedControl"] {
-    position: fixed !important;
-    top: 15px !important;
-    left: 15px !important;
-    width: 100px !important;
-    height: 40px !important;
-    
-    z-index: 1000002 !important; /* 同样最高 */
-    opacity: 0 !important;       /* 隐身 */
-    display: block !important;
-    pointer-events: auto !important;
-    
-    margin: 0 !important;
-    padding: 0 !important;
+    display: none !important; /* 这个可以直接干掉，反正我们可以点遮罩关闭 */
 }
 
-/* 确保 Header 不会挡住我们的按钮 */
+/* 确保 Header 不挡住我们的自定义按钮 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
+    z-index: 100 !important;
 }
 
 /* =============================
-   4) Other UI Components
+   ★ 自定义 Menu 按钮 (类似 Show 按钮风格) ★
+   ============================= */
+.custom-menu-button {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 9999999; /* 必须最高 */
+    
+    /* 样式模仿你喜欢的 Show 按钮 */
+    background-color: rgba(0,0,0,0.5); 
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 8px 16px;
+    
+    font-size: 15px;
+    font-weight: 500;
+    font-family: "Source Sans Pro", sans-serif;
+    letter-spacing: 0.5px;
+    
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* 悬停 */
+.custom-menu-button:hover {
+    background-color: rgba(0,0,0,0.7);
+    border-color: rgba(255,255,255,0.5);
+    transform: translateY(1px);
+}
+
+/* 点击 */
+.custom-menu-button:active {
+    background-color: rgba(0,0,0,0.8);
+    transform: translateY(2px);
+}
+
+/* =============================
+   4) Other Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
 div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
@@ -197,10 +190,38 @@ button:hover { background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
 
-<div class="custom-visual-menu">
+<div id="custom-menu-trigger" class="custom-menu-button" onclick="triggerSidebar()">
     <span>☰</span>
     <span>Menu</span>
 </div>
+
+<script>
+function triggerSidebar() {
+    const doc = window.parent.document;
+    
+    // 1. 找原生【打开】按钮
+    // 即使它被 CSS 移到了屏幕外，JS 依然能获取到并点击
+    let openBtn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+    
+    if (!openBtn) {
+       openBtn = window.document.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+    }
+
+    if (openBtn) {
+        openBtn.click();
+    } else {
+        // 如果找不到打开按钮，说明侧边栏可能已经是开着的，或者正在动画中
+        // 我们尝试找“关闭”按钮来实现 toggle 功能（虽然我们把关闭按钮隐藏了，但它在DOM里还在）
+        let closeBtn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
+        if (!closeBtn) {
+            closeBtn = window.document.querySelector('button[data-testid="stSidebarExpandedControl"]');
+        }
+        if (closeBtn) {
+            closeBtn.click();
+        }
+    }
+}
+</script>
 """,
     unsafe_allow_html=True
 )

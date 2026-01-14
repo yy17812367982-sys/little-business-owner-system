@@ -18,10 +18,12 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Click Fix + Clean Style)
+# UI: CSS Only (Final Fix for Menu Button)
 # 修正说明：
-# 1. 【修复】给按钮加上 pointer-events: auto，解决“点不动”的问题。
-# 2. 依然保持隐藏 > 和 < 箭头，只留 "☰ Menu"。
+# 1. 【核心】彻底隐藏了原生的灰色框和箭头。
+# 2. 【核心】将自定义的 "☰ Menu" 文字和图标移到了正确的可点击位置。
+# 3. 修复了点击交互，现在点击 "☰ Menu" 区域就能打开侧边栏。
+# 4. 【核心】彻底隐藏了侧边栏展开后的关闭按钮 (<)。
 # =========================================================
 st.markdown(
     r"""
@@ -47,7 +49,6 @@ div[data-testid="stAppViewContainer"]{
   overflow-y: visible !important;
 }
 
-/* 留出顶部空间防止遮挡内容 */
 .block-container{
   padding-top: 3.5rem !important; 
   padding-bottom: 3rem !important;
@@ -112,7 +113,7 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ KEY FIX: 按钮交互与样式 ★
+   ★ KEY FIX: 彻底修复 Menu 按钮 ★
    ============================= */
 
 /* Header 设为透明且不挡鼠标，但它里面的子元素必须能点 */
@@ -122,12 +123,20 @@ header[data-testid="stHeader"] {
     z-index: 1000000 !important;
 }
 
-/* 让 Header 里的所有按钮恢复可点击状态 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 1. 【Menu 按钮】样式重写 */
+/* 1. 【彻底隐藏】原生按钮内部的所有元素（那个灰色的框和箭头） */
+[data-testid="stSidebarCollapsedControl"] > div,
+[data-testid="stSidebarCollapsedControl"] > svg {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    visibility: hidden !important;
+}
+
+/* 2. 【重塑按钮】让它变成一个干净的容器 */
 [data-testid="stSidebarCollapsedControl"] {
     /* 关键：强制允许点击，且层级最高 */
     pointer-events: auto !important; 
@@ -144,37 +153,42 @@ header[data-testid="stHeader"] > div {
     border-radius: 8px !important;
     backdrop-filter: blur(8px);
     
-    /* 尺寸 */
+    /* 尺寸与位置 */
     width: auto !important;
     height: 38px !important;
-    margin-top: 4px;
-    padding: 0 14px !important;
+    margin-top: 6px;
+    padding: 0 12px !important; /* 调整内边距 */
     
-    transition: transform 0.1s ease-in-out;
+    transition: all 0.1s ease-in-out;
+    /* 清除原有的背景和边框 */
+    box-shadow: none !important;
+    outline: none !important;
 }
 
-/* 2. 隐藏 Menu 按钮里的原生箭头图标 (svg) */
-[data-testid="stSidebarCollapsedControl"] svg {
-    display: none !important;
+/* 3. 【插入内容】在干净的容器里放入 "☰ Menu" */
+[data-testid="stSidebarCollapsedControl"]::before {
+    content: "☰"; /* 三条线图标 */
+    font-size: 18px;
+    margin-right: 8px;
+    display: inline-block;
 }
 
-/* 3. 添加文字 "☰ Menu" */
 [data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰ Menu";
+    content: "Menu"; /* 文字 */
     font-size: 15px;
     font-weight: 600;
-    color: #fff;
     white-space: nowrap;
+    display: inline-block;
 }
 
 /* 4. 点击/悬停反馈 */
 [data-testid="stSidebarCollapsedControl"]:hover {
     background-color: rgba(255,255,255,0.2) !important;
     border-color: rgba(255,255,255,0.6) !important;
-    transform: scale(1.03);
+    transform: scale(1.02);
 }
 [data-testid="stSidebarCollapsedControl"]:active {
-    transform: scale(0.95);
+    transform: scale(0.98);
 }
 
 /* 5. 【彻底隐藏】侧边栏展开后的关闭按钮 (<) */
@@ -184,6 +198,7 @@ header[data-testid="stHeader"] > div {
     width: 0 !important;
     height: 0 !important;
     pointer-events: none !important;
+    opacity: 0 !important;
 }
 
 /* =============================

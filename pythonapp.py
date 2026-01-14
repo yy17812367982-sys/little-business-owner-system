@@ -54,7 +54,7 @@ if st.session_state.get("_do_collapse_sidebar", False):
     collapse_sidebar()
 
 # =========================================================
-# UI: CSS
+# UI: CSS Only (Native Button Transformation)
 # =========================================================
 st.markdown(
     r"""
@@ -77,11 +77,9 @@ div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100v
   background-attachment:fixed;
 }
 .stApp::before{
-  ...
-  background: rgba(0,0,0,0.38);
-  ...
+  content:""; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.52); pointer-events: none; z-index: 0;
 }
-
 div[data-testid="stAppViewContainer"]{ position: relative; z-index: 1; }
 div[data-testid="stAppViewContainer"], div[data-testid="stMain"],
 div[data-testid="stHeader"], div[data-testid="stToolbar"]{
@@ -97,7 +95,7 @@ div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
 div[data-testid="stCaption"], div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important; text-shadow: none !important;
 }
-.stMarkdown p{ color: rgba(255,255,255,0.90) !important; text-shadow: 0 0 6px rgba(0,0,0,0.55) !important; }
+.stMarkdown p{ color: rgba(255,255,255,0.65) !important; text-shadow: none !important; }
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
@@ -111,8 +109,10 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ 核心：Header 不挡点击，但内部按钮可点 ★
+   ★ 核心：原生按钮整容术 ★
    ============================= */
+
+/* 1) Header 不挡点击，但内部按钮可点 */
 header[data-testid="stHeader"] {
   background: transparent !important;
   pointer-events: none !important;
@@ -122,9 +122,7 @@ header[data-testid="stHeader"] > div {
   pointer-events: auto !important;
 }
 
-/* =============================
-   侧边栏折叠按钮改造：让按钮区域=整块
-   ============================= */
+/* 2) 改造原生打开按钮（collapsed 控件） */
 [data-testid="stSidebarCollapsedControl"]{
   position: fixed !important;
   top: 16px !important;
@@ -146,9 +144,11 @@ header[data-testid="stHeader"] > div {
   margin: 0 !important;
   padding: 0 !important;
 }
+
+/* ✅关键：让真正可点击的 button 覆盖整个盒子 */
 [data-testid="stSidebarCollapsedControl"] button{
   position: absolute !important;
-  inset: 0 !important;
+  inset: 0 !important;             /* top/right/bottom/left = 0 */
   width: 100% !important;
   height: 100% !important;
   margin: 0 !important;
@@ -163,10 +163,14 @@ header[data-testid="stHeader"] > div {
 
   cursor: pointer !important;
 }
+
+/* 隐藏原生 SVG 图标 */
 [data-testid="stSidebarCollapsedControl"] button svg,
 [data-testid="stSidebarCollapsedControl"] button img{
   display: none !important;
 }
+
+/* ✅把“☰ Menu”画到 button 上（点击区域=整个按钮） */
 [data-testid="stSidebarCollapsedControl"] button::before{
   content: "☰ Menu";
   color: #ffffff !important;
@@ -175,14 +179,17 @@ header[data-testid="stHeader"] > div {
   font-family: "Source Sans Pro", sans-serif;
   letter-spacing: 0.5px;
 }
+
+/* hover */
 [data-testid="stSidebarCollapsedControl"]:hover{
   background-color: rgba(0,0,0,0.8) !important;
   border-color: rgba(255,255,255,0.6) !important;
   transform: translateY(1px);
 }
 
+
 /* =============================
-   隐藏展开侧边栏后的关闭按钮 (<)
+   ★ 隐藏展开侧边栏后的关闭按钮 (<) ★
    ============================= */
 [data-testid="stSidebarExpandedControl"]{
   display: none !important;
@@ -225,13 +232,13 @@ div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
 div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
 
 .card{
-  background: rgba(0,0,0,0.50);
-  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
   padding: 14px 16px;
   margin: 8px 0;
   backdrop-filter: blur(10px);
-  color: rgba(255,255,255,0.95) !important;
+  color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
 }
 
@@ -249,61 +256,27 @@ button:hover{ background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar-track{ background: transparent; }
 
 /* =============================
-   Metrics visibility fix
+   Metrics visibility fix (A)
    ============================= */
+
+/* 指标标题 */
 div[data-testid="stMetricLabel"] *{
   color: rgba(255,255,255,0.92) !important;
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
+
+/* 指标数值 */
 div[data-testid="stMetricValue"] *{
   color: rgba(255,255,255,0.98) !important;
   font-weight: 800 !important;
   text-shadow: 0 2px 14px rgba(0,0,0,0.95) !important;
 }
+
+/* 指标 delta（如果有） */
 div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
 
-/* =============================
-   ✅ Ask AI Floating Button (HTML, not st.button)
-   ============================= */
-.askai-fab{
-  position: fixed;
-  top: 78px;
-  left: 18px;
-  z-index: 1000003;
-
-  width: 140px;
-  height: 46px;
-  border-radius: 999px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  font-weight: 900;
-  letter-spacing: 1px;
-
-  background: rgba(0,0,0,0.45);
-  border: 1px solid rgba(255,255,255,0.25);
-  box-shadow: 0 0 18px rgba(120,200,255,0.25);
-  
-  color:#fff !important; text-decoration:none !important;
-
-  cursor: pointer;
-  user-select: none;
-
-  animation: askai_float 1.8s ease-in-out infinite;
-}
-.askai-fab:hover{
-  background: rgba(0,0,0,0.65);
-  border-color: rgba(255,255,255,0.55);
-}
-@keyframes askai_float{
-  0%{ transform: translateY(0px); }
-  50%{ transform: translateY(-3px); }
-  100%{ transform: translateY(0px); }
-}
 </style>
 """,
     unsafe_allow_html=True
@@ -321,37 +294,6 @@ def t(zh: str, en: str) -> str:
 def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
     st.rerun()
-
-# =========================================================
-# ✅ AskAI: query-param toggle bridge (stable click)
-# =========================================================
-# =========================================================
-# ✅ AskAI: query-param toggle bridge (stable)
-# =========================================================
-def _get_query_params():
-    # Streamlit 新旧版本兼容
-    try:
-        # 新版：st.query_params 是 dict-like
-        return dict(st.query_params)
-    except Exception:
-        return st.experimental_get_query_params()
-
-def _clear_query_params():
-    try:
-        st.query_params.clear()
-    except Exception:
-        st.experimental_set_query_params()
-
-params = _get_query_params()
-
-# 只要出现 askai=1 就切换面板
-if params.get("askai") is not None:
-    st.session_state.top_ai_open = not st.session_state.get("top_ai_open", False)
-    if st.session_state.top_ai_open:
-        st.session_state.show_top_chat = True
-    _clear_query_params()
-    st.rerun()
-
 
 # =========================================================
 # API Key + client
@@ -804,20 +746,6 @@ if "chat_history" not in st.session_state:
 if "site_geo" not in st.session_state:
     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
-# AskAI states
-if "top_ai_open" not in st.session_state:
-    st.session_state.top_ai_open = False
-if "show_top_chat" not in st.session_state:
-    st.session_state.show_top_chat = False
-if "top_submit_id" not in st.session_state:
-    st.session_state.top_submit_id = 0
-if "last_handled_submit_id" not in st.session_state:
-    st.session_state.last_handled_submit_id = -1
-if "clear_top_ask_ai" not in st.session_state:
-    st.session_state.clear_top_ask_ai = False
-if "top_last_status" not in st.session_state:
-    st.session_state.top_last_status = ""
-
 # =========================================================
 # Helpers
 # =========================================================
@@ -1025,6 +953,7 @@ with st.sidebar:
     new_suite = mapping[suite_label]
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
+        # ✅ 选中后让 sidebar 自动收回（用 SAFE flag，下一轮主流程执行 collapse）
         st.session_state["_do_collapse_sidebar"] = True
         st.rerun()
 
@@ -1045,21 +974,24 @@ with st.sidebar:
     st.caption("v5.3 Geocoding + Overpass (robust)")
 
 # =========================================================
-# Header + Top Ask AI (HTML FAB, stable)
+# Header + Top Ask AI
 # =========================================================
 st.title("SME BI Platform")
 
-st.markdown(
-    """
-<a class="askai-fab" href="?askai=1">✨ ASK AI</a>
-""",
-    unsafe_allow_html=True
-)
+if "show_top_chat" not in st.session_state:
+    st.session_state.show_top_chat = False
+if "top_chat_collapsed" not in st.session_state:
+    st.session_state.top_chat_collapsed = True
+if "top_submit_id" not in st.session_state:
+    st.session_state.top_submit_id = 0
+if "last_handled_submit_id" not in st.session_state:
+    st.session_state.last_handled_submit_id = -1
+if "clear_top_ask_ai" not in st.session_state:
+    st.session_state.clear_top_ask_ai = False
+if "top_last_status" not in st.session_state:
+    st.session_state.top_last_status = ""
 
-
-# —— Ask AI 功能区（保持你原逻辑）
-if st.session_state.top_ai_open:
-
+with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
@@ -1090,29 +1022,32 @@ if st.session_state.top_ai_open:
             st.session_state.chat_history.append({"role": "ai", "text": ans})
             st.session_state.clear_top_ask_ai = True
             st.session_state.top_last_status = "ready"
-            st.session_state.show_top_chat = True
+            st.session_state.show_top_chat = False
+            st.session_state.top_chat_collapsed = True
             st.rerun()
 
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
     with c1:
-        if st.button(t("展示", "Show"), use_container_width=True, key="top_show"):
+        if st.button(t("展示", "Show"), use_container_width=True):
             st.session_state.show_top_chat = True
+            st.session_state.top_chat_collapsed = False
             st.rerun()
     with c2:
-        if st.button(t("收起", "Hide"), use_container_width=True, key="top_hide"):
+        if st.button(t("收起", "Hide"), use_container_width=True):
             st.session_state.show_top_chat = False
+            st.session_state.top_chat_collapsed = True
             st.rerun()
     with c3:
-        if st.button(t("清空", "Clear"), use_container_width=True, key="top_clear"):
+        if st.button(t("清空", "Clear"), use_container_width=True):
             st.session_state.chat_history = []
             st.session_state.show_top_chat = False
+            st.session_state.top_chat_collapsed = True
             st.session_state.top_last_status = ""
             st.rerun()
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
 
-# —— 对话记录展示（✅只保留一次）
 if st.session_state.show_top_chat and st.session_state.chat_history:
     st.markdown("### " + t("对话记录", "Conversation"))
     recent = st.session_state.chat_history[-6:]
@@ -1161,6 +1096,7 @@ def render_open_store():
         st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
                      "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
 
+    # Step 1
     if st.session_state.open_step == 1:
         p = st.session_state.profile
         st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
@@ -1190,6 +1126,7 @@ def render_open_store():
             placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
         )
 
+    # Step 2
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         p = st.session_state.profile
@@ -1337,6 +1274,7 @@ def render_open_store():
         else:
             st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
 
+    # Step 3
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
         st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash (no AI here)"))
@@ -1396,6 +1334,7 @@ def render_open_store():
             with st.expander(t("查看缺货风险明细", "View stockout-risk details")):
                 st.dataframe(health["stockout_items"], use_container_width=True)
 
+    # Step 4
     else:
         pr = st.session_state.pricing
         st.subheader(t("第 4 步：定价 & 一键总分析", "Step 4: Pricing & One-click Final Analysis"))

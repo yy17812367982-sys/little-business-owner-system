@@ -21,7 +21,7 @@ st.set_page_config(
 # UI: CSS Only (Native Button Transformation)
 # 核心逻辑：
 # 不再创建假按钮，而是把 Streamlit 那个原生按钮“整容”成你要的样子。
-# 强制设定宽高，确保整个方块都能被点击。
+# ✅ 关键修复：让内部 button 覆盖整个“Menu 框”，整块都能点。
 # =========================================================
 st.markdown(
     r"""
@@ -75,68 +75,93 @@ section[data-testid="stSidebar"]{
    ★ 核心：原生按钮整容术 ★
    ============================= */
 
-/* 1. 处理 Header，防止它挡住按钮点击 */
+/* 1) 处理 Header，防止它挡住按钮点击 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
     z-index: 1000000 !important;
 }
-/* 必须让 Header 内部的子元素恢复点击，否则原生的按钮（就在Header里）会点不到 */
+/* 必须让 Header 内部的子元素恢复点击，否则原生按钮（就在Header里）会点不到 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 2. 改造原生打开按钮 */
-[data-testid="stSidebarCollapsedControl"] {
-    /* 强制定位和层级 */
+/* =========================================================
+   ✅ 修复点：让“Menu 框”整块都可点
+   - 事件绑定在内部 button 上，外层撑大不等于可点击区域变大
+   - 所以：让内部 button absolute + inset:0 铺满整个框
+   - 再让 ::after 的文字 pointer-events:none，避免挡点击
+   ========================================================= */
+
+/* 2) 改造原生打开按钮容器（外观 + 尺寸） */
+[data-testid="stSidebarCollapsedControl"]{
     position: fixed !important;
     top: 16px !important;
     left: 16px !important;
     z-index: 1000002 !important;
-    
-    /* 【关键】强制撑开尺寸，这就是你的“感应器” */
+
     width: 110px !important;
     height: 44px !important;
-    
-    /* 样式：模仿 Show 按钮的深色玻璃风格 */
+
     background-color: rgba(0,0,0,0.6) !important;
     border: 1px solid rgba(255,255,255,0.3) !important;
     border-radius: 8px !important;
-    
-    /* 布局：让内部文字居中 */
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    
-    /* 交互 */
-    pointer-events: auto !important;
+
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
     cursor: pointer !important;
     transition: all 0.2s ease;
-    
-    /* 清除默认边距 */
-    margin: 0 !important;
-    padding: 0 !important;
+    overflow: hidden !important;
+
+    /* 关键：给内部绝对定位 button 一个参照 */
+    position: fixed !important;
 }
 
-/* 3. 隐藏原生按钮内部的 SVG 箭头 */
-[data-testid="stSidebarCollapsedControl"] svg, 
-[data-testid="stSidebarCollapsedControl"] img {
+/* ✅ 真正的点击体：内部 button 铺满整个框 */
+[data-testid="stSidebarCollapsedControl"] button{
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+
+    /* button 自己透明，但保留点击 */
+    opacity: 0 !important;
+    background: transparent !important;
+    border: none !important;
+
+    pointer-events: auto !important;
+}
+
+/* 3) 隐藏原生按钮内部的 SVG 箭头（双保险） */
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="stSidebarCollapsedControl"] img{
     display: none !important;
 }
 
-/* 4. 插入我们想要的文字和图标 */
-[data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰ Menu"; /* 这里是你想要的文字 */
+/* 4) 插入我们想要的文字和图标（不吃点击） */
+[data-testid="stSidebarCollapsedControl"]::after{
+    content: "☰ Menu";
+    position: absolute !important;
+    inset: 0 !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
     color: #ffffff !important;
     font-size: 16px !important;
     font-weight: 600 !important;
     font-family: "Source Sans Pro", sans-serif;
     letter-spacing: 0.5px;
-    display: block !important;
+
+    pointer-events: none !important; /* ✅ 关键：文字不挡点击 */
 }
 
-/* 5. 鼠标悬停效果 */
-[data-testid="stSidebarCollapsedControl"]:hover {
+/* 5) 鼠标悬停效果 */
+[data-testid="stSidebarCollapsedControl"]:hover{
     background-color: rgba(0,0,0,0.8) !important;
     border-color: rgba(255,255,255,0.6) !important;
     transform: translateY(1px);
@@ -146,8 +171,8 @@ header[data-testid="stHeader"] > div {
    ★ 彻底隐藏多余元素 ★
    ============================= */
 
-/* 1. 彻底隐藏展开侧边栏后的关闭按钮 (<) */
-[data-testid="stSidebarExpandedControl"] {
+/* 1) 彻底隐藏展开侧边栏后的关闭按钮 (<) */
+[data-testid="stSidebarExpandedControl"]{
     display: none !important;
     width: 0 !important;
     height: 0 !important;
@@ -155,8 +180,8 @@ header[data-testid="stHeader"] > div {
     pointer-events: none !important;
 }
 
-/* 2. 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button {
+/* 2) 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
     display: none !important;
 }
 
@@ -164,29 +189,29 @@ section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button {
    4) Other Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
-div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
+div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div{
   background: rgba(0,0,0,0.33) !important;
   border: 1px solid rgba(255,255,255,0.14) !important;
   border-radius: 12px !important;
   backdrop-filter: blur(8px);
 }
-.stTextInput input, .stNumberInput input, .stTextArea textarea {
+.stTextInput input, .stNumberInput input, .stTextArea textarea{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
 }
-.stTextInput input::placeholder, .stTextArea textarea::placeholder {
+.stTextInput input::placeholder, .stTextArea textarea::placeholder{
   color: rgba(255,255,255,0.50) !important;
 }
 
-div[data-baseweb="menu"], div[role="listbox"] {
+div[data-baseweb="menu"], div[role="listbox"]{
   background: #ffffff !important;
   border-radius: 8px !important;
 }
-div[data-baseweb="menu"] *, div[role="listbox"] * { color: #111 !important; text-shadow: none !important; }
-div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover { background: #f0f2f6 !important; }
-div[data-baseweb="menu"] div[role="option"][aria-selected="true"] { background: #e6efff !important; }
+div[data-baseweb="menu"] *, div[role="listbox"] *{ color: #111 !important; text-shadow: none !important; }
+div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
 
-.card {
+.card{
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;
@@ -196,14 +221,14 @@ div[data-baseweb="menu"] div[role="option"][aria-selected="true"] { background: 
   color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
 }
-button {
+button{
   background: rgba(0,0,0,0.30) !important;
   border: 1px solid rgba(255,255,255,0.16) !important;
   color: rgba(255,255,255,0.95) !important;
   border-radius: 10px !important;
   backdrop-filter: blur(8px);
 }
-button:hover { background: rgba(255,255,255,0.15) !important; }
+button:hover{ background: rgba(255,255,255,0.15) !important; }
 
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }

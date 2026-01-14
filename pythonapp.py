@@ -254,6 +254,29 @@ button:hover{ background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
+
+/* =============================
+   Metrics visibility fix (A)
+   ============================= */
+
+/* 指标标题 */
+div[data-testid="stMetricLabel"] *{
+  color: rgba(255,255,255,0.92) !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
+}
+
+/* 指标数值 */
+div[data-testid="stMetricValue"] *{
+  color: rgba(255,255,255,0.98) !important;
+  font-weight: 800 !important;
+  text-shadow: 0 2px 14px rgba(0,0,0,0.95) !important;
+}
+
+/* 指标 delta（如果有） */
+div[data-testid="stMetricDelta"] *{
+  text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
+}
+
 </style>
 """,
     unsafe_allow_html=True

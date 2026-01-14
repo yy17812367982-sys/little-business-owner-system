@@ -277,6 +277,44 @@ div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
 
+/* =============================
+   Ask AI Expander 强化（显眼 + 轻微动效）
+   目标：标题那一行（可点击）更醒目
+   ============================= */
+
+/* 1) 找到 expander 的 header，做“发光边框 + 轻微呼吸” */
+div[data-testid="stExpander"] > details > summary{
+  border: 1px solid rgba(255,255,255,0.22) !important;
+  background: rgba(0,0,0,0.35) !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 0 rgba(255,255,255,0);
+  animation: askai_pulse 2.2s ease-in-out infinite;
+}
+
+/* 2) 标题文字更亮更粗 */
+div[data-testid="stExpander"] > details > summary *{
+  color: rgba(255,255,255,0.98) !important;
+  font-weight: 800 !important;
+  text-shadow: 0 0 10px rgba(255,255,255,0.18) !important;
+}
+
+/* 3) 鼠标悬停更“像按钮” */
+div[data-testid="stExpander"] > details > summary:hover{
+  border-color: rgba(255,255,255,0.55) !important;
+  background: rgba(0,0,0,0.55) !important;
+  transform: translateY(1px);
+}
+
+/* 呼吸动画 */
+@keyframes askai_pulse{
+  0%   { box-shadow: 0 0 0 rgba(120,200,255,0.00); }
+  50%  { box-shadow: 0 0 18px rgba(120,200,255,0.25); }
+  100% { box-shadow: 0 0 0 rgba(120,200,255,0.00); }
+}
+
+
 </style>
 """,
     unsafe_allow_html=True

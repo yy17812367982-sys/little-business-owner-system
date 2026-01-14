@@ -18,11 +18,10 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Super Clean Version)
+# UI: CSS Only (Click Fix + Clean Style)
 # 修正说明：
-# 1. 使用 "display: none" 暴力隐藏按钮内部所有原生图标，消除“灰框”和“>”箭头。
-# 2. 彻底隐藏侧边栏展开后的关闭按钮 (<)。
-# 3. 按钮只保留干净的 "☰ Menu" 字样。
+# 1. 【修复】给按钮加上 pointer-events: auto，解决“点不动”的问题。
+# 2. 依然保持隐藏 > 和 < 箭头，只留 "☰ Menu"。
 # =========================================================
 st.markdown(
     r"""
@@ -48,8 +47,9 @@ div[data-testid="stAppViewContainer"]{
   overflow-y: visible !important;
 }
 
+/* 留出顶部空间防止遮挡内容 */
 .block-container{
-  padding-top: 2rem !important;
+  padding-top: 3.5rem !important; 
   padding-bottom: 3rem !important;
 }
 
@@ -63,7 +63,6 @@ div[data-testid="stAppViewContainer"]{
   background-attachment:fixed;
 }
 
-/* Dark overlay */
 .stApp::before{
   content:"";
   position: fixed;
@@ -78,7 +77,6 @@ div[data-testid="stAppViewContainer"]{
   z-index: 1;
 }
 
-/* Transparent Containers */
 div[data-testid="stAppViewContainer"],
 div[data-testid="stMain"],
 div[data-testid="stHeader"],
@@ -114,65 +112,78 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ KEY FIX: 暴力清理按钮样式 ★
+   ★ KEY FIX: 按钮交互与样式 ★
    ============================= */
 
-/* 1. 彻底隐藏按钮内部的所有原生元素（那个灰色的框和箭头） */
-[data-testid="stSidebarCollapsedControl"] > * {
-    display: none !important;
-}
-
-/* 2. 重塑按钮容器 */
-[data-testid="stSidebarCollapsedControl"] {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(0,0,0,0.45) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,0.25) !important;
-    border-radius: 8px !important;
-    backdrop-filter: blur(6px);
-    width: auto !important;  /* 宽度自适应 */
-    height: 40px !important; /* 固定高度 */
-    margin-top: 6px;
-    padding: 0 16px !important; /* 左右留白 */
-    transition: all 0.2s ease-in-out;
-    z-index: 1000002 !important;
-}
-
-/* 3. 插入纯净的文字和图标 */
-[data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰ Menu";  /* 只显示这个 */
-    color: #ffffff !important;
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    white-space: nowrap;
-}
-
-/* 4. 鼠标悬停效果 */
-[data-testid="stSidebarCollapsedControl"]:hover {
-    background-color: rgba(255,255,255,0.2) !important;
-    border-color: rgba(255,255,255,0.6) !important;
-    transform: scale(1.02);
-}
-
-/* 5. 【彻底隐藏】展开后的关闭按钮 (<) */
-[data-testid="stSidebarExpandedControl"] {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
-}
-
-/* Header 交互修正 */
+/* Header 设为透明且不挡鼠标，但它里面的子元素必须能点 */
 header[data-testid="stHeader"] {
     pointer-events: none !important;
     background: transparent !important;
+    z-index: 1000000 !important;
 }
+
+/* 让 Header 里的所有按钮恢复可点击状态 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
+}
+
+/* 1. 【Menu 按钮】样式重写 */
+[data-testid="stSidebarCollapsedControl"] {
+    /* 关键：强制允许点击，且层级最高 */
+    pointer-events: auto !important; 
+    z-index: 1000002 !important;
+    
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    
+    /* 外观：深色玻璃 */
+    background-color: rgba(0,0,0,0.55) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(8px);
+    
+    /* 尺寸 */
+    width: auto !important;
+    height: 38px !important;
+    margin-top: 4px;
+    padding: 0 14px !important;
+    
+    transition: transform 0.1s ease-in-out;
+}
+
+/* 2. 隐藏 Menu 按钮里的原生箭头图标 (svg) */
+[data-testid="stSidebarCollapsedControl"] svg {
+    display: none !important;
+}
+
+/* 3. 添加文字 "☰ Menu" */
+[data-testid="stSidebarCollapsedControl"]::after {
+    content: "☰ Menu";
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+}
+
+/* 4. 点击/悬停反馈 */
+[data-testid="stSidebarCollapsedControl"]:hover {
+    background-color: rgba(255,255,255,0.2) !important;
+    border-color: rgba(255,255,255,0.6) !important;
+    transform: scale(1.03);
+}
+[data-testid="stSidebarCollapsedControl"]:active {
+    transform: scale(0.95);
+}
+
+/* 5. 【彻底隐藏】侧边栏展开后的关闭按钮 (<) */
+[data-testid="stSidebarExpandedControl"] {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
 }
 
 /* =============================

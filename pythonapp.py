@@ -18,11 +18,11 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Native Button Enhanced)
+# UI: CSS Only (Clean Menu Button)
 # 修正说明：
-# 1. 保持了之前的原生按钮方案，确保手机/PC稳定可用。
-# 2. 【新】为侧边栏开关按钮增加了“呼吸灯”动画，使其更显眼。
-# 3. 【新】为按钮增加了鼠标悬停时的文字提示 (Tooltip)。
+# 1. 【核心】精确定位并隐藏了原生的“>”箭头图标 (svg)。
+# 2. 【核心】彻底隐藏了侧边栏展开后的“<”箭头按钮。
+# 3. 保留并优化了 "☰ Menu" 的文字和呼吸灯效果。
 # =========================================================
 st.markdown(
     r"""
@@ -114,8 +114,8 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ KEY FIX: Enhanced Sidebar Button ★
-   增加了动画和文字提示
+   ★ KEY FIX: CLEAN "☰ Menu" BUTTON ★
+   彻底清除 > 和 < 箭头，只保留文字
    ============================= */
 
 /* 定义呼吸灯动画 */
@@ -134,55 +134,59 @@ section[data-testid="stSidebar"]{
   }
 }
 
-/* Hide the original arrow */
-[data-testid="stSidebarCollapsedControl"] > div {
-    color: transparent !important;
+/* 【核心修改1】 隐藏按钮内部原生的 ">" SVG 图标 */
+[data-testid="stSidebarCollapsedControl"] svg {
+    display: none !important;
 }
 
-/* Add the "☰ Menu" text */
-[data-testid="stSidebarCollapsedControl"]:before {
+/* 添加 "☰ Menu" 文字 */
+[data-testid="stSidebarCollapsedControl"]::before {
     content: "☰ Menu";
     color: #ffffff !important;
     font-size: 1rem;
     font-weight: 600;
-    display: block;
-    width: 100%;
-    text-align: center;
+    white-space: nowrap; /* 防止换行 */
 }
 
-/* 美化原生侧边栏打开按钮 */
+/* 美化按钮容器外形 */
 [data-testid="stSidebarCollapsedControl"] {
     display: flex !important;
     align-items: center;
     justify-content: center;
-    background-color: rgba(0,0,0,0.45) !important; /* 稍微深一点 */
+    background-color: rgba(0,0,0,0.45) !important;
     color: #ffffff !important;
-    border: 1.5px solid rgba(255,255,255,0.3) !important; /* 边框加粗一点 */
+    border: 1.5px solid rgba(255,255,255,0.3) !important;
     border-radius: 8px !important;
     backdrop-filter: blur(6px);
+    /* 宽度设为 auto，由内容撑开 */
     width: auto !important;
     height: 2.6rem !important;
     margin-top: 0.2rem;
     transition: all 0.2s ease-in-out;
     z-index: 1000002 !important;
-    /* 应用呼吸动画，无限循环 */
     animation: pulse-white 2s infinite;
-    padding-left: 8px !important;
-    padding-right: 8px !important;
+    /* 增加左右内边距，让文字不拥挤 */
+    padding-left: 12px !important;
+    padding-right: 12px !important;
 }
 
 /* 鼠标悬停时的效果 */
 [data-testid="stSidebarCollapsedControl"]:hover {
     background-color: rgba(255,255,255,0.25) !important;
     color: #fff !important;
-    transform: scale(1.08);
-    animation: none; /* 悬停时停止呼吸动画 */
+    transform: scale(1.05);
+    animation: none;
     border-color: rgba(255,255,255,0.9) !important;
 }
 
-/* Hide the left arrow button when sidebar is expanded */
+/* 【核心修改2】 彻底隐藏展开后的 "<" 箭头按钮 */
 [data-testid="stSidebarExpandedControl"] {
     display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
 }
 
 /* Header 交互修正 */

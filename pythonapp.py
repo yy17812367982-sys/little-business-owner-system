@@ -14,7 +14,7 @@ import requests
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="expand"  # ✅ 默认折叠，需要靠按钮打开
+    initial_sidebar_state="expanded"  # ✅ 默认折叠，需要靠按钮打开
 )
 
 # =========================================================

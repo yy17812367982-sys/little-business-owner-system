@@ -136,10 +136,7 @@ header[data-testid="stHeader"] > div {
   border: 1px solid rgba(255,255,255,0.3) !important;
   border-radius: 8px !important;
 
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-
+  display: block !important;
   pointer-events: auto !important;
   cursor: pointer !important;
   transition: all 0.2s ease;
@@ -148,29 +145,48 @@ header[data-testid="stHeader"] > div {
   padding: 0 !important;
 }
 
-/* 3) 隐藏原生 SVG */
-[data-testid="stSidebarCollapsedControl"] svg,
-[data-testid="stSidebarCollapsedControl"] img{
+/* ✅关键：让真正可点击的 button 覆盖整个盒子 */
+[data-testid="stSidebarCollapsedControl"] button{
+  position: absolute !important;
+  inset: 0 !important;             /* top/right/bottom/left = 0 */
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+
+  background: transparent !important;
+  border: none !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+
+  cursor: pointer !important;
+}
+
+/* 隐藏原生 SVG 图标 */
+[data-testid="stSidebarCollapsedControl"] button svg,
+[data-testid="stSidebarCollapsedControl"] button img{
   display: none !important;
 }
 
-/* 4) 插入 Menu 文案 */
-[data-testid="stSidebarCollapsedControl"]::after{
+/* ✅把“☰ Menu”画到 button 上（点击区域=整个按钮） */
+[data-testid="stSidebarCollapsedControl"] button::before{
   content: "☰ Menu";
   color: #ffffff !important;
   font-size: 16px !important;
   font-weight: 600 !important;
   font-family: "Source Sans Pro", sans-serif;
   letter-spacing: 0.5px;
-  display: block !important;
 }
 
-/* 5) hover */
+/* hover */
 [data-testid="stSidebarCollapsedControl"]:hover{
   background-color: rgba(0,0,0,0.8) !important;
   border-color: rgba(255,255,255,0.6) !important;
   transform: translateY(1px);
 }
+
 
 /* =============================
    ★ 隐藏展开侧边栏后的关闭按钮 (<) ★

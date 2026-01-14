@@ -277,6 +277,42 @@ div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
 
+/* =============================
+   Ask AI Floating Button (animated)
+   ============================= */
+.askai-btn-wrap{
+  position: fixed;
+  top: 78px;          /* 你想更靠上就调小 */
+  left: 18px;
+  z-index: 1000003;
+}
+
+.askai-btn-wrap button{
+  width: 140px !important;
+  height: 46px !important;
+  border-radius: 999px !important;
+  font-weight: 900 !important;
+  letter-spacing: 1px !important;
+
+  background: rgba(0,0,0,0.45) !important;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  box-shadow: 0 0 18px rgba(120,200,255,0.25) !important;
+
+  animation: askai_float 1.8s ease-in-out infinite;
+}
+
+.askai-btn-wrap button:hover{
+  background: rgba(0,0,0,0.65) !important;
+  border-color: rgba(255,255,255,0.55) !important;
+}
+
+@keyframes askai_float{
+  0%{ transform: translateY(0px); }
+  50%{ transform: translateY(-3px); }
+  100%{ transform: translateY(0px); }
+}
+
+
 </style>
 """,
     unsafe_allow_html=True
@@ -974,14 +1010,14 @@ with st.sidebar:
     st.caption("v5.3 Geocoding + Overpass (robust)")
 
 # =========================================================
-# Header + Top Ask AI
+# Header + Top Ask AI (REPLACED: no expander, controlled by animated button)
 # =========================================================
 st.title("SME BI Platform")
 
+if "top_ai_open" not in st.session_state:
+    st.session_state.top_ai_open = False
 if "show_top_chat" not in st.session_state:
     st.session_state.show_top_chat = False
-if "top_chat_collapsed" not in st.session_state:
-    st.session_state.top_chat_collapsed = True
 if "top_submit_id" not in st.session_state:
     st.session_state.top_submit_id = 0
 if "last_handled_submit_id" not in st.session_state:
@@ -991,11 +1027,27 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
-with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
+# —— 动态“✨ ASK AI”入口（用原生 button + CSS 动画，稳）
+ask_ai_btn = st.container()
+with ask_ai_btn:
+    st.markdown("<div class='askai-btn-wrap'>", unsafe_allow_html=True)
+    if st.button("✨ ASK AI", key="askai_fab"):
+        st.session_state.top_ai_open = not st.session_state.top_ai_open
+        # 打开入口时，默认把对话展示出来更顺手（你不想就删掉这两行）
+        if st.session_state.top_ai_open:
+            st.session_state.show_top_chat = True
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# —— 下面是“原来的 Ask AI 功能区”，只是不再用 expander 包了
+if st.session_state.top_ai_open:
+
+    # 原逻辑：清空输入框
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
 
+    # 表单（原样保留）
     with st.form("top_ai_form", clear_on_submit=False):
         colA, colB = st.columns([3, 1])
         with colA:
@@ -1022,31 +1074,50 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
             st.session_state.chat_history.append({"role": "ai", "text": ans})
             st.session_state.clear_top_ask_ai = True
             st.session_state.top_last_status = "ready"
-            st.session_state.show_top_chat = False
-            st.session_state.top_chat_collapsed = True
+            st.session_state.show_top_chat = True
             st.rerun()
 
+    # 原来的 3 个按钮：展示/收起/清空（保留）
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
     with c1:
-        if st.button(t("展示", "Show"), use_container_width=True):
+        if st.button(t("展示", "Show"), use_container_width=True, key="top_show"):
             st.session_state.show_top_chat = True
-            st.session_state.top_chat_collapsed = False
             st.rerun()
     with c2:
-        if st.button(t("收起", "Hide"), use_container_width=True):
+        if st.button(t("收起", "Hide"), use_container_width=True, key="top_hide"):
             st.session_state.show_top_chat = False
-            st.session_state.top_chat_collapsed = True
             st.rerun()
     with c3:
-        if st.button(t("清空", "Clear"), use_container_width=True):
+        if st.button(t("清空", "Clear"), use_container_width=True, key="top_clear"):
             st.session_state.chat_history = []
             st.session_state.show_top_chat = False
-            st.session_state.top_chat_collapsed = True
             st.session_state.top_last_status = ""
             st.rerun()
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
+
+# —— 对话记录展示（原样保留）
+if st.session_state.show_top_chat and st.session_state.chat_history:
+    st.markdown("### " + t("对话记录", "Conversation"))
+    recent = st.session_state.chat_history[-6:]
+    st.markdown("---")
+    for m in recent:
+        role = m.get("role", "")
+        text = (m.get("text") or "")
+        safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        if role == "user":
+            st.markdown(
+                "<div class='card'><b>{}</b><br>{}</div>".format(t("你:", "You:"), safe_text),
+                unsafe_allow_html=True
+            )
+        else:
+            ai_label = t("Yangyu 的 AI:", "Yangyu's AI:")
+            st.markdown(
+                "<div class='card'><b>{}</b><br>{}</div>".format(ai_label, safe_text),
+                unsafe_allow_html=True
+            )
+
 
 if st.session_state.show_top_chat and st.session_state.chat_history:
     st.markdown("### " + t("对话记录", "Conversation"))

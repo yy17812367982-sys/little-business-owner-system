@@ -18,44 +18,25 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Final Fix for Menu Button)
+# UI: CSS Only (Stable Click Fix)
 # 修正说明：
-# 1. 【核心】彻底隐藏了原生的灰色框和箭头。
-# 2. 【核心】将自定义的 "☰ Menu" 文字和图标移到了正确的可点击位置。
-# 3. 修复了点击交互，现在点击 "☰ Menu" 区域就能打开侧边栏。
-# 4. 【核心】彻底隐藏了侧边栏展开后的关闭按钮 (<)。
+# 1. 按钮背景全透明（去掉灰框）。
+# 2. 强制层级最高 (z-index)，确保能点到。
+# 3. 彻底隐藏展开后的关闭箭头 (<)。
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Global Reset & Scroll
+   0) Global Reset
    ============================= */
-html, body{
-  height: auto !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
-div[data-testid="stAppViewContainer"]{
-  height: auto !important;
-  min-height: 100vh !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
-.stApp{
-  height: auto !important;
-  overflow-y: visible !important;
-}
-
-.block-container{
-  padding-top: 3.5rem !important; 
-  padding-bottom: 3rem !important;
-}
+html, body{ height: auto !important; overflow-x: hidden !important; }
+div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
+.stApp{ height: auto !important; overflow-y: visible !important; }
+.block-container{ padding-top: 3.5rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
-   1) Background + overlay
+   1) Background
    ============================= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
@@ -63,146 +44,103 @@ div[data-testid="stAppViewContainer"]{
   background-position:center;
   background-attachment:fixed;
 }
-
 .stApp::before{
-  content:"";
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.52);
-  pointer-events: none;
-  z-index: 0;
+  content:""; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.52); pointer-events: none; z-index: 0;
 }
-
-div[data-testid="stAppViewContainer"]{
-  position: relative;
-  z-index: 1;
-}
-
-div[data-testid="stAppViewContainer"],
-div[data-testid="stMain"],
-div[data-testid="stHeader"],
-div[data-testid="stToolbar"]{
+div[data-testid="stAppViewContainer"]{ position: relative; z-index: 1; }
+div[data-testid="stAppViewContainer"], div[data-testid="stMain"],
+div[data-testid="stHeader"], div[data-testid="stToolbar"]{
   background: transparent !important;
 }
 
 /* =============================
    2) Typography
    ============================= */
-div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
-  color:#fff !important;
-  text-shadow: 0 0 6px rgba(0,0,0,0.65);
-}
-div[data-testid="stCaption"], div[data-testid="stCaption"] *{
-  color: rgba(255,255,255,0.55) !important;
-  text-shadow: none !important;
-}
-.stMarkdown p{
-  color: rgba(255,255,255,0.65) !important;
-  text-shadow: none !important;
-}
+div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){ color:#fff !important; text-shadow: 0 0 6px rgba(0,0,0,0.65); }
+div[data-testid="stCaption"], div[data-testid="stCaption"] *{ color: rgba(255,255,255,0.55) !important; text-shadow: none !important; }
+.stMarkdown p{ color: rgba(255,255,255,0.65) !important; text-shadow: none !important; }
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
-   3) Sidebar Styling
+   3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.65) !important;
+  background: rgba(0,0,0,0.75) !important; /* 深色背景 */
   backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ KEY FIX: 彻底修复 Menu 按钮 ★
+   ★ 核心修复：MENU 按钮 ★
    ============================= */
 
-/* Header 设为透明且不挡鼠标，但它里面的子元素必须能点 */
+/* 1. Header 穿透，但允许子元素点击 */
 header[data-testid="stHeader"] {
-    pointer-events: none !important;
     background: transparent !important;
+    pointer-events: none !important;
     z-index: 1000000 !important;
 }
-
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 1. 【彻底隐藏】原生按钮内部的所有元素（那个灰色的框和箭头） */
-[data-testid="stSidebarCollapsedControl"] > div,
-[data-testid="stSidebarCollapsedControl"] > svg {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    visibility: hidden !important;
-}
-
-/* 2. 【重塑按钮】让它变成一个干净的容器 */
+/* 2. Menu 按钮容器：去掉灰框，设为透明，但在原位置占位 */
 [data-testid="stSidebarCollapsedControl"] {
-    /* 关键：强制允许点击，且层级最高 */
-    pointer-events: auto !important; 
-    z-index: 1000002 !important;
+    pointer-events: auto !important; /* 强制可点 */
+    z-index: 1000002 !important;     /* 最上层 */
+    
+    background: transparent !important; /* 去掉灰色背景 */
+    border: none !important;            /* 去掉边框 */
+    box-shadow: none !important;
+    color: transparent !important;      /* 隐藏原有文字颜色 */
     
     display: flex !important;
     align-items: center;
-    justify-content: center;
-    
-    /* 外观：深色玻璃 */
-    background-color: rgba(0,0,0,0.55) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 8px !important;
-    backdrop-filter: blur(8px);
-    
-    /* 尺寸与位置 */
     width: auto !important;
-    height: 38px !important;
-    margin-top: 6px;
-    padding: 0 12px !important; /* 调整内边距 */
-    
-    transition: all 0.1s ease-in-out;
-    /* 清除原有的背景和边框 */
-    box-shadow: none !important;
-    outline: none !important;
+    min-width: 80px !important; /* 保证有足够点击宽度 */
+    height: 50px !important;    /* 保证有足够点击高度 */
+    margin-left: 0px !important;
 }
 
-/* 3. 【插入内容】在干净的容器里放入 "☰ Menu" */
-[data-testid="stSidebarCollapsedControl"]::before {
-    content: "☰"; /* 三条线图标 */
-    font-size: 18px;
-    margin-right: 8px;
-    display: inline-block;
+/* 3. 隐藏原生 SVG 箭头 (不要那个 > 号) */
+[data-testid="stSidebarCollapsedControl"] svg {
+    display: none !important;
 }
 
+/* 4. 添加自定义的 "☰ Menu" */
 [data-testid="stSidebarCollapsedControl"]::after {
-    content: "Menu"; /* 文字 */
-    font-size: 15px;
-    font-weight: 600;
-    white-space: nowrap;
-    display: inline-block;
+    content: "☰ Menu"; 
+    color: #ffffff !important;  /* 白色文字 */
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    letter-spacing: 1px;
+    
+    /* 绝对定位，确保它就在按钮中心 */
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    
+    /* 给文字加一点阴影，防止背景太亮看不清 */
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    cursor: pointer;
 }
 
-/* 4. 点击/悬停反馈 */
-[data-testid="stSidebarCollapsedControl"]:hover {
-    background-color: rgba(255,255,255,0.2) !important;
-    border-color: rgba(255,255,255,0.6) !important;
-    transform: scale(1.02);
-}
-[data-testid="stSidebarCollapsedControl"]:active {
-    transform: scale(0.98);
+/* 5. 鼠标悬停时的微小反馈 */
+[data-testid="stSidebarCollapsedControl"]:hover::after {
+    color: #d0d0d0 !important;
+    transform: translateY(-50%) scale(1.05);
 }
 
-/* 5. 【彻底隐藏】侧边栏展开后的关闭按钮 (<) */
+/* 6. 【彻底删除】侧边栏展开后的关闭按钮 (<) */
 [data-testid="stSidebarExpandedControl"] {
     display: none !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
 }
 
 /* =============================
-   4) Inputs Glass Effect
+   4) Other Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
 div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
@@ -219,26 +157,14 @@ div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* =============================
-   5) Dropdown Menus (White)
-   ============================= */
 div[data-baseweb="menu"], div[role="listbox"] {
   background: #ffffff !important;
   border-radius: 8px !important;
 }
-div[data-baseweb="menu"] *, div[role="listbox"] * {
-  color: #111 !important; text-shadow: none !important;
-}
-div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover {
-  background: #f0f2f6 !important;
-}
-div[data-baseweb="menu"] div[role="option"][aria-selected="true"] {
-  background: #e6efff !important;
-}
+div[data-baseweb="menu"] *, div[role="listbox"] * { color: #111 !important; text-shadow: none !important; }
+div[data-baseweb="menu"] div[role="option"]:hover, div[role="listbox"] div[role="option"]:hover { background: #f0f2f6 !important; }
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"] { background: #e6efff !important; }
 
-/* =============================
-   6) Cards & Buttons
-   ============================= */
 .card {
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(255,255,255,0.12);
@@ -258,9 +184,6 @@ button {
 }
 button:hover { background: rgba(255,255,255,0.15) !important; }
 
-/* =============================
-   7) Scrollbar
-   ============================= */
 ::-webkit-scrollbar{ width:6px; height:6px; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }

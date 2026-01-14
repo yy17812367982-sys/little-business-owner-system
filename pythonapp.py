@@ -18,11 +18,12 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS & JS (The "Sensor" Method)
+# UI: CSS Only (The "Phantom Overlay" Method)
 # 修正说明：
-# 1. 创建一个 .nav-sensor：全透明、层级最高，专门负责被点击。
-# 2. 创建一个 .nav-visual：负责显示 "☰ Menu"，没有点击事件，只负责好看。
-# 3. 将原生按钮移出屏幕（left: -9999px），眼不见心不烦。
+# 1. 创建一个 .custom-visual-menu：只负责显示 "☰ Menu"，没有点击功能。
+# 2. 将原生的 [打开按钮] 变成透明，强行覆盖在 Menu 上。
+# 3. 将原生的 [关闭按钮] 也变成透明，强行覆盖在 Menu 上。
+# 4. 结果：你点 Menu 位置，实际上是在轮流点击原生的开关，实现完美控制。
 # =========================================================
 st.markdown(
     r"""
@@ -33,7 +34,8 @@ st.markdown(
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{ padding-top: 4.5rem !important; padding-bottom: 3rem !important; }
+/* 顶部留白给 Header */
+.block-container{ padding-top: 4rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
    1) Background
@@ -63,7 +65,7 @@ div[data-testid="stCaption"], div[data-testid="stCaption"] *{ color: rgba(255,25
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
-   3) Sidebar Styles & Cleaning
+   3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.75) !important;
@@ -72,84 +74,81 @@ section[data-testid="stSidebar"]{
   z-index: 99999 !important;
 }
 
-/* ★★★ 关键：把原生按钮统统藏起来，但保留在DOM里 ★★★ */
-[data-testid="stSidebarCollapsedControl"], 
-[data-testid="stSidebarExpandedControl"] {
-    position: fixed !important;
-    left: -9999px !important; /* 扔到屏幕外面去 */
-    top: -9999px !important;
-    width: 1px !important;
-    height: 1px !important;
-    opacity: 0 !important;
-    overflow: hidden !important; 
-    pointer-events: none !important; /* 防止它拦截鼠标 */
-}
-
-/* 让 Header 不挡道 */
-header[data-testid="stHeader"] {
-    background: transparent !important;
-    pointer-events: none !important;
-    z-index: 100 !important;
-}
-
 /* =============================
-   ★ 自定义按钮：视觉层 + 感应层 ★
+   ★ 核心方案：透明覆盖层 (Phantom Overlay) ★
    ============================= */
 
-/* 1. 视觉层 (Visual): 只负责长得好看 */
-.nav-visual {
+/* 1. 视觉层：长得好看的 "☰ Menu" (它是假的，负责给眼睛看) */
+.custom-visual-menu {
     position: fixed;
     top: 15px;
     left: 15px;
     width: 100px;
-    height: 42px;
+    height: 40px;
     
+    /* 样式 */
     background-color: rgba(0,0,0,0.6);
-    border: 1px solid rgba(255,255,255,0.3);
+    border: 1px solid rgba(255,255,255,0.35);
     border-radius: 8px;
-    backdrop-filter: blur(8px);
+    color: white;
     
+    /* 布局 */
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     
-    color: white;
     font-size: 16px;
     font-weight: 600;
-    letter-spacing: 1px;
-    
-    z-index: 9000000; /* 很高，但比感应器低 */
-    pointer-events: none; /* 让鼠标直接穿透它，点到下面的东西也没关系，反正我们有感应器 */
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    transition: transform 0.1s;
+    z-index: 1000001; /* 很高，但在原生按钮下面 */
+    pointer-events: none; /* 让鼠标穿透它，去点上面的透明按钮 */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
-/* 2. 感应层 (Sensor): 全透明，在最上层，负责被点 */
-.nav-sensor {
-    position: fixed;
-    top: 10px;  /* 稍微比视觉层大一点，容错 */
-    left: 10px;
-    width: 110px;
-    height: 52px;
+/* 2. 功能层A：原生的 [打开按钮] -> 变成透明，盖在视觉层上 */
+[data-testid="stSidebarCollapsedControl"] {
+    position: fixed !important;
+    top: 15px !important;
+    left: 15px !important;
+    width: 100px !important;
+    height: 40px !important;
     
-    background-color: transparent; /* 全透明 */
-    /* background-color: rgba(255,0,0,0.3);  <-- 调试用：打开这个看感应区在哪里 */
+    z-index: 1000002 !important; /* 最高层级 */
+    opacity: 0 !important;       /* 完全透明 (隐身) */
+    display: block !important;
+    visibility: visible !important;
+    pointer-events: auto !important; /* 必须能接收点击 */
     
-    z-index: 9999999; /* 宇宙最高层级，神挡杀神 */
-    cursor: pointer;
-    
-    /* 解决手机端点击高亮背景的问题 */
-    -webkit-tap-highlight-color: transparent; 
+    margin: 0 !important;
+    border: none !important;
+    background: red !important; /* 调试用，opacity 0后看不见 */
 }
 
-/* 点击时的视觉反馈 (通过兄弟选择器控制视觉层？太麻烦，简单点用 active 伪类控制视觉层其实很难，
-   既然分层了，我们就在 JS 里加点特效，或者简单的 CSS hover 放在感应器上控制视觉层不太行。
-   这里我们直接给感应器加 hover，虽然它是透明的，但没关系) 
-*/
+/* 3. 功能层B：原生的 [关闭按钮] (<) -> 也变成透明，盖在同一个位置 */
+[data-testid="stSidebarExpandedControl"] {
+    position: fixed !important;
+    top: 15px !important;
+    left: 15px !important;
+    width: 100px !important;
+    height: 40px !important;
+    
+    z-index: 1000002 !important; /* 同样最高 */
+    opacity: 0 !important;       /* 隐身 */
+    display: block !important;
+    pointer-events: auto !important;
+    
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 确保 Header 不会挡住我们的按钮 */
+header[data-testid="stHeader"] {
+    background: transparent !important;
+    pointer-events: none !important;
+}
 
 /* =============================
-   4) Other Components
+   4) Other UI Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
 div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {
@@ -198,44 +197,10 @@ button:hover { background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
 
-<div class="nav-visual">
+<div class="custom-visual-menu">
     <span>☰</span>
     <span>Menu</span>
 </div>
-
-<div class="nav-sensor" onclick="toggleSidebarProxy()" title="Toggle Sidebar"></div>
-
-<script>
-function toggleSidebarProxy() {
-    // 寻找原生按钮，哪怕它被藏到了天涯海角
-    const doc = window.parent.document;
-    
-    // 优先找“打开”按钮
-    let btn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-    
-    // 如果“打开”按钮找不到（可能侧边栏已经是开的），就找“关闭”按钮
-    if (!btn) {
-        btn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
-    }
-    
-    // 如果在 parent 找不到，试着在当前 document 找一遍
-    if (!btn) {
-        btn = window.document.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-    }
-    if (!btn) {
-        btn = window.document.querySelector('button[data-testid="stSidebarExpandedControl"]');
-    }
-
-    // 执行点击
-    if (btn) {
-        btn.click();
-    } else {
-        console.log("Sidebar button not found (it might be hidden by Streamlit logic).");
-        // 强制尝试模拟按下 ESC 键来关闭/切换（备选方案）
-        // 但通常 click 99% 都能行。
-    }
-}
-</script>
 """,
     unsafe_allow_html=True
 )

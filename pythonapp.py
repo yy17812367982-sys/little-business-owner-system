@@ -275,13 +275,13 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
+    "gemini-1.5-pro",          # <--- 把它放第一位，比 2.0-exp 稳得多
     "gemini-2.0-pro-exp-02-05", 
-    "gemini-1.5-pro",
     "gemini-2.0-flash-exp",
 ]
 
 MODEL_CANDIDATES_FAST = [
-    "gemini-1.5-flash",
+    "gemini-1.5-flash",        # <--- 把这个调到第一位，它最稳
     "gemini-2.0-flash-exp",
     "gemini-1.5-pro",
 ]

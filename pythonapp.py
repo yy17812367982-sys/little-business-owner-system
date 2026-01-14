@@ -314,6 +314,20 @@ div[data-testid="stExpander"] > details > summary:hover{
   100% { box-shadow: 0 0 0 rgba(120,200,255,0.00); }
 }
 
+.askai-text{
+  display: inline-block;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.98);
+  text-shadow: 0 0 6px rgba(120,200,255,0.25);
+  animation: askai_glow 2.2s ease-in-out infinite;
+}
+
+@keyframes askai_glow{
+  0%   { text-shadow: 0 0 6px rgba(120,200,255,0.20); }
+  50%  { text-shadow: 0 0 14px rgba(120,200,255,0.60); }
+  100% { text-shadow: 0 0 6px rgba(120,200,255,0.20); }
+}
 
 </style>
 """,

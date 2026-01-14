@@ -18,18 +18,23 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Final Layout & Click Fix)
+# UI: Custom Menu Button (JS Proxy Method)
+# 修正说明：
+# 1. 彻底隐藏了原生的所有按钮（看不见但存在，为了让JS能点到）。
+# 2. 手写了一个全新的 "☰ Menu" 按钮，放在左上角。
+# 3. 写了 JS 脚本：你点 "☰ Menu"，代码就帮你点原生按钮。
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Global Reset & Scroll
+   0) Global & Reset
    ============================= */
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{ padding-top: 4rem !important; padding-bottom: 3rem !important; }
+/* 给顶部留出空间，防止自定义按钮遮挡内容 */
+.block-container{ padding-top: 4.5rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
    1) Background
@@ -69,10 +74,26 @@ section[data-testid="stSidebar"]{
 }
 
 /* =============================
-   ★ 终极修复：MENU 按钮点击区域 ★
+   ★ 核心：隐藏原生按钮 ★
    ============================= */
 
-/* 1. 确保 Header 不挡鼠标 */
+/* 1. 将原生【打开侧边栏】按钮设为透明并移出视野，
+      注意：不能 display:none，否则 JS 点不到它。 */
+[data-testid="stSidebarCollapsedControl"] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    position: fixed !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+}
+
+/* 2. 将原生【关闭侧边栏】按钮（那个向左的箭头）彻底隐藏 */
+[data-testid="stSidebarExpandedControl"] {
+    display: none !important;
+}
+
+/* 3. 处理 Header，使其透明且不挡鼠标 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
@@ -82,77 +103,55 @@ header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 2. Menu 按钮本体：强制撑开宽高 */
-[data-testid="stSidebarCollapsedControl"] {
-    /* 关键：给死宽高，确保点击面积 */
-    width: 110px !important;
-    height: 42px !important;
-    
-    /* 布局 */
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+/* =============================
+   ★ 核心：自定义按钮样式 ★
+   ============================= */
+.custom-menu-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 9999999 !important; /* 确保在最最上层 */
     
     /* 样式 */
-    background-color: rgba(0,0,0,0.65) !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 8px !important;
-    color: transparent !important; /* 隐藏原生文字颜色 */
+    background-color: rgba(0,0,0,0.6);
+    color: #ffffff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 8px;
+    backdrop-filter: blur(8px);
     
-    /* 定位微调 */
-    margin-top: 10px !important;
-    margin-left: 10px !important;
-    padding: 0 !important;
+    /* 尺寸与布局 */
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
     
-    z-index: 1000002 !important;
-    cursor: pointer !important;
-    transition: transform 0.1s;
+    /* 动画 */
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-/* 3. 隐藏原生 SVG 图标 */
-[data-testid="stSidebarCollapsedControl"] svg {
-    display: none !important;
+.custom-menu-btn:hover {
+    background-color: rgba(0,0,0,0.8);
+    transform: translateY(1px);
+    border-color: rgba(255,255,255,0.6);
 }
 
-/* 4. 添加 "☰ Menu" 文字，居中显示 */
-[data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰ Menu"; 
-    color: #ffffff !important;
-    font-size: 16px !important;
-    font-weight: 600 !important;
-    letter-spacing: 1px;
-    
-    /* 确保文字不偏移 */
-    position: relative;
-    top: -1px;
+.custom-menu-btn:active {
+    transform: translateY(2px);
+    background-color: rgba(0,0,0,0.9);
 }
 
-/* 5. 悬停效果 */
-[data-testid="stSidebarCollapsedControl"]:hover {
-    background-color: rgba(255,255,255,0.2) !important;
-    border-color: rgba(255,255,255,0.8) !important;
-    transform: scale(1.02);
+.menu-icon {
+    font-size: 18px;
+    line-height: 1;
 }
 
-/* =============================
-   ★ 终极修复：彻底删掉右侧关闭箭头 (<) ★
-   ============================= */
-
-/* 针对 PC 端展开后的关闭按钮 */
-[data-testid="stSidebarExpandedControl"] {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
-/* 针对 移动端 Header 里的关闭按钮 */
-section[data-testid="stSidebar"] button[kind="header"] {
-    display: none !important;
-}
-
-/* 双保险：隐藏侧边栏顶部任何可能出现的 SVG 按钮 */
-section[data-testid="stSidebar"] .st-emotion-cache-16txtl3 {
-    display: none !important;
+.menu-text {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
 /* =============================
@@ -204,6 +203,31 @@ button:hover { background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
+
+<div class="custom-menu-btn" onclick="openSidebarProxy()">
+    <span class="menu-icon">☰</span>
+    <span class="menu-text">Menu</span>
+</div>
+
+<script>
+// JS 代理函数：点击上面的 div，触发下面的逻辑
+function openSidebarProxy() {
+    // 1. 尝试查找 Streamlit 原生的打开按钮（哪怕它被隐藏了，JS也能点）
+    const doc = window.parent.document; // 兼容 Streamlit Cloud 的 iframe 环境
+    let toggleBtn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+    
+    // 如果在 parent 找不到，找当前 document (本地运行环境)
+    if (!toggleBtn) {
+        toggleBtn = window.document.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+    }
+
+    if (toggleBtn) {
+        toggleBtn.click();
+    } else {
+        console.warn("Could not find native sidebar button to click.");
+    }
+}
+</script>
 """,
     unsafe_allow_html=True
 )

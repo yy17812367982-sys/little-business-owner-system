@@ -287,6 +287,8 @@ div[data-testid="stMetricDelta"] *{
   background: rgba(0,0,0,0.45);
   border: 1px solid rgba(255,255,255,0.25);
   box-shadow: 0 0 18px rgba(120,200,255,0.25);
+  
+  color:#fff !important; text-decoration:none !important;
 
   cursor: pointer;
   user-select: none;

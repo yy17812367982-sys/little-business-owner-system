@@ -7,7 +7,6 @@ import random
 from datetime import datetime
 from google import genai
 import requests
-import math
 
 # =========================================================
 # Page config
@@ -15,92 +14,56 @@ import math
 st.set_page_config(
     page_title="Project B: SME BI Platform",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed"  # ✅ mobile default collapsed
 )
 
 # =========================================================
-# CSS (SAFE: do NOT break Streamlit scroll / sidebar)
+# UI: CSS + JS (SAFE, ONE BLOCK ONLY)
+# 关键：所有 CSS/JS 都在同一个 markdown 字符串里，避免你再次粘贴炸括号
 # =========================================================
 st.markdown(
     r"""
 <style>
-/* Only show the floating sidebar button on mobile/small screens */
-@media (max-width: 900px){
-  .sidebar-fab{
-    position: fixed;
-    left: 10px;
-    top: 12px;
-    z-index: 10000;
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.18);
-    background: rgba(0,0,0,0.35);
-    color: rgba(255,255,255,0.95);
-    backdrop-filter: blur(10px);
-    cursor: pointer;
-    font-size: 20px;
-    line-height: 40px;
-    text-align: center;
-    user-select: none;
-  }
-  .sidebar-fab:active{
-    transform: scale(0.98);
-  }
-}
-/* Hide on desktop */
-@media (min-width: 901px){
-  .sidebar-fab{ display:none; }
+/* =============================
+   0) Scrolling: keep page scrollable and avoid "infinite blank"
+   ============================= */
+html, body{
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
-/* Keep sidebar/header above content */
-section[data-testid="stSidebar"]{ z-index: 9998 !important; }
-header[data-testid="stHeader"]{ z-index: 9999 !important; }
-</style>
+/* Main container must remain scrollable */
+div[data-testid="stAppViewContainer"]{
+  height: auto !important;
+  min-height: 100vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
 
-<div class="sidebar-fab" onclick="window.__toggleSidebarMobile()" title="Menu">☰</div>
+/* Do NOT lock stApp */
+.stApp{
+  height: auto !important;
+  overflow-y: visible !important;
+}
 
-<script>
-window.__toggleSidebarMobile = function(){
-  const doc = window.parent.document;
-
-  // Try to find Streamlit's built-in open/close sidebar buttons (varies by version)
-  const openBtn =
-    doc.querySelector('button[title="Open sidebar"]') ||
-    doc.querySelector('button[aria-label="Open sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b =>
-      ((b.title || "").toLowerCase().includes("open") && (b.title || "").toLowerCase().includes("sidebar")) ||
-      ((b.getAttribute("aria-label") || "").toLowerCase().includes("open") && (b.getAttribute("aria-label") || "").toLowerCase().includes("sidebar"))
-    );
-
-  const closeBtn =
-    doc.querySelector('button[title="Close sidebar"]') ||
-    doc.querySelector('button[aria-label="Close sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b =>
-      ((b.title || "").toLowerCase().includes("close") && (b.title || "").toLowerCase().includes("sidebar")) ||
-      ((b.getAttribute("aria-label") || "").toLowerCase().includes("close") && (b.getAttribute("aria-label") || "").toLowerCase().includes("sidebar"))
-    );
-
-  if (openBtn) openBtn.click();
-  else if (closeBtn) closeBtn.click();
-};
-</script>
-""",
-    unsafe_allow_html=True
-)
-
+/* Reduce bottom blank space */
+.block-container{
+  padding-top: 1.1rem;
+  padding-bottom: 2.2rem !important;
+}
 
 /* =============================
-   1) Background + overlay (保留你想要的氛围，但不破坏滚动)
+   1) Background + overlay (keeps your vibe, but no scroll break)
    ============================= */
 .stApp{
   background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
+  background-size:cover;
+  background-position:center;
+  background-attachment:fixed;
 }
 
-/* overlay 不捕获事件 */
+/* overlay */
 .stApp::before{
   content:"";
   position: fixed;
@@ -110,16 +73,13 @@ window.__toggleSidebarMobile = function(){
   z-index: 0;
 }
 
+/* content above overlay */
 div[data-testid="stAppViewContainer"]{
   position: relative;
   z-index: 1;
 }
 
-
-
-/* =============================
-   2) Transparent areas
-   ============================= */
+/* transparent shell */
 div[data-testid="stAppViewContainer"],
 div[data-testid="stMain"],
 div[data-testid="stHeader"],
@@ -128,36 +88,43 @@ div[data-testid="stToolbar"]{
 }
 
 /* =============================
-   3) Typography
+   2) Typography / readability
    ============================= */
 div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
   color:#fff !important;
   text-shadow: 0 0 6px rgba(0,0,0,0.65);
 }
+
 div[data-testid="stCaption"],
 div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important;
   text-shadow: none !important;
 }
+
 .stMarkdown p{
-  color: rgba(255,255,255,0.70) !important;
+  color: rgba(255,255,255,0.65) !important;
   text-shadow: none !important;
 }
-a, a *{ color: rgba(180,220,255,0.95) !important; }
+
+a, a *{
+  color: rgba(180,220,255,0.95) !important;
+}
 
 /* =============================
-   4) Sidebar glass + fix sidebar scrolling
+   3) Sidebar glass (keep)
    ============================= */
 section[data-testid="stSidebar"]{
   background: rgba(0,0,0,0.42) !important;
   backdrop-filter: blur(12px);
   border-right: 1px solid rgba(255,255,255,0.10);
-  overflow-y: auto !important;         /* ✅ sidebar 自己能滚 */
-  overscroll-behavior: contain;
+  z-index: 9998 !important;
+}
+header[data-testid="stHeader"]{
+  z-index: 9999 !important;
 }
 
 /* =============================
-   5) Inputs
+   4) Inputs glass (keep)
    ============================= */
 div[data-baseweb="input"],
 div[data-baseweb="base-input"],
@@ -171,19 +138,24 @@ div[data-baseweb="base-input"] > div{
   backdrop-filter: blur(10px);
   box-shadow: none !important;
 }
+
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea{
   background: transparent !important;
   color: rgba(255,255,255,0.95) !important;
 }
+
 .stTextInput input::placeholder,
 .stTextArea textarea::placeholder{
   color: rgba(255,255,255,0.50) !important;
 }
 
-/* dropdown menu: white bg */
+/* =============================
+   5) Dropdown: white bg + dark text
+   ============================= */
 div[data-baseweb="popover"]{ background: transparent !important; }
+
 div[data-baseweb="menu"],
 div[role="listbox"]{
   background: #ffffff !important;
@@ -191,49 +163,41 @@ div[role="listbox"]{
   border-radius: 12px !important;
   box-shadow: 0 12px 34px rgba(0,0,0,0.28) !important;
   overflow: hidden !important;
+  backdrop-filter: none !important;
 }
+
 div[data-baseweb="menu"] *,
 div[role="listbox"] *{
   color: #111 !important;
   text-shadow: none !important;
 }
 
-/* =============================
-   6) File uploader
-   ============================= */
-div[data-testid="stFileUploader"]{
-  background: rgba(0,0,0,0.26) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(12px);
+div[data-baseweb="menu"] div[role="option"]:hover,
+div[role="listbox"] div[role="option"]:hover{
+  background: #f2f3f5 !important;
+}
+
+div[data-baseweb="menu"] div[role="option"][aria-selected="true"],
+div[role="listbox"] div[role="option"][aria-selected="true"]{
+  background: #e9eefc !important;
 }
 
 /* =============================
-   7) Dataframe
+   6) Card
    ============================= */
-div[data-testid="stDataFrame"]{
-  background: rgba(0,0,0,0.28) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
-  border-radius: 14px !important;
+.card{
+  background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin: 8px 0;
   backdrop-filter: blur(10px);
-}
-div[data-testid="stDataFrame"] *{
-  background: transparent !important;
-  color: rgba(255,255,255,0.95) !important;
+  color: rgba(255,255,255,0.90) !important;
+  text-shadow: none !important;
 }
 
 /* =============================
-   8) Metric
-   ============================= */
-div[data-testid="stMetric"]{
-  background: rgba(0,0,0,0.30) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(10px);
-}
-
-/* =============================
-   9) Buttons / tabs
+   7) Buttons unify
    ============================= */
 button{
   background: rgba(0,0,0,0.30) !important;
@@ -244,109 +208,15 @@ button{
 }
 button:hover{ background: rgba(255,255,255,0.12) !important; }
 
-div[data-baseweb="tab-list"]{
-  background: rgba(0,0,0,0.30) !important;
-  border: 1px solid rgba(255,255,255,0.10) !important;
-  border-radius: 14px !important;
-  backdrop-filter: blur(10px);
-}
-
 /* =============================
-   10) Card
+   8) Floating controls: sidebar toggle + top/bottom
    ============================= */
-.card{
-  background: rgba(0,0,0,0.32);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 16px;
-  padding: 14px 16px;
-  margin: 8px 0;
-  backdrop-filter: blur(10px);
-  color: rgba(255,255,255,0.85) !important;
-  text-shadow: none !important;
-}
-
-/* =============================
-   11) Floating nav buttons (Home/Top/Bottom)
-   ============================= */
-.float-nav{
+.fab{
   position: fixed;
-  right: 14px;
-  bottom: 14px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.float-nav button{
-  width: 48px !important;
-  height: 48px !important;
-  border-radius: 14px !important;
-  font-size: 18px !important;
-  padding: 0 !important;
-}
-
-/* =============================
-   12) Scrollbar
-   ============================= */
-::-webkit-scrollbar{ width:6px; height:6px; }
-::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
-::-webkit-scrollbar-track{ background: transparent; }
-
-/* =============================
-   13) Mobile: background fixed 会更卡 -> 改成 scroll
-   ============================= */
-@media (max-width: 900px){
-  .stApp{ background-attachment: scroll !important; }
-
-  /* 手机上 deckgl 地图更容易吞手势：允许页面滚动优先 */
-  div[data-testid="stDeckGlJsonChart"], div[data-testid="stDeckGlJsonChart"] *{
-    touch-action: pan-y !important;
-  }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =========================================================
-# Floating buttons (Top/Bottom/Home)
-# =========================================================
-def _inject_scroll_js():
-    st.markdown(
-        """
-<script>
-window.__scrollToTop = function(){
-  const el = window.parent.document.querySelector('div[data-testid="stAppViewContainer"]');
-  if(el) el.scrollTo({top: 0, behavior: 'smooth'});
-};
-window.__scrollToBottom = function(){
-  const el = window.parent.document.querySelector('div[data-testid="stAppViewContainer"]');
-  if(el) el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
-};
-</script>
-        """,
-        unsafe_allow_html=True
-    )
-
-_inject_scroll_js()
-
-# ===== Sidebar Toggle Button (ALWAYS visible) =====
-st.markdown(r"""
-<style>
-/* 让 sidebar 永远在最上层，不会被盖住 */
-section[data-testid="stSidebar"]{
-  z-index: 9998 !important;
-}
-header[data-testid="stHeader"]{
-  z-index: 9999 !important;
-}
-
-/* 自己的汉堡按钮（固定左上角） */
-.sidebar-toggle-btn{
-  position: fixed;
-  left: 14px;
-  top: 12px;
+  left: 12px;
   z-index: 10000;
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(0,0,0,0.35);
@@ -354,37 +224,74 @@ header[data-testid="stHeader"]{
   backdrop-filter: blur(10px);
   cursor: pointer;
   font-size: 20px;
-  line-height: 44px;
+  line-height: 42px;
   text-align: center;
   user-select: none;
 }
-.sidebar-toggle-btn:hover{
-  background: rgba(255,255,255,0.12);
+.fab:active{ transform: scale(0.98); }
+
+.fab.menu{ top: 12px; }
+.fab.top{ top: 64px; font-size: 18px; }
+.fab.bottom{ top: 114px; font-size: 18px; }
+
+/* Desktop: still show, but not intrusive */
+@media (min-width: 901px){
+  .fab{ left: 16px; }
 }
+
+/* =============================
+   9) Scrollbar
+   ============================= */
+::-webkit-scrollbar{ width:6px; height:6px; }
+::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
+::-webkit-scrollbar-track{ background: transparent; }
 </style>
 
-<div class="sidebar-toggle-btn" onclick="window.__toggleSidebar()" title="Menu">☰</div>
+<div class="fab menu" onclick="window.__toggleSidebar()" title="Menu">☰</div>
+<div class="fab top" onclick="window.__scrollTop()" title="Top">↑</div>
+<div class="fab bottom" onclick="window.__scrollBottom()" title="Bottom">↓</div>
 
 <script>
+window.__scrollTop = function(){
+  window.scrollTo({top: 0, behavior: "smooth"});
+};
+window.__scrollBottom = function(){
+  // 只滚到页面真实底部，避免你说的“还能滚到空白”
+  const maxScroll = Math.max(
+    document.body.scrollHeight,
+    document.documentElement.scrollHeight
+  );
+  window.scrollTo({top: maxScroll, behavior: "smooth"});
+};
+
 window.__toggleSidebar = function(){
   const doc = window.parent.document;
 
-  // Streamlit 不同版本 title 文案可能不一样，所以多尝试几种 selector
   const openBtn =
     doc.querySelector('button[title="Open sidebar"]') ||
     doc.querySelector('button[aria-label="Open sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b => (b.innerText || "").toLowerCase().includes("sidebar") && (b.title || "").toLowerCase().includes("open"));
+    Array.from(doc.querySelectorAll("button")).find(b => {
+      const t = (b.title || "").toLowerCase();
+      const a = (b.getAttribute("aria-label") || "").toLowerCase();
+      return (t.includes("open") && t.includes("sidebar")) || (a.includes("open") && a.includes("sidebar"));
+    });
 
   const closeBtn =
     doc.querySelector('button[title="Close sidebar"]') ||
     doc.querySelector('button[aria-label="Close sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b => (b.innerText || "").toLowerCase().includes("sidebar") && (b.title || "").toLowerCase().includes("close"));
+    Array.from(doc.querySelectorAll("button")).find(b => {
+      const t = (b.title || "").toLowerCase();
+      const a = (b.getAttribute("aria-label") || "").toLowerCase();
+      return (t.includes("close") && t.includes("sidebar")) || (a.includes("close") && a.includes("sidebar"));
+    });
 
   if (openBtn) openBtn.click();
   else if (closeBtn) closeBtn.click();
 };
 </script>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True
+)
 
 # =========================================================
 # Language
@@ -458,7 +365,7 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
     last_err = None
 
     for model_name in models:
-        for attempt in range(2):
+        for _ in range(2):
             try:
                 resp = client.models.generate_content(model=model_name, contents=prompt)
                 text = getattr(resp, "text", None)
@@ -468,11 +375,9 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
             except Exception as e:
                 msg = str(e)
                 last_err = f"{model_name}: {msg}"
-
                 if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
                     time.sleep(1.2 + random.random())
                     continue
-
                 if ("Not available" in msg) or ("PERMISSION_DENIED" in msg) or ("403" in msg):
                     break
                 break
@@ -611,7 +516,7 @@ def geocode_candidates_multi_fuzzy(query: str, limit: int = 6):
     return [], last_debug
 
 # =========================================================
-# Overpass: competitor & traffic estimation (ROBUST / NO CRASH)
+# Overpass robust
 # =========================================================
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -706,12 +611,12 @@ def estimate_competitors_overpass(lat: float, lon: float, radius_miles: float, b
         parts.append(f'nwr{f}(around:{r},{lat},{lon});')
 
     query = f"""
-[out:json][timeout:25];
-(
-  {"".join(parts)}
-);
-out center;
-"""
+    [out:json][timeout:25];
+    (
+      {"".join(parts)}
+    );
+    out center;
+    """
 
     data, dbg = _overpass_post(query, timeout=40)
     if data is None:
@@ -738,12 +643,12 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
     r = int(_miles_to_meters(radius_miles))
 
     query = f"""
-[out:json][timeout:25];
-(
-  way["highway"](around:{r},{lat},{lon});
-);
-out tags;
-"""
+    [out:json][timeout:25];
+    (
+      way["highway"](around:{r},{lat},{lon});
+    );
+    out tags;
+    """
 
     data, dbg = _overpass_post(query, timeout=40)
     if data is None:
@@ -1075,23 +980,12 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.4 (scroll+mobile+syntax safe)")
+    st.caption("v5.3 Geocoding + Overpass (robust)")
 
 # =========================================================
-# Header + Floating buttons + Top Ask AI
+# Header + Top Ask AI
 # =========================================================
 st.title("Project B: SME BI Platform")
-
-# Floating nav buttons
-st.markdown(
-    """
-<div class="float-nav">
-  <button onclick="window.__scrollToTop()" title="Top">⬆</button>
-  <button onclick="window.__scrollToBottom()" title="Bottom">⬇</button>
-</div>
-""",
-    unsafe_allow_html=True
-)
 
 if "show_top_chat" not in st.session_state:
     st.session_state.show_top_chat = False
@@ -1171,17 +1065,15 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=True):
                 role = m.get("role", "")
                 text = (m.get("text") or "")
                 safe_text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
                 if role == "user":
                     st.markdown(
-                        f"<div class='card'><b>{t('你', 'You')}:</b><br>{safe_text}</div>",
+                        "<div class='card'><b>{}</b><br>{}</div>".format(t("你:", "You:"), safe_text),
                         unsafe_allow_html=True
                     )
                 else:
-                    # ✅ 关键修复：不要在 f-string 的 {} 里写带反斜杠的字符串
-                    ai_label = t("Yangyu 的 AI", "Yangyu's AI")
+                    ai_label = t("Yangyu 的 AI:", "Yangyu's AI:")
                     st.markdown(
-                        f"<div class='card'><b>{ai_label}:</b><br>{safe_text}</div>",
+                        "<div class='card'><b>{}</b><br>{}</div>".format(ai_label, safe_text),
                         unsafe_allow_html=True
                     )
 
@@ -1314,13 +1206,12 @@ def render_open_store():
                 idx = int(geo.get("picked_idx", 0))
                 idx = max(0, min(idx, len(labels) - 1))
 
-                picked = st.selectbox(
+                picked_label = st.selectbox(
                     t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
                     labels,
-                    index=idx,
-                    key="site_pick_label"
+                    index=idx
                 )
-                chosen = cands[labels.index(picked)]
+                chosen = cands[labels.index(picked_label)]
                 lat, lon = chosen["lat"], chosen["lon"]
 
                 s["lat"] = float(lat)
@@ -1566,7 +1457,10 @@ def render_operations():
     st.header(t("运营（帮助企业跑起来）", "Operations (Run the business)"))
 
     st.markdown(
-        f"<div class='card'>{t('这里更偏“日常运营”：库存周报、补货策略、促销触发、SOP 检查表等。', 'This suite focuses on day-to-day operations: weekly inventory review, replenishment rules, promo triggers, SOP checklists.')}</div>",
+        "<div class='card'>{}</div>".format(
+            t("这里更偏“日常运营”：库存周报、补货策略、促销触发、SOP 检查表等。",
+              "This suite focuses on day-to-day operations: weekly inventory review, replenishment rules, promo triggers, SOP checklists.")
+        ),
         unsafe_allow_html=True
     )
 
@@ -1688,7 +1582,10 @@ def render_finance():
     st.header(t("财务分析（上传资料 → AI 指导）", "Financial Analysis (Upload docs → AI guidance)"))
 
     st.markdown(
-        f"<div class='card'>{t('上传你自己的财务资料（CSV/XLSX/TXT），AI 会做结构化分析：现金流、利润率、成本项、风险点、下一步动作。', 'Upload your own finance materials (CSV/XLSX/TXT). AI will produce a structured analysis: cash flow, margins, costs, risks, next actions.')}</div>",
+        "<div class='card'>{}</div>".format(
+            t("上传你自己的财务资料（CSV/XLSX/TXT），AI 会做结构化分析：现金流、利润率、成本项、风险点、下一步动作。",
+              "Upload your own finance materials (CSV/XLSX/TXT). AI will produce a structured analysis: cash flow, margins, costs, risks, next actions.")
+        ),
         unsafe_allow_html=True
     )
 

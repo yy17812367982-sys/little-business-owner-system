@@ -256,7 +256,6 @@ window.__scrollTop = function(){
   window.scrollTo({top: 0, behavior: "smooth"});
 };
 window.__scrollBottom = function(){
-  // 只滚到页面真实底部，避免你说的“还能滚到空白”
   const maxScroll = Math.max(
     document.body.scrollHeight,
     document.documentElement.scrollHeight
@@ -266,27 +265,32 @@ window.__scrollBottom = function(){
 
 window.__toggleSidebar = function(){
   const doc = window.parent.document;
+  
+  // 1. 优先尝试通过 data-testid 查找 (不受语言影响，更稳定)
+  // Streamlit 的侧边栏开关按钮通常有特定的 testid
+  let toggleBtn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
+  
+  // 如果侧边栏已经是展开状态，想关闭它，或者是新版 Streamlit 的不同 ID
+  if (!toggleBtn) {
+    toggleBtn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
+  }
 
-  const openBtn =
-    doc.querySelector('button[title="Open sidebar"]') ||
-    doc.querySelector('button[aria-label="Open sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b => {
+  // 2. 如果上面没找到，再使用原来的文本匹配逻辑作为备选 (Fallback)
+  if (!toggleBtn) {
+    toggleBtn = Array.from(doc.querySelectorAll("button")).find(b => {
       const t = (b.title || "").toLowerCase();
       const a = (b.getAttribute("aria-label") || "").toLowerCase();
-      return (t.includes("open") && t.includes("sidebar")) || (a.includes("open") && a.includes("sidebar"));
+      // 增加中文匹配，或者只匹配 "sidebar" 
+      return (t.includes("sidebar") || a.includes("sidebar")) || 
+             (t.includes("侧边栏") || a.includes("侧边栏"));
     });
+  }
 
-  const closeBtn =
-    doc.querySelector('button[title="Close sidebar"]') ||
-    doc.querySelector('button[aria-label="Close sidebar"]') ||
-    Array.from(doc.querySelectorAll("button")).find(b => {
-      const t = (b.title || "").toLowerCase();
-      const a = (b.getAttribute("aria-label") || "").toLowerCase();
-      return (t.includes("close") && t.includes("sidebar")) || (a.includes("close") && a.includes("sidebar"));
-    });
-
-  if (openBtn) openBtn.click();
-  else if (closeBtn) closeBtn.click();
+  if (toggleBtn) {
+    toggleBtn.click();
+  } else {
+    console.log("Sidebar toggle button not found.");
+  }
 };
 </script>
 """,

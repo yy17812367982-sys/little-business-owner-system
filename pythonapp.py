@@ -277,6 +277,27 @@ div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
 
+.askai-badge{
+  display: inline-block;
+  padding: 8px 14px;
+  margin: 6px 0 8px 0;
+  border-radius: 999px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.98);
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.28);
+  box-shadow: 0 0 22px rgba(120,200,255,0.20);
+  animation: askai_float 1.8s ease-in-out infinite;
+}
+
+@keyframes askai_float{
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-3px); }
+  100% { transform: translateY(0px); }
+}
+
+
 </style>
 """,
     unsafe_allow_html=True

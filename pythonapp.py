@@ -18,11 +18,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS Only (Stable Click Fix)
-# 修正说明：
-# 1. 按钮背景全透明（去掉灰框）。
-# 2. 强制层级最高 (z-index)，确保能点到。
-# 3. 彻底隐藏展开后的关闭箭头 (<)。
+# UI: CSS Only (Final Fix)
 # =========================================================
 st.markdown(
     r"""
@@ -33,7 +29,7 @@ st.markdown(
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{ padding-top: 3.5rem !important; padding-bottom: 3rem !important; }
+.block-container{ padding-top: 4rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
    1) Background
@@ -66,81 +62,102 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.75) !important; /* 深色背景 */
+  background: rgba(0,0,0,0.75) !important;
   backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ 核心修复：MENU 按钮 ★
+   ★ 终极修复：Menu 按钮 ★
    ============================= */
 
-/* 1. Header 穿透，但允许子元素点击 */
+/* 1. 让 Header 透明且穿透 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
     z-index: 1000000 !important;
 }
+/* 恢复 Header 内部按钮的点击 */
 header[data-testid="stHeader"] > div {
     pointer-events: auto !important;
 }
 
-/* 2. Menu 按钮容器：去掉灰框，设为透明，但在原位置占位 */
+/* 2. 【核心】直接改造原生的“灰色方块” */
 [data-testid="stSidebarCollapsedControl"] {
-    pointer-events: auto !important; /* 强制可点 */
-    z-index: 1000002 !important;     /* 最上层 */
+    /* 强制重置样式，去掉原来的灰色背景 */
+    background-color: rgba(0,0,0,0.6) !important; /* 你想要的深色背景 */
+    border: 1px solid rgba(255,255,255,0.3) !important; /* 加上边框 */
+    border-radius: 8px !important;
+    color: #ffffff !important; /* 文字颜色 */
     
-    background: transparent !important; /* 去掉灰色背景 */
-    border: none !important;            /* 去掉边框 */
-    box-shadow: none !important;
-    color: transparent !important;      /* 隐藏原有文字颜色 */
-    
-    display: flex !important;
-    align-items: center;
+    /* 尺寸调整，确保能容纳文字 */
     width: auto !important;
-    min-width: 80px !important; /* 保证有足够点击宽度 */
-    height: 50px !important;    /* 保证有足够点击高度 */
-    margin-left: 0px !important;
+    min-width: 90px !important; 
+    height: 40px !important;
+    
+    /* 布局 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    
+    /* 交互 */
+    pointer-events: auto !important;
+    z-index: 1000002 !important;
+    margin-top: 10px !important;
+    margin-left: 10px !important;
+    padding: 0 !important;
+    
+    transition: transform 0.1s;
 }
 
-/* 3. 隐藏原生 SVG 箭头 (不要那个 > 号) */
+/* 3. 【核心】隐藏按钮里原来的那个 SVG 箭头 */
 [data-testid="stSidebarCollapsedControl"] svg {
     display: none !important;
 }
 
-/* 4. 添加自定义的 "☰ Menu" */
+/* 4. 【核心】插入 "☰ Menu" 文字 */
 [data-testid="stSidebarCollapsedControl"]::after {
     content: "☰ Menu"; 
-    color: #ffffff !important;  /* 白色文字 */
-    font-size: 18px !important;
+    font-size: 16px !important;
     font-weight: 600 !important;
     letter-spacing: 1px;
-    
-    /* 绝对定位，确保它就在按钮中心 */
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    
-    /* 给文字加一点阴影，防止背景太亮看不清 */
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    cursor: pointer;
+    padding-bottom: 2px; /* 微调垂直对齐 */
 }
 
-/* 5. 鼠标悬停时的微小反馈 */
-[data-testid="stSidebarCollapsedControl"]:hover::after {
-    color: #d0d0d0 !important;
-    transform: translateY(-50%) scale(1.05);
-}
-
-/* 6. 【彻底删除】侧边栏展开后的关闭按钮 (<) */
-[data-testid="stSidebarExpandedControl"] {
-    display: none !important;
+/* 5. 悬停效果 */
+[data-testid="stSidebarCollapsedControl"]:hover {
+    background-color: rgba(255,255,255,0.2) !important;
+    border-color: rgba(255,255,255,0.8) !important;
+    transform: scale(1.05);
 }
 
 /* =============================
-   4) Other Components
+   ★ 终极修复：隐藏右侧关闭箭头 (<) ★
+   ============================= */
+
+/* 目标 1: 标准关闭按钮 ID */
+[data-testid="stSidebarExpandedControl"] {
+    display: none !important;
+    width: 0 !important;
+    visibility: hidden !important;
+}
+
+/* 目标 2: 侧边栏 Header 里的所有按钮 (手机端通常在这里) */
+section[data-testid="stSidebar"] div[data-testid="stSidebarHeader"] button {
+    display: none !important;
+    width: 0 !important;
+    visibility: hidden !important;
+}
+
+/* 目标 3: 暴力隐藏侧边栏顶部的任何 SVG 按钮 */
+section[data-testid="stSidebar"] button svg {
+    /* 只有当按钮看起来像个关闭图标时才隐藏，这里为了保险起见，
+       如果你侧边栏里没有其他按钮在顶部，这样写没问题 */
+}
+
+/* =============================
+   4) Other UI Components
    ============================= */
 div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
 div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div {

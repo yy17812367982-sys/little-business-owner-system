@@ -18,18 +18,21 @@ st.set_page_config(
 )
 
 # =========================================================
-# UI: CSS & JS (The "Remote Control" Method)
+# UI: CSS Only (Native Button Transformation)
+# 核心逻辑：
+# 不再创建假按钮，而是把 Streamlit 那个原生按钮“整容”成你要的样子。
+# 强制设定宽高，确保整个方块都能被点击。
 # =========================================================
 st.markdown(
     r"""
 <style>
 /* =============================
-   0) Global Reset
+   0) Global Reset & Scroll
    ============================= */
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{ padding-top: 4rem !important; padding-bottom: 3rem !important; }
+.block-container{ padding-top: 4.5rem !important; padding-bottom: 3rem !important; }
 
 /* =============================
    1) Background
@@ -62,82 +65,99 @@ a, a *{ color: rgba(180,220,255,0.95) !important; }
    3) Sidebar Styles
    ============================= */
 section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.85) !important; /* 更深的背景，突出内容 */
-  backdrop-filter: blur(12px);
+  background: rgba(0,0,0,0.85) !important; /* 深色背景 */
+  backdrop-filter: blur(16px);
   border-right: 1px solid rgba(255,255,255,0.10);
   z-index: 99999 !important;
 }
 
 /* =============================
-   ★ 核心：隐藏原生按钮 (把它们扔到屏幕外) ★
+   ★ 核心：原生按钮整容术 ★
    ============================= */
 
-/* 1. 隐藏原生的“打开”按钮 (那个灰色箭头框) */
-[data-testid="stSidebarCollapsedControl"] {
-    position: fixed !important;
-    left: -9999px !important; /* 扔出去，但保持渲染 */
-    top: -9999px !important;
-    width: 1px !important;
-    height: 1px !important;
-    visibility: visible !important; /* 必须可见，否则JS可能点不动 */
-    z-index: -1 !important;
-}
-
-/* 2. 隐藏原生的“关闭”按钮 (侧边栏展开后的那个 < 号) */
-[data-testid="stSidebarExpandedControl"] {
-    display: none !important; /* 这个可以直接干掉，反正我们可以点遮罩关闭 */
-}
-
-/* 确保 Header 不挡住我们的自定义按钮 */
+/* 1. 处理 Header，防止它挡住按钮点击 */
 header[data-testid="stHeader"] {
     background: transparent !important;
     pointer-events: none !important;
-    z-index: 100 !important;
+    z-index: 1000000 !important;
+}
+/* 必须让 Header 内部的子元素恢复点击，否则原生的按钮（就在Header里）会点不到 */
+header[data-testid="stHeader"] > div {
+    pointer-events: auto !important;
 }
 
-/* =============================
-   ★ 自定义 Menu 按钮 (类似 Show 按钮风格) ★
-   ============================= */
-.custom-menu-button {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 9999999; /* 必须最高 */
+/* 2. 改造原生打开按钮 */
+[data-testid="stSidebarCollapsedControl"] {
+    /* 强制定位和层级 */
+    position: fixed !important;
+    top: 16px !important;
+    left: 16px !important;
+    z-index: 1000002 !important;
     
-    /* 样式模仿你喜欢的 Show 按钮 */
-    background-color: rgba(0,0,0,0.5); 
-    color: #ffffff;
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 8px;
-    padding: 8px 16px;
+    /* 【关键】强制撑开尺寸，这就是你的“感应器” */
+    width: 110px !important;
+    height: 44px !important;
     
-    font-size: 15px;
-    font-weight: 500;
+    /* 样式：模仿 Show 按钮的深色玻璃风格 */
+    background-color: rgba(0,0,0,0.6) !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 8px !important;
+    
+    /* 布局：让内部文字居中 */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    
+    /* 交互 */
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease;
+    
+    /* 清除默认边距 */
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* 3. 隐藏原生按钮内部的 SVG 箭头 */
+[data-testid="stSidebarCollapsedControl"] svg, 
+[data-testid="stSidebarCollapsedControl"] img {
+    display: none !important;
+}
+
+/* 4. 插入我们想要的文字和图标 */
+[data-testid="stSidebarCollapsedControl"]::after {
+    content: "☰ Menu"; /* 这里是你想要的文字 */
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
     font-family: "Source Sans Pro", sans-serif;
     letter-spacing: 0.5px;
-    
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    
-    cursor: pointer;
-    backdrop-filter: blur(4px);
-    transition: all 0.2s ease;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
+    display: block !important;
 }
 
-/* 悬停 */
-.custom-menu-button:hover {
-    background-color: rgba(0,0,0,0.7);
-    border-color: rgba(255,255,255,0.5);
+/* 5. 鼠标悬停效果 */
+[data-testid="stSidebarCollapsedControl"]:hover {
+    background-color: rgba(0,0,0,0.8) !important;
+    border-color: rgba(255,255,255,0.6) !important;
     transform: translateY(1px);
 }
 
-/* 点击 */
-.custom-menu-button:active {
-    background-color: rgba(0,0,0,0.8);
-    transform: translateY(2px);
+/* =============================
+   ★ 彻底隐藏多余元素 ★
+   ============================= */
+
+/* 1. 彻底隐藏展开侧边栏后的关闭按钮 (<) */
+[data-testid="stSidebarExpandedControl"] {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* 2. 双重保险：隐藏侧边栏 Header 区域的任何按钮 */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button {
+    display: none !important;
 }
 
 /* =============================
@@ -189,39 +209,6 @@ button:hover { background: rgba(255,255,255,0.15) !important; }
 ::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
 ::-webkit-scrollbar-track{ background: transparent; }
 </style>
-
-<div id="custom-menu-trigger" class="custom-menu-button" onclick="triggerSidebar()">
-    <span>☰</span>
-    <span>Menu</span>
-</div>
-
-<script>
-function triggerSidebar() {
-    const doc = window.parent.document;
-    
-    // 1. 找原生【打开】按钮
-    // 即使它被 CSS 移到了屏幕外，JS 依然能获取到并点击
-    let openBtn = doc.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-    
-    if (!openBtn) {
-       openBtn = window.document.querySelector('button[data-testid="stSidebarCollapsedControl"]');
-    }
-
-    if (openBtn) {
-        openBtn.click();
-    } else {
-        // 如果找不到打开按钮，说明侧边栏可能已经是开着的，或者正在动画中
-        // 我们尝试找“关闭”按钮来实现 toggle 功能（虽然我们把关闭按钮隐藏了，但它在DOM里还在）
-        let closeBtn = doc.querySelector('button[data-testid="stSidebarExpandedControl"]');
-        if (!closeBtn) {
-            closeBtn = window.document.querySelector('button[data-testid="stSidebarExpandedControl"]');
-        }
-        if (closeBtn) {
-            closeBtn.click();
-        }
-    }
-}
-</script>
 """,
     unsafe_allow_html=True
 )

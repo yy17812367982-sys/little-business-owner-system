@@ -134,6 +134,22 @@ section[data-testid="stSidebar"]{
   }
 }
 
+/* Hide the original arrow */
+[data-testid="stSidebarCollapsedControl"] > div {
+    color: transparent !important;
+}
+
+/* Add the "☰ Menu" text */
+[data-testid="stSidebarCollapsedControl"]:before {
+    content: "☰ Menu";
+    color: #ffffff !important;
+    font-size: 1rem;
+    font-weight: 600;
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
 /* 美化原生侧边栏打开按钮 */
 [data-testid="stSidebarCollapsedControl"] {
     display: flex !important;
@@ -144,13 +160,15 @@ section[data-testid="stSidebar"]{
     border: 1.5px solid rgba(255,255,255,0.3) !important; /* 边框加粗一点 */
     border-radius: 8px !important;
     backdrop-filter: blur(6px);
-    width: 2.6rem !important; /* 稍微大一点 */
+    width: auto !important;
     height: 2.6rem !important;
     margin-top: 0.2rem;
     transition: all 0.2s ease-in-out;
     z-index: 1000002 !important;
     /* 应用呼吸动画，无限循环 */
     animation: pulse-white 2s infinite;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
 }
 
 /* 鼠标悬停时的效果 */
@@ -162,29 +180,9 @@ section[data-testid="stSidebar"]{
     border-color: rgba(255,255,255,0.9) !important;
 }
 
-/* 添加悬停文字提示 (Tooltip) - 仅电脑端有效 */
-[data-testid="stSidebarCollapsedControl"]:hover::after {
-    content: "打开菜单 / Open Menu"; /* 提示文字 */
-    position: absolute;
-    left: 115%; /* 显示在按钮右侧 */
-    top: 50%;
-    transform: translateY(-50%);
-    background: rgba(0,0,0,0.85); /* 深色背景 */
-    color: #fff;
-    padding: 5px 10px;
-    border-radius: 6px;
-    font-size: 14px;
-    white-space: nowrap;
-    pointer-events: none; /* 提示框不挡鼠标 */
-    border: 1px solid rgba(255,255,255,0.2);
-    backdrop-filter: blur(4px);
-}
-
-/* 美化展开后的“关闭”按钮 */
+/* Hide the left arrow button when sidebar is expanded */
 [data-testid="stSidebarExpandedControl"] {
-    color: #ffffff !important;
-    background: transparent !important;
-    border: none !important;
+    display: none !important;
 }
 
 /* Header 交互修正 */

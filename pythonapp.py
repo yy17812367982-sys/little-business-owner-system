@@ -14,6 +14,16 @@ import requests
 # =========================================================
 st.set_page_config(
     page_title="Project B: SME BI Platform",
+st.info(
+    """
+    **📢 U.S. SME Pilot Program (Beta)** This platform is accepting pilot users from the U.S. small business sector.  
+    
+    **Objective:** Optimizing inventory & reducing costs for Main Street businesses.  
+    **Developer:** Yang Yu (Quantitative Finance & Systems Expert)  
+    **Contact:** yy17812367982@gmail.com
+    """,
+    icon="🚀"
+)
     layout="wide",
     initial_sidebar_state="collapsed"
 )

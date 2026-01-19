@@ -302,7 +302,6 @@ def t(zh: str, en: str) -> str:
 
 def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
-    st.rerun()
 
 # =========================================================
 # API Key + client

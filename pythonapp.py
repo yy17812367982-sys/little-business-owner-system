@@ -1684,3 +1684,19 @@ elif st.session_state.active_suite == "operations":
     render_operations()
 else:
     render_finance()
+
+# =========================================================
+# Footer: Research & Compliance Notice
+# =========================================================
+st.markdown("---")
+st.markdown(
+    """
+    <div style="text-align: center; font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5; padding-bottom: 20px;">
+        <b>Research & Compliance Notice</b><br>
+        This system is developed for research and analytical framework demonstration purposes only.<br>
+        It does not provide investment advice, financial advisory services, or regulated commercial services.<br>
+        Any outputs are for informational and research discussion purposes only.
+    </div>
+    """,
+    unsafe_allow_html=True
+)

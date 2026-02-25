@@ -13,7 +13,7 @@ import requests
 # Page config
 # =========================================================
 st.set_page_config(
-    page_title="Project B: SME BI Platform",
+    page_title="SME Financial Research Framework",
     layout="wide",
     initial_sidebar_state="collapsed"
 )

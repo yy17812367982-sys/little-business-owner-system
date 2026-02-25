@@ -19,10 +19,11 @@ st.set_page_config(
 )
 st.info(
     """
-    **📢 U.S. SME Pilot Program (Beta)** This platform is accepting pilot users from the U.S. small business sector.
+    **📢 U.S. Small Business Financial Research Initiative (Development Stage)
+        This platform is currently under research and development to explore structured financial data interpretation models for U.S. small businesses.
     
-    **Objective:** Optimizing inventory & reducing costs for Main Street businesses.  
-    **Developer:** Yang Yu (Quantitative Finance & Systems Expert)  
+    **Objective:** Studying data-driven frameworks to improve financial transparency and operational decision-making efficiency.  
+    **Developer:** Yang Yu (Quantitative Finance & Systems Research)  
     **Contact:** yy17812367982@gmail.com
     """
 )

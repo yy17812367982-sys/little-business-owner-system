@@ -985,7 +985,7 @@ with st.sidebar:
 # =========================================================
 # Header + Top Ask AI
 # =========================================================
-st.title("SME BI Platform")
+st.title("SME Financial Research Framework")
 
 if "show_top_chat" not in st.session_state:
     st.session_state.show_top_chat = False

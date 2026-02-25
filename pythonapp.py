@@ -19,7 +19,7 @@ st.set_page_config(
 )
 st.info(
     """
-    **📢 U.S. Small Business Financial Research Initiative (Development Stage)
+    📢 U.S. Small Business Financial Research Initiative (Development Stage)
         This platform is currently under research and development to explore structured financial data interpretation models for U.S. small businesses.
     
     **Objective:** Studying data-driven frameworks to improve financial transparency and operational decision-making efficiency.  

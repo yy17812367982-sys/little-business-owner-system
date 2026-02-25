@@ -1684,12 +1684,3 @@ elif st.session_state.active_suite == "operations":
     render_operations()
 else:
     render_finance()
-# =========================================================
-# Router
-# =========================================================
-if st.session_state.active_suite == "open_store":
-    render_open_store()
-elif st.session_state.active_suite == "operations":
-    render_operations()
-else:
-    render_finance()

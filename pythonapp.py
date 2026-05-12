@@ -329,7 +329,7 @@ div[data-testid="stDataFrame"] * {
    ============================= */
 .open-step-wrap{
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 14px 0 18px 0;
 }
@@ -1699,7 +1699,10 @@ def render_open_store():
         ("#a78bfa", "#4c1d95"),  # purple: budget/pricing
         ("#34d399", "#064e3b"),  # green: decision/report
     ]
-    progress_html = "<div class='open-step-wrap'>"
+    # Robust segmented progress bar. Keep HTML compact (single-line tags) to avoid Streamlit
+    # occasionally rendering part of the markup as literal text.
+    import html as _html
+    pills = []
     for i, title in enumerate(step_titles, start=1):
         active = i <= st.session_state.open_step
         current = i == st.session_state.open_step
@@ -1709,13 +1712,14 @@ def render_open_store():
         else:
             style = "background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.16); color: rgba(255,255,255,0.62);"
         badge = "●" if current else "✓" if active else "○"
-        progress_html += f"""
-        <div class='open-step-pill' style='{style}'>
-            <span class='open-step-badge'>{badge}</span>
-            <span class='open-step-text'>{i}/4 · {title}</span>
-        </div>
-        """
-    progress_html += "</div>"
+        safe_title = _html.escape(str(title), quote=True)
+        pills.append(
+            '<div class="open-step-pill" style="{}">'
+            '<span class="open-step-badge">{}</span>'
+            '<span class="open-step-text">{}/4 · {}</span>'
+            '</div>'.format(style, badge, i, safe_title)
+        )
+    progress_html = '<div class="open-step-wrap">' + ''.join(pills) + '</div>'
     st.markdown(progress_html, unsafe_allow_html=True)
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])

@@ -105,7 +105,10 @@ div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
 div[data-testid="stCaption"], div[data-testid="stCaption"] *{
   color: rgba(255,255,255,0.55) !important; text-shadow: none !important;
 }
-.stMarkdown p{ color: rgba(255,255,255,0.65) !important; text-shadow: none !important; }
+.stMarkdown p{ 
+  color: rgba(255,255,255,0.88) !important; 
+  text-shadow: 0 2px 8px rgba(0,0,0,0.75) !important; 
+}
 a, a *{ color: rgba(180,220,255,0.95) !important; }
 
 /* =============================
@@ -286,6 +289,75 @@ div[data-testid="stMetricValue"] *{
 div[data-testid="stMetricDelta"] *{
   text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
 }
+
+/* =============================
+   Markdown table visibility fix
+   ============================= */
+
+/* Markdown 表格整体 */
+div[data-testid="stMarkdownContainer"] table {
+  background: rgba(0,0,0,0.55) !important;
+  border-collapse: collapse !important;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  width: 100% !important;
+  margin: 12px 0 22px 0 !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
+}
+
+/* 表头 */
+div[data-testid="stMarkdownContainer"] thead,
+div[data-testid="stMarkdownContainer"] thead tr,
+div[data-testid="stMarkdownContainer"] th {
+  background: rgba(0,0,0,0.82) !important;
+  color: rgba(255,255,255,0.98) !important;
+  font-weight: 800 !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.95) !important;
+}
+
+/* 表格内容 */
+div[data-testid="stMarkdownContainer"] td {
+  background: rgba(0,0,0,0.52) !important;
+  color: rgba(255,255,255,0.95) !important;
+  font-weight: 550 !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
+}
+
+/* 表格边框 */
+div[data-testid="stMarkdownContainer"] th,
+div[data-testid="stMarkdownContainer"] td {
+  border: 1px solid rgba(255,255,255,0.20) !important;
+  padding: 10px 14px !important;
+  vertical-align: top !important;
+}
+
+/* 表格里的加粗文字 */
+div[data-testid="stMarkdownContainer"] table strong,
+div[data-testid="stMarkdownContainer"] table b {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+/* 表格里的代码/公式 */
+div[data-testid="stMarkdownContainer"] table code {
+  background: rgba(255,255,255,0.92) !important;
+  color: #0f172a !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  text-shadow: none !important;
+}
+
+/* Markdown 表格外层滚动区域 */
+div[data-testid="stMarkdownContainer"] {
+  overflow-x: auto !important;
+}
+
+/* Dataframe/table fallback visibility */
+div[data-testid="stDataFrame"] * {
+  color: rgba(255,255,255,0.95) !important;
+}
+
 
 </style>
 """,
@@ -1261,7 +1333,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.4 Finance Engine + Geocoding + Overpass")
+    st.caption("v5.5 Finance Engine + Table Readability + Geocoding + Overpass")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1696,7 +1768,7 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
                 out = ask_ai(prompt, mode="open_store")
             st.session_state.outputs["final_open_store"] = out
             st.success(t("完成。", "Done."))
-            st.write(out)
+            st.markdown(out)
 
         if st.session_state.outputs["final_open_store"]:
             with st.expander(t("上一次输出", "Last output"), expanded=False):
@@ -1831,7 +1903,7 @@ def render_operations():
             with st.spinner(t("分析中…", "Analyzing...")):
                 out = ask_ai(q, mode="operations")
             st.session_state.outputs["ops_ai_output"] = out
-            st.write(out)
+            st.markdown(out)
 
     st.divider()
     st.subheader(t("可交付物：运营报告（AI）", "Deliverable: Operations Report (AI)"))
@@ -1950,7 +2022,7 @@ Return:
         with st.spinner(t("分析中…", "Analyzing...")):
             out = ask_ai(prompt, mode="finance")
         st.session_state.outputs["finance_ai_output"] = out
-        st.write(out)
+        st.markdown(out)
 
     st.divider()
     st.subheader(t("可交付物：财务报告（AI）", "Deliverable: Finance Report (AI)"))

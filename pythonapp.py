@@ -1722,17 +1722,32 @@ def render_open_store():
     progress_html = '<div class="open-step-wrap">' + ''.join(pills) + '</div>'
     st.markdown(progress_html, unsafe_allow_html=True)
 
+    # Navigation uses callbacks instead of mutating session_state mid-render.
+    # This keeps the segmented progress bar and page content perfectly aligned
+    # without reintroducing forced st.rerun() calls.
+    def _open_store_prev():
+        st.session_state.open_step = max(1, int(st.session_state.get("open_step", 1)) - 1)
+
+    def _open_store_next():
+        st.session_state.open_step = min(4, int(st.session_state.get("open_step", 1)) + 1)
+
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
-        if st.session_state.open_step > 1:
-            if st.button(t("◀ 上一步", "◀ Back"), use_container_width=True):
-                st.session_state.open_step = max(1, st.session_state.open_step - 1)
-        else:
-            st.button(t("◀ 上一步", "◀ Back"), use_container_width=True, disabled=True)
+        st.button(
+            t("◀ 上一步", "◀ Back"),
+            use_container_width=True,
+            disabled=st.session_state.open_step <= 1,
+            on_click=_open_store_prev,
+            key="open_store_back_btn",
+        )
     with nav2:
         if st.session_state.open_step < 4:
-            if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
-                st.session_state.open_step = min(4, st.session_state.open_step + 1)
+            st.button(
+                t("下一步 ▶", "Next ▶"),
+                use_container_width=True,
+                on_click=_open_store_next,
+                key="open_store_next_btn",
+            )
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
     with nav3:

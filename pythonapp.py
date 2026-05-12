@@ -1286,7 +1286,7 @@ def render_open_store():
     # Step 3
     elif st.session_state.open_step == 3:
         inv = st.session_state.inventory
-        st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash (no AI here)"))
+        st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash "))
 
         col1, col2 = st.columns([1, 1])
         with col1:

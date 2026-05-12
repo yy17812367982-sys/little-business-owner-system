@@ -1,4 +1,8 @@
 import streamlit as st
+APP_VERSION = "1.1"
+LAST_UPDATED = "MAY 2026"
+
+st.sidebar.caption(f"SME BI Platform Prototype | Version {APP_VERSION} | Last updated: {LAST_UPDATED}")
 import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np

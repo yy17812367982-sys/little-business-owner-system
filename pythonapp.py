@@ -1173,6 +1173,212 @@ Computed Metrics: {m}
     return clean_currency_for_markdown(ask_ai(prompt, mode="open_store"))
 
 
+def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize uploaded operations inventory data.
+    Required columns: Item, Stock, Cost, Monthly_Sales
+    Optional columns: Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier
+    """
+    df2 = df.copy()
+    df2.columns = [str(c).strip() for c in df2.columns]
+
+    required = ["Item", "Stock", "Cost", "Monthly_Sales"]
+    missing = [c for c in required if c not in df2.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+
+    for col in ["Stock", "Cost", "Monthly_Sales"]:
+        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
+
+    if "Category" not in df2.columns:
+        df2["Category"] = "General"
+    if "Lead_Time_Days" not in df2.columns:
+        df2["Lead_Time_Days"] = 7
+    if "MOQ" not in df2.columns:
+        df2["MOQ"] = 1
+    if "Shelf_Life_Days" not in df2.columns:
+        df2["Shelf_Life_Days"] = 365
+    if "Supplier" not in df2.columns:
+        df2["Supplier"] = "Not provided"
+
+    for col in ["Lead_Time_Days", "MOQ", "Shelf_Life_Days"]:
+        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
+
+    df2["Item"] = df2["Item"].astype(str)
+    df2["Category"] = df2["Category"].astype(str)
+    df2["Supplier"] = df2["Supplier"].astype(str)
+    return df2
+
+
+def operations_inventory_health(df: pd.DataFrame) -> dict:
+    """Compute operational inventory diagnostics for SMEs."""
+    df2 = normalize_inventory_df(df)
+    df2["Total_Value"] = df2["Stock"] * df2["Cost"]
+    df2["Daily_Sales"] = df2["Monthly_Sales"] / 30.0
+    df2["Months_Of_Cover"] = np.where(df2["Monthly_Sales"] > 0, df2["Stock"] / df2["Monthly_Sales"], np.inf)
+    df2["Days_Of_Cover"] = df2["Months_Of_Cover"] * 30.0
+    df2["Reorder_Point"] = np.ceil(df2["Daily_Sales"] * df2["Lead_Time_Days"] * 1.30)
+
+    # Preliminary reorder estimate. This is intentionally conservative and should be verified against storage and supplier terms.
+    df2["Suggested_Order_Qty"] = np.maximum(np.ceil(df2["Reorder_Point"] + df2["Monthly_Sales"] * 0.50 - df2["Stock"]), 0)
+    df2["Suggested_Order_Qty"] = np.where(
+        (df2["Suggested_Order_Qty"] > 0) & (df2["MOQ"] > 1),
+        np.ceil(df2["Suggested_Order_Qty"] / df2["MOQ"]) * df2["MOQ"],
+        df2["Suggested_Order_Qty"]
+    )
+    df2["Suggested_Order_Value"] = df2["Suggested_Order_Qty"] * df2["Cost"]
+
+    def classify(row):
+        if row["Monthly_Sales"] <= 0:
+            return "No Sales / Review"
+        if row["Months_Of_Cover"] < 0.50 or row["Stock"] <= row["Reorder_Point"]:
+            return "Critical Stockout Risk"
+        if row["Months_Of_Cover"] < 1.50:
+            return "Watchlist"
+        if row["Months_Of_Cover"] >= 6.0:
+            return "Dead / Overstock"
+        if row["Months_Of_Cover"] >= 4.0:
+            return "Overstock"
+        return "Healthy"
+
+    def action(row):
+        status = row["Status"]
+        if status == "Critical Stockout Risk":
+            return "Reorder immediately; raise safety stock and verify supplier lead time."
+        if status == "Watchlist":
+            return "Monitor weekly; prepare reorder if demand continues or lead time increases."
+        if status == "Overstock":
+            return "Pause reorder; use bundles or targeted promotion."
+        if status == "Dead / Overstock":
+            return "Stop reorder; discount, bundle, return to vendor, or liquidate."
+        if status == "No Sales / Review":
+            return "Check listing, shelf placement, demand, and discontinuation options."
+        return "Maintain normal replenishment rule."
+
+    df2["Status"] = df2.apply(classify, axis=1)
+    df2["Suggested_Action"] = df2.apply(action, axis=1)
+    df2["Perishable_Risk"] = np.where(
+        (df2["Shelf_Life_Days"] > 0) & (df2["Shelf_Life_Days"] <= 21) & (df2["Days_Of_Cover"] > df2["Shelf_Life_Days"]),
+        "Perishable Waste Risk",
+        ""
+    )
+
+    stockout = df2[df2["Status"].eq("Critical Stockout Risk")].copy()
+    watchlist = df2[df2["Status"].eq("Watchlist")].copy()
+    overstock = df2[df2["Status"].isin(["Overstock", "Dead / Overstock", "No Sales / Review"])].copy()
+    perishable = df2[df2["Perishable_Risk"].ne("")].copy()
+
+    total_value = float(df2["Total_Value"].sum())
+    slow_value = float(overstock["Total_Value"].sum()) if len(overstock) else 0.0
+    stockout_order_value = float(stockout["Suggested_Order_Value"].sum()) if len(stockout) else 0.0
+    avg_moc = float(df2.replace([np.inf, -np.inf], np.nan)["Months_Of_Cover"].mean()) if len(df2) else 0.0
+
+    summary = (
+        f"Total inventory value: USD {total_value:,.0f}; "
+        f"slow-moving/overstock value: USD {slow_value:,.0f}; "
+        f"critical stockout-risk items: {len(stockout)}; "
+        f"watchlist items: {len(watchlist)}; "
+        f"overstock/dead items: {len(overstock)}; "
+        f"perishable-risk items: {len(perishable)}; "
+        f"average months of cover: {avg_moc:.2f}; "
+        f"suggested immediate reorder value: USD {stockout_order_value:,.0f}."
+    )
+
+    return {
+        "df2": df2,
+        "total_value": total_value,
+        "slow_value": slow_value,
+        "stockout_order_value": stockout_order_value,
+        "avg_months_of_cover": avg_moc,
+        "stockout_items": stockout,
+        "watchlist_items": watchlist,
+        "overstock_items": overstock,
+        "perishable_items": perishable,
+        "summary": summary,
+    }
+
+
+def build_operations_context() -> str:
+    inv = st.session_state.inventory
+    inv_df = inv.get("df")
+    if not isinstance(inv_df, pd.DataFrame):
+        return "No inventory data has been uploaded or loaded."
+
+    try:
+        health = operations_inventory_health(inv_df)
+        df2 = health["df2"]
+        display_cols = [
+            "Item", "Category", "Stock", "Monthly_Sales", "Cost", "Total_Value",
+            "Months_Of_Cover", "Lead_Time_Days", "MOQ", "Shelf_Life_Days",
+            "Reorder_Point", "Suggested_Order_Qty", "Suggested_Order_Value", "Status", "Perishable_Risk", "Suggested_Action"
+        ]
+        display_cols = [c for c in display_cols if c in df2.columns]
+        return f"""
+Operations inventory summary:
+{health['summary']}
+
+Detailed inventory diagnostics:
+{df2[display_cols].to_string(index=False)}
+"""
+    except Exception as e:
+        return f"Inventory data is present but could not be analyzed: {e}"
+
+
+def ai_operations_diagnosis(user_question: str = "") -> str:
+    context = build_operations_context()
+    prompt = f"""
+You are Yangyu's AI assistant for SME operations management.
+Output MUST be Markdown.
+
+Rules:
+- Use the uploaded inventory diagnostics as the primary evidence.
+- Every key finding must cite item names and actual numbers where available.
+- Do NOT invent sales, costs, suppliers, spoilage, customer behavior, or demand channels.
+- If a metric is unavailable, write "Not available from uploaded data."
+- Do NOT use dollar signs. Use "USD" before amounts.
+- Focus on operations, not generic business strategy.
+- Distinguish critical stockout risk from watchlist risk and overstock risk.
+- Suggested order quantities are preliminary estimates; if storage capacity, supplier delivery frequency, or MOQ constraints are unavailable, say they should be confirmed before ordering.
+- Proofread the final output for spelling and formatting.
+
+User question:
+{user_question if user_question.strip() else 'Please run a full operations diagnosis.'}
+
+Uploaded data and computed operations diagnostics:
+{context}
+
+Report structure:
+# Operations Diagnosis
+
+## 1) Executive Summary
+- 5 bullets.
+- Each bullet must include an actual item, count, value, or months-of-cover number.
+
+## 2) Inventory Health Dashboard
+Metric | Actual Result | Interpretation
+Include total inventory value, slow-moving value, critical stockout-risk count, watchlist count, overstock/dead count, perishable-risk count, average months of cover, and suggested immediate reorder value when available.
+
+## 3) Replenishment Priority
+Item | Status | Months of Cover | Suggested Order Qty | Suggested Action
+List the most urgent critical stockout/watchlist items first.
+
+## 4) Overstock / Cash-Tied Items
+Item | Stock | Monthly Sales | Months of Cover | Cash Tied | Action
+List slow-moving or dead-stock items.
+
+## 5) 7-Day Action Plan
+- 10 owner-executable actions.
+- Each action must include owner + metric/target + timing.
+
+## 6) 30-Day Operating Controls
+- Replenishment rule, promotion rule, waste log, supplier review, weekly review rhythm.
+
+## 7) Follow-up Questions
+- 5 questions that would materially improve the analysis.
+"""
+    return clean_currency_for_markdown(ask_ai(prompt, mode="operations"))
+
+
 def ai_report_operations() -> str:
     ops_ai = st.session_state.outputs.get("ops_ai_output", "")
     context = build_operations_context()

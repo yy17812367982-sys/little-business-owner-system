@@ -5,6 +5,7 @@ import numpy as np
 import os
 import time
 import random
+import re
 from datetime import datetime
 from google import genai
 import requests
@@ -402,20 +403,60 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
-    "gemini-3-pro-preview",
+    # Current Gemini 3 family first. If an account has not enabled these yet,
+    # the app automatically falls back to stable Gemini 2.5 models.
+    "gemini-3.1-pro-preview",
     "gemini-2.5-pro",
     "gemini-3-flash-preview",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 ]
 
 MODEL_CANDIDATES_FAST = [
     "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
 ]
 
 if "ai_quality" not in st.session_state:
     st.session_state.ai_quality = "pro"
+
+def sanitize_ai_markdown_output(text: str) -> str:
+    """
+    Clean AI Markdown before display/download.
+    Streamlit/Markdown treats dollar signs as math delimiters, which can make
+    finance outputs italic, faint, or broken. We use USD instead.
+    Also soften legal/accounting conclusions that require evidence beyond
+    the uploaded SME workbook.
+    """
+    if text is None:
+        return ""
+    out = str(text)
+
+    # Avoid Markdown math rendering caused by $ in currency amounts.
+    out = out.replace("$", "USD ")
+
+    # Clean common spacing glitches after replacing currency symbols.
+    out = re.sub(r"USD\s+(-?\d)", r"USD \1", out)
+    out = re.sub(r"USD\s+([A-Za-z])", r"USD \1", out)
+
+    # Avoid over-legal conclusions. Use liquidity language unless actual legal
+    # insolvency/balance-sheet evidence is provided and explicitly discussed.
+    replacements = {
+        r"\bInsolvency Crisis\b": "Severe Liquidity Risk",
+        r"\bInsolvency Risk\b": "Critical Liquidity Risk",
+        r"\binsolvency crisis\b": "severe liquidity risk",
+        r"\binsolvency risk\b": "critical liquidity risk",
+        r"\binsolvency\b": "severe liquidity risk",
+        r"\binsolvent\b": "under severe liquidity pressure",
+    }
+    for pat, repl in replacements.items():
+        out = re.sub(pat, repl, out, flags=re.IGNORECASE)
+
+    return out
+
 
 def ask_ai(user_prompt: str, mode: str = "general") -> str:
     if not API_KEY or not client:
@@ -440,7 +481,7 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
                 resp = client.models.generate_content(model=model_name, contents=prompt)
                 text = getattr(resp, "text", None)
                 if text and str(text).strip():
-                    return text
+                    return sanitize_ai_markdown_output(text)
                 last_err = f"Empty response from {model_name}"
             except Exception as e:
                 msg = str(e)
@@ -974,6 +1015,9 @@ Critical evidence rules:
 - If using a general industry benchmark, label it clearly as "General benchmark", not as company-specific fact.
 - Separate actual-data findings from assumptions and recommendations.
 - Do not provide investment, legal, tax, or regulated financial advice. This is business analysis support only.
+- Do NOT use dollar signs in the output. Use "USD" before amounts, for example "USD 803,500", to avoid Markdown math rendering issues.
+- Do NOT use legal/accounting conclusions such as "insolvency" unless the uploaded data includes sufficient balance-sheet/legal evidence. Use "liquidity risk" or "cash-flow deficit" instead.
+- When comparing inventory purchases and COGS, state that differences may reflect timing, beginning/ending inventory, prepayments, or purchasing inefficiency; do not present it as confirmed waste without reconciliation.
 
 Focus={focus}
 Style={style}
@@ -1990,6 +2034,9 @@ Critical evidence rules:
 - If using a general industry benchmark, label it clearly as "General benchmark", not as company-specific fact.
 - Separate actual-data findings from assumptions and recommendations.
 - Do not provide investment, legal, tax, or regulated financial advice. This is business analysis support only.
+- Do NOT use dollar signs in the output. Use "USD" before amounts, for example "USD 803,500", to avoid Markdown math rendering issues.
+- Do NOT use legal/accounting conclusions such as "insolvency" unless the uploaded data includes sufficient balance-sheet/legal evidence. Use "liquidity risk" or "cash-flow deficit" instead.
+- When comparing inventory purchases and COGS, state that differences may reflect timing, beginning/ending inventory, prepayments, or purchasing inefficiency; do not present it as confirmed waste without reconciliation.
 
 Focus={focus}
 Style={style}

@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import os
@@ -28,41 +27,6 @@ st.info(
     **Contact:** yy17812367982@gmail.com
     """
 )
-
-# =========================================================
-# ✅ Sidebar collapse helper (SAFE: two-step flag -> execute in main flow)
-# =========================================================
-def collapse_sidebar():
-    components.html(
-        """
-        <script>
-        (function(){
-          const selectors = [
-            '[data-testid="stSidebarCollapseButton"]',
-            '[data-testid="stSidebarCollapseButton"] button',
-            'button[aria-label="Close sidebar"]',
-            'button[title="Close sidebar"]'
-          ];
-          let btn = null;
-          for (const s of selectors) {
-            btn = window.parent.document.querySelector(s);
-            if (btn) break;
-          }
-          if (btn) btn.click();
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-if "_do_collapse_sidebar" not in st.session_state:
-    st.session_state["_do_collapse_sidebar"] = False
-
-# ✅ Only execute collapse in main render flow (avoid SessionInfo init race)
-if st.session_state.get("_do_collapse_sidebar", False):
-    st.session_state["_do_collapse_sidebar"] = False
-    collapse_sidebar()
 
 # =========================================================
 # UI: CSS Only (Native Button Transformation)
@@ -1567,8 +1531,6 @@ with st.sidebar:
     new_suite = mapping[suite_label]
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
-        # ✅ 选中后让 sidebar 自动收回（用 SAFE flag，下一轮主流程执行 collapse）
-        st.session_state["_do_collapse_sidebar"] = True
         st.rerun()
 
     st.markdown("---")

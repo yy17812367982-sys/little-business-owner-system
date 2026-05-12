@@ -963,43 +963,251 @@ Pricing: {pr}
 """
     return ask_ai(prompt, mode="open_store")
 
-def ai_report_operations() -> str:
-    out = st.session_state.outputs
-    ops_ai = out.get("ops_ai_output", "")
-    if ops_ai is None:
-        ops_ai = ""
-    elif not isinstance(ops_ai, str):
-        ops_ai = str(ops_ai)
+def clean_currency_for_markdown(text: str) -> str:
+    """Prevent Markdown math rendering by replacing dollar signs in AI output."""
+    if not isinstance(text, str):
+        return text
+    return text.replace("$", "USD ")
 
+
+def _ops_required_columns_present(df: pd.DataFrame) -> bool:
+    cols = {str(c).strip() for c in df.columns}
+    return {"Item", "Stock", "Cost", "Monthly_Sales"}.issubset(cols)
+
+
+def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize uploaded operations inventory data.
+    Required columns: Item, Stock, Cost, Monthly_Sales
+    Optional columns: Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier
+    """
+    df2 = df.copy()
+    df2.columns = [str(c).strip() for c in df2.columns]
+
+    required = ["Item", "Stock", "Cost", "Monthly_Sales"]
+    missing = [c for c in required if c not in df2.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+
+    for col in ["Stock", "Cost", "Monthly_Sales"]:
+        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
+
+    if "Category" not in df2.columns:
+        df2["Category"] = "General"
+    if "Lead_Time_Days" not in df2.columns:
+        df2["Lead_Time_Days"] = 7
+    if "MOQ" not in df2.columns:
+        df2["MOQ"] = 1
+    if "Shelf_Life_Days" not in df2.columns:
+        df2["Shelf_Life_Days"] = 365
+    if "Supplier" not in df2.columns:
+        df2["Supplier"] = "Not provided"
+
+    for col in ["Lead_Time_Days", "MOQ", "Shelf_Life_Days"]:
+        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
+
+    df2["Item"] = df2["Item"].astype(str)
+    df2["Category"] = df2["Category"].astype(str)
+    df2["Supplier"] = df2["Supplier"].astype(str)
+    return df2
+
+
+def operations_inventory_health(df: pd.DataFrame) -> dict:
+    """Compute operational inventory diagnostics for SMEs."""
+    df2 = normalize_inventory_df(df)
+    df2["Total_Value"] = df2["Stock"] * df2["Cost"]
+    df2["Daily_Sales"] = df2["Monthly_Sales"] / 30.0
+    df2["Months_Of_Cover"] = np.where(df2["Monthly_Sales"] > 0, df2["Stock"] / df2["Monthly_Sales"], np.inf)
+    df2["Days_Of_Cover"] = df2["Months_Of_Cover"] * 30.0
+    df2["Reorder_Point"] = np.ceil(df2["Daily_Sales"] * df2["Lead_Time_Days"] * 1.30)
+    df2["Suggested_Order_Qty"] = np.maximum(np.ceil(df2["Reorder_Point"] + df2["Monthly_Sales"] * 0.50 - df2["Stock"]), 0)
+    df2["Suggested_Order_Qty"] = np.where(
+        (df2["Suggested_Order_Qty"] > 0) & (df2["MOQ"] > 1),
+        np.ceil(df2["Suggested_Order_Qty"] / df2["MOQ"]) * df2["MOQ"],
+        df2["Suggested_Order_Qty"]
+    )
+    df2["Suggested_Order_Value"] = df2["Suggested_Order_Qty"] * df2["Cost"]
+
+    def classify(row):
+        if row["Monthly_Sales"] <= 0:
+            return "No Sales / Review"
+        if row["Stock"] <= row["Reorder_Point"] or row["Months_Of_Cover"] < 1.0:
+            return "Stockout Risk"
+        if row["Months_Of_Cover"] >= 6.0:
+            return "Dead / Overstock"
+        if row["Months_Of_Cover"] >= 4.0:
+            return "Overstock"
+        if row["Months_Of_Cover"] < 2.0:
+            return "Watchlist"
+        return "Healthy"
+
+    def action(row):
+        status = row["Status"]
+        if status == "Stockout Risk":
+            return "Reorder immediately; raise safety stock and review supplier lead time."
+        if status == "Watchlist":
+            return "Monitor weekly; prepare reorder if demand continues."
+        if status == "Overstock":
+            return "Pause reorder; use bundles or targeted promotion."
+        if status == "Dead / Overstock":
+            return "Stop reorder; discount, bundle, return to vendor, or liquidate."
+        if status == "No Sales / Review":
+            return "Check listing, shelf placement, demand, and discontinuation options."
+        return "Maintain normal replenishment rule."
+
+    df2["Status"] = df2.apply(classify, axis=1)
+    df2["Suggested_Action"] = df2.apply(action, axis=1)
+    df2["Perishable_Risk"] = np.where(
+        (df2["Shelf_Life_Days"] > 0) & (df2["Shelf_Life_Days"] <= 21) & (df2["Days_Of_Cover"] > df2["Shelf_Life_Days"]),
+        "Perishable Waste Risk",
+        ""
+    )
+
+    stockout = df2[df2["Status"].eq("Stockout Risk")].copy()
+    watchlist = df2[df2["Status"].eq("Watchlist")].copy()
+    overstock = df2[df2["Status"].isin(["Overstock", "Dead / Overstock", "No Sales / Review"])].copy()
+    perishable = df2[df2["Perishable_Risk"].ne("")].copy()
+
+    total_value = float(df2["Total_Value"].sum())
+    slow_value = float(overstock["Total_Value"].sum()) if len(overstock) else 0.0
+    stockout_order_value = float(stockout["Suggested_Order_Value"].sum()) if len(stockout) else 0.0
+    avg_moc = float(df2.replace([np.inf, -np.inf], np.nan)["Months_Of_Cover"].mean()) if len(df2) else 0.0
+
+    summary = (
+        f"Total inventory value: USD {total_value:,.0f}; "
+        f"slow-moving/overstock value: USD {slow_value:,.0f}; "
+        f"stockout-risk items: {len(stockout)}; "
+        f"watchlist items: {len(watchlist)}; "
+        f"overstock/dead items: {len(overstock)}; "
+        f"perishable-risk items: {len(perishable)}; "
+        f"average months of cover: {avg_moc:.2f}; "
+        f"suggested immediate reorder value: USD {stockout_order_value:,.0f}."
+    )
+
+    return {
+        "df2": df2,
+        "total_value": total_value,
+        "slow_value": slow_value,
+        "stockout_order_value": stockout_order_value,
+        "avg_months_of_cover": avg_moc,
+        "stockout_items": stockout,
+        "watchlist_items": watchlist,
+        "overstock_items": overstock,
+        "perishable_items": perishable,
+        "summary": summary,
+    }
+
+
+def build_operations_context() -> str:
     inv = st.session_state.inventory
     inv_df = inv.get("df")
-    inv_table = inv_df.to_string(index=False) if isinstance(inv_df, pd.DataFrame) else "Not provided"
-    inv_snapshot = out.get("inventory_summary", "No inventory summary available.")
+    if not isinstance(inv_df, pd.DataFrame):
+        return "No inventory data has been uploaded or loaded."
 
-    prompt = f"""
-Return Markdown.
+    try:
+        health = operations_inventory_health(inv_df)
+        df2 = health["df2"]
+        display_cols = [
+            "Item", "Category", "Stock", "Monthly_Sales", "Cost", "Total_Value",
+            "Months_Of_Cover", "Lead_Time_Days", "MOQ", "Shelf_Life_Days",
+            "Reorder_Point", "Suggested_Order_Qty", "Status", "Perishable_Risk", "Suggested_Action"
+        ]
+        display_cols = [c for c in display_cols if c in df2.columns]
+        return f"""
+Operations inventory summary:
+{health['summary']}
 
-# Operations Report
-## Current Snapshot
-- Inventory snapshot: {inv_snapshot}
-
-## Key Signals from Data
-- Use only provided inputs.
-
-## Ops Advisor Notes (if any)
-{ops_ai.strip() if ops_ai.strip() else "[None]"}
-
-## Inventory Rules
-## Pricing Execution Rules
-## KPIs (8)
-## Next 14 Days Action Plan (owner/metric)
-## Data Gaps
-
-Inventory table:
-{inv_table}
+Detailed inventory diagnostics:
+{df2[display_cols].to_string(index=False)}
 """
-    return ask_ai(prompt, mode="operations")
+    except Exception as e:
+        return f"Inventory data is present but could not be analyzed: {e}"
 
+
+def ai_operations_diagnosis(user_question: str = "") -> str:
+    context = build_operations_context()
+    prompt = f"""
+You are Yangyu's AI assistant for SME operations management.
+Output MUST be Markdown.
+
+Rules:
+- Use the uploaded inventory diagnostics as the primary evidence.
+- Every key finding must cite item names and actual numbers where available.
+- Do NOT invent sales, costs, suppliers, spoilage, customer behavior, or demand channels.
+- If a metric is unavailable, write "Not available from uploaded data."
+- Do NOT use dollar signs. Use "USD" before amounts.
+- Focus on operations, not generic business strategy.
+- Distinguish stockout risk from overstock risk.
+
+User question:
+{user_question if user_question.strip() else 'Please run a full operations diagnosis.'}
+
+Uploaded data and computed operations diagnostics:
+{context}
+
+Report structure:
+# Operations Diagnosis
+
+## 1) Executive Summary
+- 5 bullets.
+- Each bullet must include an actual item, count, value, or months-of-cover number.
+
+## 2) Inventory Health Dashboard
+Metric | Actual Result | Interpretation
+Include total inventory value, slow-moving value, stockout-risk count, overstock/dead count, perishable-risk count, average months of cover, and suggested immediate reorder value when available.
+
+## 3) Replenishment Priority
+Item | Status | Months of Cover | Suggested Order Qty | Suggested Action
+List the most urgent stockout/watchlist items first.
+
+## 4) Overstock / Cash-Tied Items
+Item | Stock | Monthly Sales | Months of Cover | Cash Tied | Action
+List slow-moving or dead-stock items.
+
+## 5) 7-Day Action Plan
+- 10 owner-executable actions.
+- Each action must include owner + metric/target + timing.
+
+## 6) 30-Day Operating Controls
+- Replenishment rule, promotion rule, waste log, supplier review, weekly review rhythm.
+
+## 7) Follow-up Questions
+- 5 questions that would materially improve the analysis.
+"""
+    return clean_currency_for_markdown(ask_ai(prompt, mode="operations"))
+
+
+def ai_report_operations() -> str:
+    ops_ai = st.session_state.outputs.get("ops_ai_output", "")
+    context = build_operations_context()
+    prompt = f"""
+You are producing a professional Operations Report for a U.S. small business owner.
+Output MUST be Markdown.
+
+Rules:
+- Use uploaded inventory data and computed diagnostics as primary evidence.
+- Every recommendation must map to either stockout risk, overstock/cash-tied risk, perishable risk, supplier lead time, MOQ, or weekly operating control.
+- Do NOT invent data. If unavailable, say "Not available from uploaded data."
+- Do NOT use dollar signs. Use "USD" before amounts.
+
+Uploaded data and computed diagnostics:
+{context}
+
+Previous advisor output, if any:
+{ops_ai if isinstance(ops_ai, str) and ops_ai.strip() else '[None]'}
+
+Report structure:
+# Operations Control Report
+## 1) Current Inventory Snapshot
+## 2) Critical Stockout Risks
+## 3) Overstock and Cash-Tied Items
+## 4) Replenishment Rules
+## 5) Promotion and Liquidation Rules
+## 6) Weekly SOP Checklist
+## 7) KPIs to Track
+## 8) Next 14 Days Action Plan
+"""
+    return clean_currency_for_markdown(ask_ai(prompt, mode="operations"))
 
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
     finance_ai = st.session_state.outputs.get("finance_ai_output", "")
@@ -1377,7 +1585,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.5 Finance Engine + Table Readability + Geocoding + Overpass")
+    st.caption("v5.7 Operations Control Center + Finance Engine + Geocoding + Overpass")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1851,120 +2059,194 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
 # Suite 2: Operations
 # =========================================================
 def render_operations():
-    st.header(t("运营（帮助企业跑起来）", "Operations (Run the business)"))
+    st.header(t("运营控制中心", "Operations Control Center"))
 
     st.markdown(
         "<div class='card'>{}</div>".format(
-            t("这里更偏“日常运营”：库存周报、补货策略、促销触发、SOP 检查表等。",
-              "This suite focuses on day-to-day operations: weekly inventory review, replenishment rules, promo triggers, SOP checklists.")
+            t("这一模块用于把库存、补货、滞销、现金占用和行动清单串起来，帮助小企业做日常运营诊断。",
+              "This suite connects inventory, replenishment, overstock, cash tied in stock, and action plans for day-to-day SME operations diagnosis.")
         ),
         unsafe_allow_html=True
     )
 
-    tab_ops1, tab_ops2, tab_ops3 = st.tabs([
-        t("库存周检", "Inventory Weekly Review"),
-        t("定价执行", "Pricing Execution"),
-        t("运营问诊", "Ops Advisor")
+    inv = st.session_state.inventory
+    if "ops_diagnosis_md" not in st.session_state.outputs:
+        st.session_state.outputs["ops_diagnosis_md"] = ""
+
+    st.subheader(t("1. 上传或加载库存运营数据", "1. Upload or Load Operations Inventory Data"))
+    st.caption(t(
+        "必需字段：Item, Stock, Cost, Monthly_Sales。可选字段：Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier。",
+        "Required columns: Item, Stock, Cost, Monthly_Sales. Optional: Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier."
+    ))
+
+    colA, colB, colC = st.columns([1, 1.4, 1])
+    with colA:
+        if st.button(t("加载咖啡店示例数据", "Load café sample data"), key="ops_load_cafe_sample", use_container_width=True):
+            sample_data = {
+                "Item": [
+                    "Milk Gallons", "Paper Cups", "Cup Lids", "Napkins", "Croissants",
+                    "Sandwich Packs", "Branded Tumblers", "Tea Leaves", "Pumpkin Spice Syrup", "Bagged Coffee Beans"
+                ],
+                "Category": [
+                    "Perishable", "Packaging", "Packaging", "Packaging", "Perishable",
+                    "Perishable", "Merchandise", "Dry Goods", "Seasonal", "Retail"
+                ],
+                "Stock": [28, 420, 390, 600, 36, 22, 130, 80, 48, 32],
+                "Cost": [4.20, 0.08, 0.05, 0.02, 1.15, 2.75, 13.20, 8.40, 9.50, 7.20],
+                "Monthly_Sales": [42, 500, 460, 500, 120, 70, 13, 12, 8, 8],
+                "Lead_Time_Days": [2, 5, 5, 5, 1, 2, 21, 14, 10, 7],
+                "MOQ": [10, 100, 100, 200, 24, 20, 50, 20, 12, 12],
+                "Shelf_Life_Days": [7, 365, 365, 365, 3, 4, 999, 365, 180, 120],
+                "Supplier": [
+                    "Local Dairy", "Packaging Supplier", "Packaging Supplier", "Packaging Supplier", "Bakery",
+                    "Kitchen Prep", "Merch Vendor", "Tea Vendor", "Seasonal Vendor", "Roaster"
+                ]
+            }
+            inv["df"] = pd.DataFrame(sample_data)
+            st.session_state.outputs["ops_ai_output"] = ""
+            st.session_state.outputs["ops_diagnosis_md"] = ""
+            st.rerun()
+
+    with colB:
+        uploaded = st.file_uploader(
+            t("上传 CSV 库存表", "Upload inventory CSV"),
+            type=["csv"],
+            key="ops_control_csv"
+        )
+        if uploaded is not None:
+            try:
+                inv["df"] = pd.read_csv(uploaded)
+                st.session_state.outputs["ops_ai_output"] = ""
+                st.session_state.outputs["ops_diagnosis_md"] = ""
+                st.success(t("已读取 CSV。", "CSV loaded."))
+                st.rerun()
+            except Exception as e:
+                st.error(t(f"CSV 读取失败：{e}", f"Failed to read CSV: {e}"))
+
+    with colC:
+        if st.button(t("清空运营数据", "Clear operations data"), use_container_width=True):
+            inv["df"] = None
+            st.session_state.outputs["ops_ai_output"] = ""
+            st.session_state.outputs["ops_report_md"] = ""
+            st.session_state.outputs["ops_diagnosis_md"] = ""
+            st.rerun()
+
+    if inv.get("df") is None:
+        st.info(t("请先加载示例数据或上传 CSV。", "Load sample data or upload a CSV first."))
+        return
+
+    try:
+        health = operations_inventory_health(inv["df"])
+        df2 = health["df2"]
+        st.session_state.outputs["inventory_summary"] = health["summary"]
+    except Exception as e:
+        st.error(t(f"库存数据结构不符合要求：{e}", f"Inventory data format error: {e}"))
+        return
+
+    st.subheader(t("2. 库存健康仪表盘", "2. Inventory Health Dashboard"))
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(t("库存总价值", "Total Inventory Value"), f"USD {health['total_value']:,.0f}")
+    m2.metric(t("慢动销/积压金额", "Slow-Moving Value"), f"USD {health['slow_value']:,.0f}")
+    m3.metric(t("缺货风险 SKU", "Stockout-Risk SKUs"), len(health["stockout_items"]))
+    m4.metric(t("平均覆盖月数", "Avg. Months Cover"), f"{health['avg_months_of_cover']:.2f}")
+
+    m5, m6, m7, m8 = st.columns(4)
+    m5.metric(t("积压/滞销 SKU", "Overstock/Dead SKUs"), len(health["overstock_items"]))
+    m6.metric(t("易腐风险 SKU", "Perishable-Risk SKUs"), len(health["perishable_items"]))
+    m7.metric(t("建议即时补货额", "Immediate Reorder Value"), f"USD {health['stockout_order_value']:,.0f}")
+    cash_tied_ratio = (health["slow_value"] / health["total_value"] * 100.0) if health["total_value"] else 0.0
+    m8.metric(t("库存现金占压率", "Cash-Tied Ratio"), f"{cash_tied_ratio:.1f}%")
+
+    st.markdown("#### " + t("运营诊断表", "Operations Diagnostic Table"))
+    display_cols = [
+        "Item", "Category", "Stock", "Monthly_Sales", "Cost", "Total_Value",
+        "Months_Of_Cover", "Lead_Time_Days", "MOQ", "Shelf_Life_Days",
+        "Reorder_Point", "Suggested_Order_Qty", "Suggested_Order_Value", "Status", "Perishable_Risk", "Suggested_Action"
+    ]
+    display_cols = [c for c in display_cols if c in df2.columns]
+    st.dataframe(df2[display_cols], use_container_width=True)
+
+    tab1, tab2, tab3 = st.tabs([
+        t("补货优先级", "Replenishment Priority"),
+        t("积压/促销处理", "Overstock & Promotion"),
+        t("AI 运营诊断", "AI Operations Diagnosis")
     ])
 
-    with tab_ops1:
-        inv = st.session_state.inventory
-        st.subheader(t("库存周检（数据+指标）", "Inventory Weekly Review (Data + Metrics)"))
-
-        colA, colB = st.columns([1, 1])
-        with colA:
-            if st.button(t("加载示例数据", "Load sample data"), key="ops_load_sample"):
-                data = {
-                    "Item": ["Synthetic Oil", "Wiper Blades", "Brake Pads", "Tires", "Air Filter"],
-                    "Stock": [120, 450, 30, 8, 200],
-                    "Cost": [25, 8, 45, 120, 5],
-                    "Monthly_Sales": [40, 5, 25, 6, 15]
-                }
-                inv["df"] = pd.DataFrame(data)
-                st.rerun()
-        with colB:
-            uploaded = st.file_uploader(t("上传 CSV", "Upload CSV"), type=["csv"], key="ops_inv_csv")
-            if uploaded is not None:
-                inv["df"] = pd.read_csv(uploaded)
-                st.rerun()
-
-        if inv["df"] is None:
-            st.info(t("请先加载或上传库存数据。", "Load or upload inventory data first."))
+    with tab1:
+        st.subheader(t("补货优先级", "Replenishment Priority"))
+        priority = df2[df2["Status"].isin(["Stockout Risk", "Watchlist"])].copy()
+        if len(priority) == 0:
+            st.success(t("当前没有明显缺货风险。", "No obvious stockout risk based on current data."))
         else:
-            df = inv["df"]
-            health = inventory_health(df)
-            st.dataframe(health["df2"], use_container_width=True)
+            priority = priority.sort_values(["Status", "Months_Of_Cover"], ascending=[False, True])
+            st.dataframe(priority[[
+                "Item", "Category", "Stock", "Monthly_Sales", "Months_Of_Cover", "Lead_Time_Days",
+                "Reorder_Point", "Suggested_Order_Qty", "Suggested_Order_Value", "Suggested_Action"
+            ]], use_container_width=True)
+            st.warning(t(
+                "优先处理低覆盖月数和交期较长的 SKU，避免旺日断货。",
+                "Prioritize low-cover and longer-lead-time SKUs to avoid busy-day stockouts."
+            ))
 
-            st.metric(t("库存总价值", "Total Inventory Value"), f"${health['total_value']:,.0f}")
-            st.metric(t("滞销库存价值", "Dead Stock Value"), f"${health['dead_value']:,.0f}")
+    with tab2:
+        st.subheader(t("积压/促销处理", "Overstock & Promotion"))
+        overstock = health["overstock_items"].copy()
+        if len(overstock) == 0:
+            st.success(t("当前没有明显积压或滞销品。", "No obvious overstock or dead-stock items."))
+        else:
+            overstock = overstock.sort_values(["Months_Of_Cover", "Total_Value"], ascending=[False, False])
+            st.dataframe(overstock[[
+                "Item", "Category", "Stock", "Monthly_Sales", "Months_Of_Cover", "Total_Value", "MOQ", "Suggested_Action"
+            ]], use_container_width=True)
+            st.info(t(
+                "对高覆盖月数 SKU 暂停补货，并通过捆绑、折扣、退货或清仓释放现金。",
+                "Pause replenishment for high-cover SKUs and release cash through bundles, discounts, returns, or liquidation."
+            ))
 
-            dead_n = len(health["dead_items"])
-            stockout_n = len(health["stockout_items"])
-            if dead_n > 0:
-                st.warning(t(f"滞销品 {dead_n} 个：建议清仓/捆绑/退换货。", f"Dead stock {dead_n}: consider clearance/bundles/returns."))
-            if stockout_n > 0:
-                st.error(t(f"缺货风险 {stockout_n} 个：建议提高安全库存。", f"Stockout risk {stockout_n}: increase safety stock."))
-
-            st.markdown("#### " + t("本周动作清单（可勾选）", "This week’s action checklist"))
-            st.checkbox(t("清点滞销 Top 10 并制定清仓价", "Identify top 10 dead-stock SKUs and set clearance prices"))
-            st.checkbox(t("设置补货阈值（销量×交期×安全系数）", "Set replenishment thresholds (sales × lead time × safety factor)"))
-            st.checkbox(t("把库存周报发给负责人并约 15 分钟复盘", "Send weekly report and run a 15-min review"))
-
-    with tab_ops2:
-        pr = st.session_state.pricing
-        st.subheader(t("定价执行（从策略到动作）", "Pricing Execution (From strategy to actions)"))
-
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            pr["strategy"] = st.selectbox(
-                t("定价策略", "Strategy"),
-                ["Competitive", "Value-based", "Premium", "Penetration"],
-                index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"]),
-                key="ops_strategy"
-            )
-            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr["cost"]), step=1.0, key="ops_cost")
-            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr["competitor_price"]), step=1.0, key="ops_comp")
-        with col2:
-            pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]), key="ops_margin")
-            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                          index=["Low","Medium","High"].index(pr["elasticity"]), key="ops_elasticity")
-
-        rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
-        st.metric(t("建议价（简单）", "Suggested Price (simple)"), f"${rec_price:,.2f}")
-
-        st.markdown("#### " + t("执行规则（你可以按业务调整）", "Execution rules (tune per business)"))
-        st.write(t("- 若竞品价明显低于建议价：优先做捆绑/赠品，而不是硬降价。", "- If competitor is far lower: prefer bundles/freebies before cutting price."))
-        st.write(t("- 每周固定一天复盘：销量、毛利、投诉、缺货率。", "- Weekly review: sales, margin, complaints, stockout rate."))
-        st.write(t("- 促销触发：滞销>2个月 或 库存周转>目标两倍。", "- Promo triggers: dead-stock >2 months or turnover >2× target."))
-
-    with tab_ops3:
-        st.subheader(t("运营问诊（AI）", "Operations Advisor (AI)"))
-        q = st.text_area(
-            t("描述你的运营问题", "Describe your ops problem"),
-            placeholder=t("例如：库存占压严重，但又怕缺货；我该怎么设补货阈值？", "E.g., cash tied in inventory but afraid of stockouts. How should I set thresholds?")
+    with tab3:
+        st.subheader(t("AI 运营诊断", "AI Operations Diagnosis"))
+        default_q = t(
+            "请基于上传的库存数据，分析缺货风险、积压库存、现金占用，并给出7天行动计划。",
+            "Please analyze stockout risk, overstock, cash tied in inventory, and provide a 7-day action plan based on the uploaded inventory data."
         )
-        if st.button(t("获取建议", "Get advice"), type="primary"):
-            with st.spinner(t("分析中…", "Analyzing...")):
-                out = ask_ai(q, mode="operations")
-            st.session_state.outputs["ops_ai_output"] = out
-            st.markdown(out)
+        q = st.text_area(
+            t("描述你的运营问题", "Describe your operations problem"),
+            value=st.session_state.get("ops_question", default_q),
+            key="ops_question",
+            height=120
+        )
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            if st.button(t("运行运营诊断", "Run Operations Diagnosis"), type="primary", use_container_width=True):
+                with st.spinner(t("分析中…", "Analyzing...")):
+                    out = ai_operations_diagnosis(q)
+                st.session_state.outputs["ops_ai_output"] = out
+                st.session_state.outputs["ops_diagnosis_md"] = out
+                st.rerun()
+        with c2:
+            if st.button(t("清空诊断", "Clear Diagnosis"), use_container_width=True):
+                st.session_state.outputs["ops_ai_output"] = ""
+                st.session_state.outputs["ops_diagnosis_md"] = ""
+                st.rerun()
+
+        if st.session_state.outputs.get("ops_diagnosis_md", ""):
+            st.markdown(st.session_state.outputs["ops_diagnosis_md"])
 
     st.divider()
-    st.subheader(t("可交付物：运营报告（AI）", "Deliverable: Operations Report (AI)"))
-
+    st.subheader(t("可交付物：运营报告", "Deliverable: Operations Report"))
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button(t("生成运营报告", "Generate Ops Report"), type="primary", use_container_width=True):
+        if st.button(t("生成运营报告", "Generate Operations Report"), type="primary", use_container_width=True):
             with st.spinner(t("生成中…", "Generating...")):
                 st.session_state.outputs["ops_report_md"] = ai_report_operations()
             st.rerun()
     with col2:
-        if st.button(t("清空运营报告", "Clear Ops Report"), use_container_width=True):
+        if st.button(t("清空运营报告", "Clear Operations Report"), use_container_width=True):
             st.session_state.outputs["ops_report_md"] = ""
             st.rerun()
 
     if st.session_state.outputs.get("ops_report_md", ""):
-        st.text_area(t("运营报告预览", "Ops Report Preview"), st.session_state.outputs["ops_report_md"], height=520)
+        st.markdown(st.session_state.outputs["ops_report_md"])
         st.download_button(
             label=t("下载 operations_report.md", "Download operations_report.md"),
             data=st.session_state.outputs["ops_report_md"],

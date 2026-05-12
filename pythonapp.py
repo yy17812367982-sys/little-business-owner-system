@@ -324,6 +324,44 @@ div[data-testid="stDataFrame"] * {
 }
 
 
+/* =============================
+   Open Store segmented progress bar
+   ============================= */
+.open-step-wrap{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 18px 0;
+}
+.open-step-pill{
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.20);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  backdrop-filter: blur(10px);
+}
+.open-step-badge{
+  font-size: 14px;
+  line-height: 1;
+}
+.open-step-text{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.55);
+}
+@media (max-width: 760px){
+  .open-step-wrap{ grid-template-columns: 1fr; }
+  .open-step-pill{ justify-content: flex-start; }
+}
+
 </style>
 """,
     unsafe_allow_html=True
@@ -1642,19 +1680,43 @@ if st.session_state.show_top_chat and st.session_state.chat_history:
 # Suite 1: Open a Store
 # =========================================================
 def render_open_store():
-    # Keep legacy state safe if the user comes from an older 4-step version.
-    if st.session_state.open_step > 3:
-        st.session_state.open_step = 3
+    # Four-page workflow: Concept -> Location -> Budget/Pricing -> Decision/Report.
+    if st.session_state.open_step > 4:
+        st.session_state.open_step = 4
 
     st.header(t("开店可行性评估", "Open a Store Feasibility"))
 
     step_titles = [
-        t("概念与选址", "Concept & Location"),
-        t("预算与定价", "Budget & Pricing"),
-        t("结论与报告", "Decision & Report"),
+        t("业务概念", "Concept"),
+        t("选址地图", "Location"),
+        t("预算定价", "Budget & Pricing"),
+        t("结论报告", "Decision & Report"),
     ]
-    st.write(f"{t('步骤', 'Step')} {st.session_state.open_step}/3 — {step_titles[st.session_state.open_step-1]}")
-    st.progress(st.session_state.open_step / 3.0)
+    # Cute segmented progress bar: one colored segment per page, instead of a single continuous bar.
+    progress_colors = [
+        ("#38bdf8", "#075985"),  # blue: concept
+        ("#f59e0b", "#92400e"),  # amber: location
+        ("#a78bfa", "#4c1d95"),  # purple: budget/pricing
+        ("#34d399", "#064e3b"),  # green: decision/report
+    ]
+    progress_html = "<div class='open-step-wrap'>"
+    for i, title in enumerate(step_titles, start=1):
+        active = i <= st.session_state.open_step
+        current = i == st.session_state.open_step
+        bg, border = progress_colors[i-1]
+        if active:
+            style = f"background: linear-gradient(135deg, {bg}, {border}); border-color: rgba(255,255,255,0.45); color:#fff;"
+        else:
+            style = "background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.16); color: rgba(255,255,255,0.62);"
+        badge = "●" if current else "✓" if active else "○"
+        progress_html += f"""
+        <div class='open-step-pill' style='{style}'>
+            <span class='open-step-badge'>{badge}</span>
+            <span class='open-step-text'>{i}/4 · {title}</span>
+        </div>
+        """
+    progress_html += "</div>"
+    st.markdown(progress_html, unsafe_allow_html=True)
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
@@ -1664,15 +1726,15 @@ def render_open_store():
         else:
             st.button(t("◀ 上一步", "◀ Back"), use_container_width=True, disabled=True)
     with nav2:
-        if st.session_state.open_step < 3:
+        if st.session_state.open_step < 4:
             if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
-                st.session_state.open_step = min(3, st.session_state.open_step + 1)
+                st.session_state.open_step = min(4, st.session_state.open_step + 1)
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
     with nav3:
         st.caption(t(
-            "共 3 页：①概念与选址 → ②预算与定价 → ③结论与报告。第三页已经是最后一页，不再有隐藏的第 4 页。",
-            "3 pages total: ① Concept & Location → ② Budget & Pricing → ③ Decision & Report. Page 3 is the final page; there is no hidden Page 4."
+            "共 4 段：①业务概念 → ②选址地图 → ③预算定价 → ④结论报告。每段对应一个页面。",
+            "4 segments total: ① Concept → ② Location Map → ③ Budget & Pricing → ④ Decision & Report. Each segment matches one page."
         ))
 
     def show_location_map(lat, lon, label="Target Location"):
@@ -1738,22 +1800,20 @@ def render_open_store():
         except Exception:
             st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
 
-    # Page 1: Concept & Location
+    # Page 1: Concept
     if st.session_state.open_step == 1:
         p = st.session_state.profile
-        s = st.session_state.site
-        st.subheader(t("第 1 页：概念与选址", "Page 1: Concept & Location"))
+        st.subheader(t("第 1 页：业务概念", "Page 1: Business Concept"))
         st.markdown(
             "<div class='card'>" + t(
-                "这一页只问两个问题：你要开什么店？这个位置大概行不行？City 不再单独填写，避免和地址重复。",
-                "This page asks only two questions: what are you opening, and does the location roughly work? City is no longer a separate input to avoid duplicating the address."
+                "先讲清楚你要开什么店、卖给谁、凭什么赢。选址放到第 2 页，避免一页塞太满。",
+                "First define what you are opening, who you serve, and why customers would choose you. Location is on Page 2 to keep this page light."
             ) + "</div>",
             unsafe_allow_html=True
         )
 
-        left, right = st.columns([1, 1.25])
-        with left:
-            st.markdown("### " + t("业务概念", "Business Concept"))
+        col1, col2 = st.columns([1, 1])
+        with col1:
             p["business_type"] = st.selectbox(
                 t("业态", "Business Type"),
                 ["Coffee Shop", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"],
@@ -1763,48 +1823,59 @@ def render_open_store():
             )
             p["target_customer"] = st.text_input(
                 t("目标客户", "Target Customer"),
-                p.get("target_customer", "Local residents, office workers, tourists, and weekend shoppers")
+                p.get("target_customer", "Downtown office workers, tourists, students, and weekend visitors")
             )
+        with col2:
             p["differentiator"] = st.text_input(
                 t("差异化", "Differentiator"),
-                p.get("differentiator", "Fast specialty coffee + grab-and-go breakfast + local Texas-style snacks")
+                p.get("differentiator", "Fast specialty coffee, grab-and-go breakfast, and locally inspired snacks")
             )
             p["notes"] = st.text_area(
                 t("限制/备注（可选）", "Constraints / Notes (optional)"),
                 p.get("notes", ""),
-                placeholder=t("例如：只做早餐、缺少全职店长、房东给2个月免租等", "E.g., breakfast only, no full-time manager yet, two months free rent from landlord, etc.")
+                placeholder=t("例如：只做早餐、缺少全职店长、房东给2个月免租等", "E.g., breakfast only, no full-time manager yet, two months free rent from landlord, etc."),
+                height=140
             )
 
-        with right:
-            st.markdown("### " + t("选址快评", "Location Quick Check"))
+    # Page 2: Location Map
+    elif st.session_state.open_step == 2:
+        s = st.session_state.site
+        st.subheader(t("第 2 页：选址地图", "Page 2: Location Map"))
+        st.markdown(
+            "<div class='card'>" + t(
+                "这里只看选址是否大致成立：地址、客流、竞品、租金压力、停车/可达性。默认点已放到 Austin, Texas。",
+                "This page checks whether the location roughly works: address, traffic, competitors, rent pressure, and accessibility. Default location is Austin, Texas."
+            ) + "</div>",
+            unsafe_allow_html=True
+        )
+
+        left, right = st.columns([1, 1.35])
+        with left:
             s["address"] = st.text_input(
                 t("地址或商圈", "Address or Trade Area"),
                 s.get("address", DEFAULT_TEXAS_ADDRESS)
             )
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
-                s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
-                s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
-            with c2:
-                s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("rent_level", "Medium")))
-                s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("parking", "Medium")))
-                s["foot_traffic_source"] = st.selectbox(
-                    t("客流来源", "Foot Traffic Source"),
-                    ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
-                    index=["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
-                )
-
+            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
+            s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
+            s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
+            s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("rent_level", "Medium")))
+            s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("parking", "Medium")))
+            s["foot_traffic_source"] = st.selectbox(
+                t("客流来源", "Foot Traffic Source"),
+                ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
+                index=["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
+            )
             b1, b2 = st.columns([1, 1])
             with b1:
                 do_search = st.button("🔎 " + t("定位地址", "Locate Address"), use_container_width=True)
             with b2:
-                if st.button(t("重置德州默认点", "Reset Texas Default"), use_container_width=True):
+                if st.button(t("德州默认点", "Texas Default"), use_container_width=True):
                     s["address"] = DEFAULT_TEXAS_ADDRESS
                     s["lat"] = DEFAULT_TEXAS_LAT
                     s["lon"] = DEFAULT_TEXAS_LON
                     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
+        with right:
             if do_search:
                 query = (s.get("address") or "").strip()
                 cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
@@ -1845,12 +1916,12 @@ def render_open_store():
         else:
             st.success(t("当前选址输入下没有明显红旗。", "No major location red flags from current inputs."))
 
-    # Page 2: Budget & Pricing
-    elif st.session_state.open_step == 2:
+    # Page 3: Budget & Pricing
+    elif st.session_state.open_step == 3:
         p = st.session_state.profile
         launch = st.session_state.launch
         pr = st.session_state.pricing
-        st.subheader(t("第 2 页：预算与定价", "Page 2: Budget & Pricing"))
+        st.subheader(t("第 3 页：预算与定价", "Page 3: Budget & Pricing"))
         st.markdown(
             "<div class='card'>" + t(
                 "把细项合并成几个关键假设：启动成本、每月固定成本、预期收入、毛利率和代表性产品定价。别做成会计考试。",
@@ -1902,9 +1973,9 @@ def render_open_store():
         else:
             st.success(t("启动资金基本覆盖目标现金跑道。", "Available funding broadly covers the target cash runway."))
 
-    # Page 3: Decision & Report
+    # Page 4: Decision & Report
     else:
-        st.subheader(t("第 3 页：结论与报告", "Page 3: Decision & Report"))
+        st.subheader(t("第 4 页：结论与报告", "Page 4: Decision & Report"))
         m = open_store_feasibility_metrics()
         decision = m["decision"]
         decision_msg = {

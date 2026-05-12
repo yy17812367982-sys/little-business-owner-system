@@ -756,6 +756,14 @@ def estimate_traffic_proxy_overpass(lat: float, lon: float, radius_miles: float)
     return {"ok": True, "roads_count": cnt, "proxy_score": round(score, 2), "traffic_est": traffic_est, "debug": dbg}
 
 # =========================================================
+# Texas default location for Open a Store
+# =========================================================
+DEFAULT_TEXAS_ADDRESS = "1011 S Congress Ave, Austin, TX 78704"
+DEFAULT_TEXAS_LAT = 30.2516
+DEFAULT_TEXAS_LON = -97.7499
+DEFAULT_TEXAS_LABEL = "South Congress, Austin, TX"
+
+# =========================================================
 # State init
 # =========================================================
 if "active_suite" not in st.session_state:
@@ -778,25 +786,37 @@ if "profile" not in st.session_state:
         "business_type": "Coffee Shop",
         "stage": "Planning",
         "budget": 80000,
-        "target_customer": "Downtown workers, students, and neighborhood residents",
-        "differentiator": "Fast service + specialty drinks + reliable grab-and-go products",
+        "target_customer": "Local residents, office workers, tourists, and weekend shoppers",
+        "differentiator": "Fast specialty coffee + grab-and-go breakfast + local Texas-style snacks",
         "city": "Austin, Texas",
         "notes": ""
     }
 
 if "site" not in st.session_state:
     st.session_state.site = {
-        "address": "211 E 5th St, Austin, TX 78701",
+        "address": "1011 S Congress Ave, Austin, TX 78704",
         "radius_miles": 1.0,
-        "traffic": 26000,
-        "competitors": 9,
+        "traffic": 28000,
+        "competitors": 12,
         "parking": "Medium",
-        "rent_level": "Medium",
+        "rent_level": "High",
         "foot_traffic_source": "Mixed (Transit + Street)",
-        "lat": 30.2669,
-        "lon": -97.7404,
+        "lat": 30.2516,
+        "lon": -97.7499,
         "risk_flags": []
     }
+
+# If an older browser session still carries the old Flushing default, move it to the Texas default.
+_old_addr = str(st.session_state.site.get("address", "")).lower() if "site" in st.session_state else ""
+if ("flushing" in _old_addr) or ("39-01 main st" in _old_addr) or ("11354" in _old_addr):
+    st.session_state.site["address"] = DEFAULT_TEXAS_ADDRESS
+    st.session_state.site["lat"] = DEFAULT_TEXAS_LAT
+    st.session_state.site["lon"] = DEFAULT_TEXAS_LON
+    st.session_state.site["traffic"] = 28000
+    st.session_state.site["competitors"] = 12
+    st.session_state.site["rent_level"] = "High"
+    st.session_state.site["parking"] = "Medium"
+    st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
 if "inventory" not in st.session_state:
     st.session_state.inventory = {
@@ -1650,28 +1670,67 @@ def render_open_store():
         ))
 
     def show_location_map(lat, lon, label="Target Location"):
-        """Show a cleaner Texas-centered location map with a graceful fallback."""
+        """Show a cleaner, darker Texas-centered location map with graceful fallback."""
+        lat = float(lat)
+        lon = float(lon)
+        label = label or DEFAULT_TEXAS_LABEL
         try:
             import pydeck as pdk
-            df = pd.DataFrame([{"lat": float(lat), "lon": float(lon), "label": label}])
-            layer = pdk.Layer(
+            df = pd.DataFrame([{
+                "lat": lat,
+                "lon": lon,
+                "label": label,
+                "radius": 95,
+            }])
+
+            point_layer = pdk.Layer(
                 "ScatterplotLayer",
                 data=df,
                 get_position="[lon, lat]",
-                get_radius=140,
-                get_fill_color=[255, 90, 90, 180],
+                get_radius="radius",
+                get_fill_color=[37, 99, 235, 210],
+                get_line_color=[255, 255, 255, 230],
+                line_width_min_pixels=2,
                 pickable=True,
             )
-            view_state = pdk.ViewState(latitude=float(lat), longitude=float(lon), zoom=13, pitch=35)
+            halo_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df,
+                get_position="[lon, lat]",
+                get_radius=420,
+                get_fill_color=[37, 99, 235, 45],
+                get_line_color=[125, 211, 252, 120],
+                line_width_min_pixels=1,
+                pickable=False,
+            )
+            text_layer = pdk.Layer(
+                "TextLayer",
+                data=df,
+                get_position="[lon, lat]",
+                get_text="label",
+                get_size=14,
+                get_color=[255, 255, 255, 230],
+                get_angle=0,
+                get_alignment_baseline="bottom",
+                get_pixel_offset=[0, -22],
+            )
+
+            view_state = pdk.ViewState(
+                latitude=lat,
+                longitude=lon,
+                zoom=14,
+                pitch=42,
+                bearing=-12,
+            )
             deck = pdk.Deck(
-                layers=[layer],
+                layers=[halo_layer, point_layer, text_layer],
                 initial_view_state=view_state,
                 tooltip={"text": "{label}"},
-                map_style="mapbox://styles/mapbox/dark-v10",
+                map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
             )
-            st.pydeck_chart(deck, use_container_width=True)
+            st.pydeck_chart(deck, use_container_width=True, height=360)
         except Exception:
-            st.map(pd.DataFrame({"lat": [float(lat)], "lon": [float(lon)]}), zoom=13)
+            st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
 
     # Page 1: Concept & Location
     if st.session_state.open_step == 1:
@@ -1698,11 +1757,11 @@ def render_open_store():
             )
             p["target_customer"] = st.text_input(
                 t("目标客户", "Target Customer"),
-                p.get("target_customer", "Downtown workers, students, and neighborhood residents")
+                p.get("target_customer", "Local residents, office workers, tourists, and weekend shoppers")
             )
             p["differentiator"] = st.text_input(
                 t("差异化", "Differentiator"),
-                p.get("differentiator", "Fast service + specialty drinks + reliable grab-and-go products")
+                p.get("differentiator", "Fast specialty coffee + grab-and-go breakfast + local Texas-style snacks")
             )
             p["notes"] = st.text_area(
                 t("限制/备注（可选）", "Constraints / Notes (optional)"),
@@ -1714,7 +1773,7 @@ def render_open_store():
             st.markdown("### " + t("选址快评", "Location Quick Check"))
             s["address"] = st.text_input(
                 t("地址或商圈", "Address or Trade Area"),
-                s.get("address", "211 E 5th St, Austin, TX 78701")
+                s.get("address", DEFAULT_TEXAS_ADDRESS)
             )
             c1, c2 = st.columns([1, 1])
             with c1:
@@ -1735,9 +1794,9 @@ def render_open_store():
                 do_search = st.button("🔎 " + t("定位地址", "Locate Address"), use_container_width=True)
             with b2:
                 if st.button(t("重置德州默认点", "Reset Texas Default"), use_container_width=True):
-                    s["address"] = "211 E 5th St, Austin, TX 78701"
-                    s["lat"] = 30.2669
-                    s["lon"] = -97.7404
+                    s["address"] = DEFAULT_TEXAS_ADDRESS
+                    s["lat"] = DEFAULT_TEXAS_LAT
+                    s["lon"] = DEFAULT_TEXAS_LON
                     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
             if do_search:
@@ -1756,8 +1815,8 @@ def render_open_store():
             elif geo.get("status") == "fail":
                 st.warning(t("地址未定位成功。可继续使用手工指标完成判断。", "Address was not located. You can still proceed using manual metrics."))
 
-            lat = float(s.get("lat", 30.2669) or 30.2669)
-            lon = float(s.get("lon", -97.7404) or -97.7404)
+            lat = float(s.get("lat", DEFAULT_TEXAS_LAT) or DEFAULT_TEXAS_LAT)
+            lon = float(s.get("lon", DEFAULT_TEXAS_LON) or DEFAULT_TEXAS_LON)
             show_location_map(lat, lon, s.get("address", "Target Location"))
 
         score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])

@@ -1366,7 +1366,7 @@ def render_open_store():
                                      placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
 
         rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
-        st.metric(t("推荐价格（简单计算）", "Recommended Price (simple)"), f"${rec_price:,.2f}")
+        st.metric(t("推荐价格（简单计算）", "Recommended Price "), f"${rec_price:,.2f}")
 
         st.divider()
         st.subheader(t("最终输出（结论/证据/行动/风控）", "Final Output (Conclusion/Evidence/Actions/Risk)"))

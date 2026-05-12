@@ -1531,7 +1531,7 @@ with st.sidebar:
     new_suite = mapping[suite_label]
     if new_suite != st.session_state.active_suite:
         st.session_state.active_suite = new_suite
-        st.rerun()
+        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     st.markdown("---")
     st.image("https://cdn-icons-png.flaticon.com/512/2362/2362378.png", width=48)
@@ -1547,7 +1547,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.7 Operations Control Center + Finance Engine + Geocoding + Overpass")
+    st.caption("v5.9 No Forced Rerun + Operations Control Center + Finance Engine + Geocoding + Overpass")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1600,26 +1600,26 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
             st.session_state.top_last_status = "ready"
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
     with c1:
         if st.button(t("展示", "Show"), use_container_width=True):
             st.session_state.show_top_chat = True
             st.session_state.top_chat_collapsed = False
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with c2:
         if st.button(t("收起", "Hide"), use_container_width=True):
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with c3:
         if st.button(t("清空", "Clear"), use_container_width=True):
             st.session_state.chat_history = []
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
             st.session_state.top_last_status = ""
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with c4:
         if st.session_state.top_last_status == "ready":
             st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
@@ -1663,11 +1663,11 @@ def render_open_store():
     with nav1:
         if st.button(t("◀ 上一步", "◀ Back"), use_container_width=True):
             st.session_state.open_step = max(1, st.session_state.open_step - 1)
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with nav2:
         if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
             st.session_state.open_step = min(4, st.session_state.open_step + 1)
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with nav3:
         st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
                      "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
@@ -1743,7 +1743,7 @@ def render_open_store():
                 s.pop("lon", None)
                 s.pop("competitors_debug", None)
                 s.pop("traffic_debug", None)
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
             if do_search:
                 query = (s.get("address") or "").strip()
@@ -1752,7 +1752,7 @@ def render_open_store():
                 st.session_state.site_geo["debug"] = dbg
                 st.session_state.site_geo["status"] = "ok" if cands else "fail"
                 st.session_state.site_geo["picked_idx"] = 0
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
             geo = st.session_state.site_geo
             cands = geo.get("cands", []) or []
@@ -1789,7 +1789,7 @@ def render_open_store():
 
                 if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
                     s["address"] = chosen.get("display_name", s["address"])
-                    st.rerun()
+                    # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
                 st.divider()
                 e1, e2 = st.columns([1, 1])
@@ -1815,13 +1815,13 @@ def render_open_store():
                             st.warning(t("交通自动估算失败（Overpass 不稳定/限流很常见），已保留你手动输入的数值。",
                                          "Traffic auto-estimation failed (Overpass is often rate-limited). Keeping your manual value."))
 
-                        st.rerun()
+                        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
                 with e2:
                     if st.button(t("清空估算结果", "Clear estimates"), use_container_width=True):
                         s.pop("competitors_debug", None)
                         s.pop("traffic_debug", None)
-                        st.rerun()
+                        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
             with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
                 st.write(geo.get("debug", {}))
@@ -1876,13 +1876,13 @@ def render_open_store():
                     "Monthly_Sales": [40, 5, 25, 6, 15]
                 }
                 inv["df"] = pd.DataFrame(data)
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
         with cB:
             uploaded = st.file_uploader(t("上传 CSV（Item,Stock,Cost,Monthly_Sales）", "Upload CSV (Item,Stock,Cost,Monthly_Sales)"),
                                         type=["csv"])
             if uploaded is not None:
                 inv["df"] = pd.read_csv(uploaded)
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
         if inv["df"] is None:
             st.info(t("请先加载示例数据或上传 CSV。", "Load sample data or upload a CSV to continue."))
@@ -1997,12 +1997,12 @@ target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['
                 with st.spinner(t("生成报告中…", "Generating report...")):
                     report_md = ai_report_open_store()
                 st.session_state.outputs["open_store_report_md"] = report_md
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
         with colC:
             st.caption(t("说明：报告会基于你前面选择的业务画像/选址/库存/定价生成，不依赖你是否点过“最终分析”。",
@@ -2067,7 +2067,7 @@ def render_operations():
             inv["df"] = pd.DataFrame(sample_data)
             st.session_state.outputs["ops_ai_output"] = ""
             st.session_state.outputs["ops_diagnosis_md"] = ""
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     with colB:
         uploaded = st.file_uploader(
@@ -2081,7 +2081,7 @@ def render_operations():
                 st.session_state.outputs["ops_ai_output"] = ""
                 st.session_state.outputs["ops_diagnosis_md"] = ""
                 st.success(t("已读取 CSV。", "CSV loaded."))
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
             except Exception as e:
                 st.error(t(f"CSV 读取失败：{e}", f"Failed to read CSV: {e}"))
 
@@ -2091,7 +2091,7 @@ def render_operations():
             st.session_state.outputs["ops_ai_output"] = ""
             st.session_state.outputs["ops_report_md"] = ""
             st.session_state.outputs["ops_diagnosis_md"] = ""
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     if inv.get("df") is None:
         st.info(t("请先加载示例数据或上传 CSV。", "Load sample data or upload a CSV first."))
@@ -2184,12 +2184,12 @@ def render_operations():
                     out = ai_operations_diagnosis(q)
                 st.session_state.outputs["ops_ai_output"] = out
                 st.session_state.outputs["ops_diagnosis_md"] = out
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
         with c2:
             if st.button(t("清空诊断", "Clear Diagnosis"), use_container_width=True):
                 st.session_state.outputs["ops_ai_output"] = ""
                 st.session_state.outputs["ops_diagnosis_md"] = ""
-                st.rerun()
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
         if st.session_state.outputs.get("ops_diagnosis_md", ""):
             st.markdown(st.session_state.outputs["ops_diagnosis_md"])
@@ -2201,11 +2201,11 @@ def render_operations():
         if st.button(t("生成运营报告", "Generate Operations Report"), type="primary", use_container_width=True):
             with st.spinner(t("生成中…", "Generating...")):
                 st.session_state.outputs["ops_report_md"] = ai_report_operations()
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with col2:
         if st.button(t("清空运营报告", "Clear Operations Report"), use_container_width=True):
             st.session_state.outputs["ops_report_md"] = ""
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     if st.session_state.outputs.get("ops_report_md", ""):
         st.markdown(st.session_state.outputs["ops_report_md"])
@@ -2329,12 +2329,12 @@ Return:
                     style=style,
                     question=question
                 )
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     with colB:
         if st.button(t("清空财务报告", "Clear Finance Report"), use_container_width=True):
             st.session_state.outputs["finance_report_md"] = ""
-            st.rerun()
+            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     if st.session_state.outputs.get("finance_report_md", ""):
         st.text_area(t("财务报告预览", "Finance Report Preview"), st.session_state.outputs["finance_report_md"], height=520)

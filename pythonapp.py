@@ -1032,7 +1032,37 @@ def open_store_feasibility_metrics() -> dict:
     }
 
 
-def ai_report_open_store() -> str:
+
+
+def clean_currency_for_markdown(text: str) -> str:
+    """
+    Normalize AI output so Streamlit Markdown does not interpret dollar amounts as LaTeX.
+    Also soften over-strong legal/accounting terms for SME demo use.
+    """
+    if text is None:
+        return ""
+    text = str(text)
+
+    # Convert common dollar patterns to USD-prefixed amounts.
+    # Examples: $803,500 -> USD 803,500; ($86,300) -> (USD 86,300)
+    text = re.sub(r"\$\s*([-+]?\d[\d,]*(?:\.\d+)?)", r"USD \1", text)
+    text = re.sub(r"USD\s+USD\s+", "USD ", text)
+
+    # Avoid unsupported hard legal/accounting labels in simple SME demo reports.
+    replacements = {
+        "Insolvency Crisis": "Critical Liquidity Risk",
+        "Insolvency Risk": "Severe Liquidity Risk",
+        "insolvency crisis": "critical liquidity risk",
+        "insolvency risk": "severe liquidity risk",
+        "bankruptcy": "severe liquidity pressure",
+        "Bankruptcy": "Severe Liquidity Pressure",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return text
+
+def ai_report_open_store(user_question: str = "") -> str:
     p = st.session_state.profile
     s = st.session_state.site
     launch = st.session_state.launch
@@ -1071,6 +1101,9 @@ Use a table: Business Concept / Location / Launch Budget / Pricing Assumptions.
 
 ## 5) 30-Day Pre-Launch Action Plan
 10 bullets. Each bullet must be executable and include timing or target.
+
+User question or focus:
+{user_question.strip() if user_question and user_question.strip() else "Please evaluate whether this store should be opened, identify the biggest risks, and provide a pre-launch action plan."}
 
 Inputs:
 Business Concept: {p}
@@ -1843,11 +1876,25 @@ def render_open_store():
 
         st.divider()
         st.subheader(t("AI 开店决策报告", "AI Launch Decision Report"))
+        st.caption(t(
+            "你可以让 AI 围绕一个具体问题生成报告；它会结合前两页的选址、预算、现金跑道和定价假设。",
+            "Ask the AI to analyze a specific launch question; it will use the location, budget, cash runway, and pricing assumptions from the previous pages."
+        ))
+        default_launch_q = (
+            "Please evaluate whether I should open this store, identify the biggest risks, "
+            "and give me a pre-launch action plan."
+        )
+        open_store_question = st.text_area(
+            t("测试问题 / 分析重点", "Test question / analysis focus"),
+            value=st.session_state.get("open_store_question", default_launch_q),
+            key="open_store_question",
+            height=120
+        )
         colA, colB = st.columns([1, 1])
         with colA:
             if st.button(t("生成开店决策报告", "Generate Launch Decision Report"), type="primary", use_container_width=True):
                 with st.spinner(t("生成报告中…", "Generating report...")):
-                    st.session_state.outputs["open_store_report_md"] = ai_report_open_store()
+                    st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""

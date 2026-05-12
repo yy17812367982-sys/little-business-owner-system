@@ -815,6 +815,28 @@ if "pricing" not in st.session_state:
         "notes": ""
     }
 
+# Open-a-store launch feasibility inputs.
+# This is intentionally lighter than the Operations and Finance suites:
+# the goal is pre-launch go/no-go feasibility, not post-launch inventory or financial statement analysis.
+if "launch" not in st.session_state:
+    st.session_state.launch = {
+        "buildout_cost": 22000.0,
+        "licenses_deposits": 8000.0,
+        "equipment_cost": 12000.0,
+        "initial_inventory_budget": 15000.0,
+        "launch_marketing_budget": 5000.0,
+        "monthly_rent": 9500.0,
+        "monthly_payroll": 12000.0,
+        "monthly_utilities": 1800.0,
+        "monthly_insurance": 700.0,
+        "other_monthly_fixed": 2500.0,
+        "expected_monthly_revenue": 52000.0,
+        "expected_gross_margin": 62,
+        "cash_target_months": 3,
+        "funding_available": 80000.0,
+        "notes": ""
+    }
+
 if "outputs" not in st.session_state:
     st.session_state.outputs = {
         "final_open_store": None,
@@ -871,274 +893,181 @@ def inventory_health(df: pd.DataFrame) -> dict:
         "dead_value": dead_value
     }
 
-def ai_report_open_store() -> str:
+def open_store_feasibility_metrics() -> dict:
+    """Compute pre-launch feasibility metrics for the Open a Store suite."""
     p = st.session_state.profile
     s = st.session_state.site
-    inv = st.session_state.inventory
+    launch = st.session_state.launch
     pr = st.session_state.pricing
 
-    inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
-    inv_df = inv.get("df", None)
+    budget = float(p.get("budget", 0) or 0)
+    funding_available = float(launch.get("funding_available", budget) or budget)
 
-    site_score = score_from_inputs_site(s["traffic"], s["competitors"], s["rent_level"], s["parking"])
-    rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
-
-    prompt = f"""
-You are producing a professional decision report for an SME owner.
-Output MUST be Markdown.
-
-Use ONLY the provided inputs; do not assume outside data.
-
-Report structure:
-# Open-Store Decision Report
-## 1) Executive Summary (3 bullets)
-- Include Overall Score (0-100) and Confidence (Low/Med/High)
-
-## 2) Key Inputs (table)
-- Business, Site, Inventory/Cash, Pricing
-
-## 3) Analysis
-### Site viability
-- cite traffic/competitors/rent/parking + computed site_score={site_score}
-
-### Inventory & cash
-- cite cash_target_days, lead_time_days, seasonality, inventory snapshot
-
-### Pricing
-- cite strategy, cost, competitor_price, target_margin, elasticity
-- include recommended price = {rec_price:.2f}
-
-## 4) Action Plan (10 bullets)
-Group by Site / Inventory&Cash / Pricing.
-Each bullet must include a metric/target or concrete next step.
-
-## 5) Risks & Controls (6 bullets)
-Each bullet must map to an input risk or an operational control.
-
-Inputs:
-Business: {p}
-Site: {s}
-Inventory: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supplier_lead_time_days']}, seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
-Inventory snapshot: {inv_snapshot}
-Inventory table:
-{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
-
-Pricing: {pr}
-"""
-    return ask_ai(prompt, mode="open_store")
-
-def clean_currency_for_markdown(text: str) -> str:
-    """Prevent Markdown math rendering by replacing dollar signs in AI output."""
-    if not isinstance(text, str):
-        return text
-    return text.replace("$", "USD ")
-
-
-def _ops_required_columns_present(df: pd.DataFrame) -> bool:
-    cols = {str(c).strip() for c in df.columns}
-    return {"Item", "Stock", "Cost", "Monthly_Sales"}.issubset(cols)
-
-
-def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize uploaded operations inventory data.
-    Required columns: Item, Stock, Cost, Monthly_Sales
-    Optional columns: Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier
-    """
-    df2 = df.copy()
-    df2.columns = [str(c).strip() for c in df2.columns]
-
-    required = ["Item", "Stock", "Cost", "Monthly_Sales"]
-    missing = [c for c in required if c not in df2.columns]
-    if missing:
-        raise ValueError(f"Missing required columns: {', '.join(missing)}")
-
-    for col in ["Stock", "Cost", "Monthly_Sales"]:
-        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
-
-    if "Category" not in df2.columns:
-        df2["Category"] = "General"
-    if "Lead_Time_Days" not in df2.columns:
-        df2["Lead_Time_Days"] = 7
-    if "MOQ" not in df2.columns:
-        df2["MOQ"] = 1
-    if "Shelf_Life_Days" not in df2.columns:
-        df2["Shelf_Life_Days"] = 365
-    if "Supplier" not in df2.columns:
-        df2["Supplier"] = "Not provided"
-
-    for col in ["Lead_Time_Days", "MOQ", "Shelf_Life_Days"]:
-        df2[col] = pd.to_numeric(df2[col], errors="coerce").fillna(0)
-
-    df2["Item"] = df2["Item"].astype(str)
-    df2["Category"] = df2["Category"].astype(str)
-    df2["Supplier"] = df2["Supplier"].astype(str)
-    return df2
-
-
-def operations_inventory_health(df: pd.DataFrame) -> dict:
-    """Compute operational inventory diagnostics for SMEs."""
-    df2 = normalize_inventory_df(df)
-    df2["Total_Value"] = df2["Stock"] * df2["Cost"]
-    df2["Daily_Sales"] = df2["Monthly_Sales"] / 30.0
-    df2["Months_Of_Cover"] = np.where(df2["Monthly_Sales"] > 0, df2["Stock"] / df2["Monthly_Sales"], np.inf)
-    df2["Days_Of_Cover"] = df2["Months_Of_Cover"] * 30.0
-    df2["Reorder_Point"] = np.ceil(df2["Daily_Sales"] * df2["Lead_Time_Days"] * 1.30)
-    df2["Suggested_Order_Qty"] = np.maximum(np.ceil(df2["Reorder_Point"] + df2["Monthly_Sales"] * 0.50 - df2["Stock"]), 0)
-    df2["Suggested_Order_Qty"] = np.where(
-        (df2["Suggested_Order_Qty"] > 0) & (df2["MOQ"] > 1),
-        np.ceil(df2["Suggested_Order_Qty"] / df2["MOQ"]) * df2["MOQ"],
-        df2["Suggested_Order_Qty"]
-    )
-    df2["Suggested_Order_Value"] = df2["Suggested_Order_Qty"] * df2["Cost"]
-
-    def classify(row):
-        if row["Monthly_Sales"] <= 0:
-            return "No Sales / Review"
-        if row["Stock"] <= row["Reorder_Point"] or row["Months_Of_Cover"] < 1.0:
-            return "Stockout Risk"
-        if row["Months_Of_Cover"] >= 6.0:
-            return "Dead / Overstock"
-        if row["Months_Of_Cover"] >= 4.0:
-            return "Overstock"
-        if row["Months_Of_Cover"] < 2.0:
-            return "Watchlist"
-        return "Healthy"
-
-    def action(row):
-        status = row["Status"]
-        if status == "Stockout Risk":
-            return "Reorder immediately; raise safety stock and review supplier lead time."
-        if status == "Watchlist":
-            return "Monitor weekly; prepare reorder if demand continues."
-        if status == "Overstock":
-            return "Pause reorder; use bundles or targeted promotion."
-        if status == "Dead / Overstock":
-            return "Stop reorder; discount, bundle, return to vendor, or liquidate."
-        if status == "No Sales / Review":
-            return "Check listing, shelf placement, demand, and discontinuation options."
-        return "Maintain normal replenishment rule."
-
-    df2["Status"] = df2.apply(classify, axis=1)
-    df2["Suggested_Action"] = df2.apply(action, axis=1)
-    df2["Perishable_Risk"] = np.where(
-        (df2["Shelf_Life_Days"] > 0) & (df2["Shelf_Life_Days"] <= 21) & (df2["Days_Of_Cover"] > df2["Shelf_Life_Days"]),
-        "Perishable Waste Risk",
-        ""
+    startup_cost = (
+        float(launch.get("buildout_cost", 0) or 0)
+        + float(launch.get("licenses_deposits", 0) or 0)
+        + float(launch.get("equipment_cost", 0) or 0)
+        + float(launch.get("initial_inventory_budget", 0) or 0)
+        + float(launch.get("launch_marketing_budget", 0) or 0)
     )
 
-    stockout = df2[df2["Status"].eq("Stockout Risk")].copy()
-    watchlist = df2[df2["Status"].eq("Watchlist")].copy()
-    overstock = df2[df2["Status"].isin(["Overstock", "Dead / Overstock", "No Sales / Review"])].copy()
-    perishable = df2[df2["Perishable_Risk"].ne("")].copy()
-
-    total_value = float(df2["Total_Value"].sum())
-    slow_value = float(overstock["Total_Value"].sum()) if len(overstock) else 0.0
-    stockout_order_value = float(stockout["Suggested_Order_Value"].sum()) if len(stockout) else 0.0
-    avg_moc = float(df2.replace([np.inf, -np.inf], np.nan)["Months_Of_Cover"].mean()) if len(df2) else 0.0
-
-    summary = (
-        f"Total inventory value: USD {total_value:,.0f}; "
-        f"slow-moving/overstock value: USD {slow_value:,.0f}; "
-        f"stockout-risk items: {len(stockout)}; "
-        f"watchlist items: {len(watchlist)}; "
-        f"overstock/dead items: {len(overstock)}; "
-        f"perishable-risk items: {len(perishable)}; "
-        f"average months of cover: {avg_moc:.2f}; "
-        f"suggested immediate reorder value: USD {stockout_order_value:,.0f}."
+    monthly_fixed_cost = (
+        float(launch.get("monthly_rent", 0) or 0)
+        + float(launch.get("monthly_payroll", 0) or 0)
+        + float(launch.get("monthly_utilities", 0) or 0)
+        + float(launch.get("monthly_insurance", 0) or 0)
+        + float(launch.get("other_monthly_fixed", 0) or 0)
     )
+
+    remaining_cash = funding_available - startup_cost
+    runway_months = remaining_cash / monthly_fixed_cost if monthly_fixed_cost > 0 else np.inf
+    target_cash_need = monthly_fixed_cost * float(launch.get("cash_target_months", 3) or 3)
+    funding_gap = max(0.0, startup_cost + target_cash_need - funding_available)
+
+    expected_revenue = float(launch.get("expected_monthly_revenue", 0) or 0)
+    expected_gm = float(launch.get("expected_gross_margin", 0) or 0) / 100.0
+    contribution_profit = expected_revenue * expected_gm
+    monthly_profit_after_fixed = contribution_profit - monthly_fixed_cost
+    breakeven_revenue = monthly_fixed_cost / expected_gm if expected_gm > 0 else np.inf
+
+    site_score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
+
+    # Pricing sanity check
+    cost = float(pr.get("cost", 0) or 0)
+    competitor_price = float(pr.get("competitor_price", 0) or 0)
+    target_margin_pct = float(pr.get("target_margin", 0) or 0)
+    recommended_price = cost * (1 + target_margin_pct / 100.0)
+    planned_price = recommended_price
+    implied_margin = (planned_price - cost) / planned_price if planned_price > 0 else 0.0
+    price_vs_competitor = (planned_price - competitor_price) / competitor_price if competitor_price > 0 else 0.0
+
+    # Scores: deliberately simple and explainable for a pre-launch decision.
+    cash_score = 100
+    if runway_months < 1:
+        cash_score = 20
+    elif runway_months < 2:
+        cash_score = 45
+    elif runway_months < float(launch.get("cash_target_months", 3) or 3):
+        cash_score = 65
+    else:
+        cash_score = 85
+    if funding_gap > 0:
+        cash_score = max(15, cash_score - 20)
+
+    margin_score = 50
+    if monthly_profit_after_fixed > 0 and expected_gm >= 0.55:
+        margin_score = 85
+    elif monthly_profit_after_fixed > 0:
+        margin_score = 70
+    elif expected_gm >= 0.55:
+        margin_score = 55
+    else:
+        margin_score = 35
+
+    competition_score = 80
+    competitors = int(s.get("competitors", 0) or 0)
+    if competitors > 20:
+        competition_score = 35
+    elif competitors > 12:
+        competition_score = 55
+    elif competitors > 6:
+        competition_score = 70
+
+    overall_score = int(round(site_score * 0.35 + cash_score * 0.35 + margin_score * 0.20 + competition_score * 0.10))
+    if overall_score >= 75 and funding_gap <= 0 and monthly_profit_after_fixed >= 0:
+        decision = "GO"
+    elif overall_score >= 55:
+        decision = "CAUTION"
+    else:
+        decision = "NO-GO"
+
+    risks = []
+    if funding_gap > 0:
+        risks.append(f"Funding gap of USD {funding_gap:,.0f} against target cash runway")
+    if runway_months < float(launch.get("cash_target_months", 3) or 3):
+        risks.append(f"Cash runway is {runway_months:.1f} months, below the target of {launch.get('cash_target_months', 3)} months")
+    if monthly_profit_after_fixed < 0:
+        risks.append(f"Expected monthly gross profit does not cover fixed costs; estimated shortfall is USD {abs(monthly_profit_after_fixed):,.0f}/month")
+    if s.get("rent_level") == "High":
+        risks.append("Rent level is marked High, increasing break-even pressure")
+    if competitors > 12:
+        risks.append(f"Competitive density is high with {competitors} competitors in the selected radius")
+    if price_vs_competitor > 0.10:
+        risks.append(f"Recommended price is {price_vs_competitor:.1%} above competitor price")
 
     return {
-        "df2": df2,
-        "total_value": total_value,
-        "slow_value": slow_value,
-        "stockout_order_value": stockout_order_value,
-        "avg_months_of_cover": avg_moc,
-        "stockout_items": stockout,
-        "watchlist_items": watchlist,
-        "overstock_items": overstock,
-        "perishable_items": perishable,
-        "summary": summary,
+        "startup_cost": startup_cost,
+        "monthly_fixed_cost": monthly_fixed_cost,
+        "remaining_cash": remaining_cash,
+        "runway_months": runway_months,
+        "target_cash_need": target_cash_need,
+        "funding_gap": funding_gap,
+        "expected_revenue": expected_revenue,
+        "expected_gross_margin_pct": expected_gm * 100,
+        "contribution_profit": contribution_profit,
+        "monthly_profit_after_fixed": monthly_profit_after_fixed,
+        "breakeven_revenue": breakeven_revenue,
+        "site_score": site_score,
+        "cash_score": cash_score,
+        "margin_score": margin_score,
+        "competition_score": competition_score,
+        "overall_score": overall_score,
+        "decision": decision,
+        "recommended_price": recommended_price,
+        "implied_margin_pct": implied_margin * 100,
+        "price_vs_competitor_pct": price_vs_competitor * 100,
+        "risks": risks,
     }
 
 
-def build_operations_context() -> str:
-    inv = st.session_state.inventory
-    inv_df = inv.get("df")
-    if not isinstance(inv_df, pd.DataFrame):
-        return "No inventory data has been uploaded or loaded."
+def ai_report_open_store() -> str:
+    p = st.session_state.profile
+    s = st.session_state.site
+    launch = st.session_state.launch
+    pr = st.session_state.pricing
+    m = open_store_feasibility_metrics()
 
-    try:
-        health = operations_inventory_health(inv_df)
-        df2 = health["df2"]
-        display_cols = [
-            "Item", "Category", "Stock", "Monthly_Sales", "Cost", "Total_Value",
-            "Months_Of_Cover", "Lead_Time_Days", "MOQ", "Shelf_Life_Days",
-            "Reorder_Point", "Suggested_Order_Qty", "Status", "Perishable_Risk", "Suggested_Action"
-        ]
-        display_cols = [c for c in display_cols if c in df2.columns]
-        return f"""
-Operations inventory summary:
-{health['summary']}
-
-Detailed inventory diagnostics:
-{df2[display_cols].to_string(index=False)}
-"""
-    except Exception as e:
-        return f"Inventory data is present but could not be analyzed: {e}"
-
-
-def ai_operations_diagnosis(user_question: str = "") -> str:
-    context = build_operations_context()
     prompt = f"""
-You are Yangyu's AI assistant for SME operations management.
+You are producing a professional pre-launch feasibility report for a U.S. small business owner.
 Output MUST be Markdown.
 
-Rules:
-- Use the uploaded inventory diagnostics as the primary evidence.
-- Every key finding must cite item names and actual numbers where available.
-- Do NOT invent sales, costs, suppliers, spoilage, customer behavior, or demand channels.
-- If a metric is unavailable, write "Not available from uploaded data."
-- Do NOT use dollar signs. Use "USD" before amounts.
-- Focus on operations, not generic business strategy.
-- Distinguish stockout risk from overstock risk.
-
-User question:
-{user_question if user_question.strip() else 'Please run a full operations diagnosis.'}
-
-Uploaded data and computed operations diagnostics:
-{context}
+Important rules:
+- This is a PRE-LAUNCH decision report, not an operations report and not a full financial statement analysis.
+- Use only the provided inputs and computed metrics.
+- Do not use dollar signs. Use "USD" before amounts to avoid Markdown rendering issues.
+- Do not overstate risk. Use "GO", "CAUTION", or "NO-GO" as the launch decision.
+- Every key finding must cite at least one specific input or computed number.
 
 Report structure:
-# Operations Diagnosis
+# Open-Store Feasibility Report
+## 1) Launch Decision
+- Decision: GO / CAUTION / NO-GO
+- Overall Score, Site Score, Cash Score, Margin Score
+- 3 concise reasons
 
-## 1) Executive Summary
-- 5 bullets.
-- Each bullet must include an actual item, count, value, or months-of-cover number.
+## 2) Key Inputs
+Use a table: Business Concept / Location / Launch Budget / Pricing Assumptions.
 
-## 2) Inventory Health Dashboard
-Metric | Actual Result | Interpretation
-Include total inventory value, slow-moving value, stockout-risk count, overstock/dead count, perishable-risk count, average months of cover, and suggested immediate reorder value when available.
+## 3) Feasibility Analysis
+### Location Feasibility
+### Launch Budget & Cash Runway
+### Margin and Break-even
+### Pricing Sanity Check
 
-## 3) Replenishment Priority
-Item | Status | Months of Cover | Suggested Order Qty | Suggested Action
-List the most urgent stockout/watchlist items first.
+## 4) Pre-Launch Risk Controls
+6 bullets with owner + metric/target.
 
-## 4) Overstock / Cash-Tied Items
-Item | Stock | Monthly Sales | Months of Cover | Cash Tied | Action
-List slow-moving or dead-stock items.
+## 5) 30-Day Pre-Launch Action Plan
+10 bullets. Each bullet must be executable and include timing or target.
 
-## 5) 7-Day Action Plan
-- 10 owner-executable actions.
-- Each action must include owner + metric/target + timing.
-
-## 6) 30-Day Operating Controls
-- Replenishment rule, promotion rule, waste log, supplier review, weekly review rhythm.
-
-## 7) Follow-up Questions
-- 5 questions that would materially improve the analysis.
+Inputs:
+Business Concept: {p}
+Location: {s}
+Launch Budget Inputs: {launch}
+Pricing Inputs: {pr}
+Computed Metrics: {m}
 """
-    return clean_currency_for_markdown(ask_ai(prompt, mode="operations"))
+    return clean_currency_for_markdown(ask_ai(prompt, mode="open_store"))
 
 
 def ai_report_operations() -> str:
@@ -1547,7 +1476,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.9 No Forced Rerun + Operations Control Center + Finance Engine + Geocoding + Overpass")
+    st.caption("v6.0 Simplified Open-Store Feasibility + Operations Control Center + Finance Engine")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1648,13 +1577,13 @@ if st.session_state.show_top_chat and st.session_state.chat_history:
 # Suite 1: Open a Store
 # =========================================================
 def render_open_store():
-    st.header(t("开店（决策流）", "Open a Store (Decision Flow)"))
+    st.header(t("开店可行性评估", "Open a Store Feasibility"))
 
     step_titles = [
-        t("业务画像", "Profile"),
-        t("选址检查", "Site Check"),
-        t("库存与现金", "Inventory & Cash"),
-        t("定价 & 总结", "Pricing & Summary")
+        t("业务概念", "Business Concept"),
+        t("选址可行性", "Location Feasibility"),
+        t("启动预算与现金跑道", "Launch Budget & Cash Runway"),
+        t("最终开店决策", "Final Launch Decision")
     ]
     st.write(f"{t('步骤', 'Step')} {st.session_state.open_step}/4 — {step_titles[st.session_state.open_step-1]}")
     st.progress(st.session_state.open_step / 4.0)
@@ -1663,74 +1592,88 @@ def render_open_store():
     with nav1:
         if st.button(t("◀ 上一步", "◀ Back"), use_container_width=True):
             st.session_state.open_step = max(1, st.session_state.open_step - 1)
-            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with nav2:
         if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
             st.session_state.open_step = min(4, st.session_state.open_step + 1)
-            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with nav3:
-        st.caption(t("提示：这部分专注“开店决策”。运营和财务在其他集合里更细。",
-                     "Tip: This suite focuses on launch decisions. Operations & finance are in other suites."))
+        st.caption(t(
+            "这个模块只回答一个问题：这家店现在值不值得开。库存运营和财务报表分析在其他模块。",
+            "This suite answers one question: is this store worth launching now? Operations and financial statements are handled in other suites."
+        ))
 
-    # Step 1
+    # Step 1: Business Concept
     if st.session_state.open_step == 1:
         p = st.session_state.profile
-        st.subheader(t("第 1 步：业务画像", "Step 1: Business Profile"))
+        launch = st.session_state.launch
+        st.subheader(t("第 1 步：业务概念", "Step 1: Business Concept"))
+        st.markdown(
+            "<div class='card'>" + t(
+                "先把生意讲清楚：卖什么、卖给谁、凭什么赢。这里不要填太细，开店前要先判断方向。",
+                "First define the business concept: what you sell, who you serve, and why you can win. Keep it lightweight at this stage."
+            ) + "</div>",
+            unsafe_allow_html=True
+        )
+
         col1, col2 = st.columns([1, 1])
         with col1:
             p["business_type"] = st.selectbox(
                 t("业态类型", "Business Type"),
-                ["Auto Parts Store", "Convenience Store", "Coffee Shop", "Restaurant", "Beauty Salon", "Other"],
-                index=["Auto Parts Store","Convenience Store","Coffee Shop","Restaurant","Beauty Salon","Other"].index(
-                    p["business_type"] if p["business_type"] in ["Auto Parts Store","Convenience Store","Coffee Shop","Restaurant","Beauty Salon","Other"] else "Other"
+                ["Coffee Shop", "Convenience Store", "Restaurant", "Auto Parts Store", "Beauty Salon", "Small Retail Store", "Other"],
+                index=["Coffee Shop", "Convenience Store", "Restaurant", "Auto Parts Store", "Beauty Salon", "Small Retail Store", "Other"].index(
+                    p["business_type"] if p["business_type"] in ["Coffee Shop", "Convenience Store", "Restaurant", "Auto Parts Store", "Beauty Salon", "Small Retail Store", "Other"] else "Coffee Shop"
                 )
             )
             p["stage"] = st.selectbox(
                 t("阶段", "Stage"),
-                ["Planning", "Open Soon", "Operating", "Expansion"],
-                index=["Planning","Open Soon","Operating","Expansion"].index(p["stage"]) if p["stage"] in ["Planning","Open Soon","Operating","Expansion"] else 0
+                ["Planning", "Lease Negotiation", "Open Soon", "Expansion"],
+                index=["Planning", "Lease Negotiation", "Open Soon", "Expansion"].index(p["stage"]) if p["stage"] in ["Planning", "Lease Negotiation", "Open Soon", "Expansion"] else 0
             )
-            p["city"] = st.text_input(t("城市", "City"), p["city"])
+            p["city"] = st.text_input(t("城市/市场", "City / Market"), p.get("city", "Los Angeles"))
         with col2:
-            p["budget"] = st.number_input(t("初始预算（美元）", "Initial Budget (USD)"), min_value=0, value=int(p["budget"]), step=1000)
-            p["target_customer"] = st.text_input(t("目标客户", "Target Customer"), p["target_customer"])
-            p["differentiator"] = st.text_input(t("差异化", "Differentiator"), p["differentiator"])
+            p["budget"] = st.number_input(t("可用启动资金（美元）", "Available Launch Budget (USD)"), min_value=0, value=int(p.get("budget", 80000)), step=1000)
+            launch["funding_available"] = float(p["budget"])
+            p["target_customer"] = st.text_input(t("目标客户", "Target Customer"), p.get("target_customer", "Local residents and commuters"))
+            p["differentiator"] = st.text_input(t("差异化", "Differentiator"), p.get("differentiator", "Convenient location + reliable product quality"))
 
         p["notes"] = st.text_area(
             t("备注（可选）", "Notes (optional)"),
-            p["notes"],
-            placeholder=t("例如：营业时间、人员配置、服务范围、限制条件等", "Constraints, hours, staffing, services, etc.")
+            p.get("notes", ""),
+            placeholder=t("例如：营业时间、人员限制、业主经验、特殊约束等", "Hours, staffing constraints, owner experience, special constraints, etc.")
         )
 
-    # Step 2
+    # Step 2: Location Feasibility
     elif st.session_state.open_step == 2:
         s = st.session_state.site
         p = st.session_state.profile
+        st.subheader(t("第 2 步：选址可行性", "Step 2: Location Feasibility"))
+        st.markdown(
+            "<div class='card'>" + t(
+                "选址评估关注客流、竞品、租金压力和可达性。地图只是辅助，最终判断以输入指标为主。",
+                "Location feasibility focuses on traffic, competition, rent pressure, and accessibility. The map is optional; the decision is driven by the input metrics."
+            ) + "</div>",
+            unsafe_allow_html=True
+        )
 
-        st.subheader(t("第 2 步：选址检查", "Step 2: Site Check"))
         colA, colB = st.columns([1, 2])
-
         with colA:
-            s["address"] = st.text_input(t("地址（支持模糊）", "Address (fuzzy supported)"), s["address"])
+            s["address"] = st.text_input(t("地址或区域", "Address or Area"), s.get("address", ""))
             s["radius_miles"] = st.selectbox(
-                t("半径（英里）", "Radius (miles)"),
+                t("评估半径（英里）", "Evaluation Radius (miles)"),
                 [0.5, 1.0, 3.0],
-                index=[0.5, 1.0, 3.0].index(s["radius_miles"])
+                index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0))
             )
-
-            s["traffic"] = st.slider(t("人流/车流（估计）", "Traffic (estimated)"), 1000, 50000, int(s["traffic"]), step=500)
-            s["competitors"] = st.number_input(t("竞品数量（估计）", "Competitors (estimated)"), min_value=0, value=int(s["competitors"]), step=1)
-            s["parking"] = st.selectbox(t("停车便利", "Parking"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["parking"]))
-            s["rent_level"] = st.selectbox(t("租金水平", "Rent Level"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s["rent_level"]))
+            s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 25000)), step=500)
+            s["competitors"] = st.number_input(t("半径内竞品数量", "Competitors in Radius"), min_value=0, value=int(s.get("competitors", 8)), step=1)
+            s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s.get("parking", "Medium")))
+            s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(s.get("rent_level", "Medium")))
             s["foot_traffic_source"] = st.selectbox(
                 t("客流来源", "Foot Traffic Source"),
                 ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
-                index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s["foot_traffic_source"])
+                index=["Mixed (Transit + Street)","Street Dominant","Transit Dominant","Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
             )
 
         with colB:
-            st.subheader(t("地图预览（输入地址→点击搜索→定位）", "Map Preview (address → click search → locate)"))
-
+            st.subheader(t("地图辅助预览", "Optional Map Preview"))
             b1, b2 = st.columns([1, 1])
             with b1:
                 do_search = st.button("🔎 " + t("Search / Locate", "Search / Locate"), use_container_width=True)
@@ -1743,7 +1686,6 @@ def render_open_store():
                 s.pop("lon", None)
                 s.pop("competitors_debug", None)
                 s.pop("traffic_debug", None)
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
             if do_search:
                 query = (s.get("address") or "").strip()
@@ -1752,264 +1694,189 @@ def render_open_store():
                 st.session_state.site_geo["debug"] = dbg
                 st.session_state.site_geo["status"] = "ok" if cands else "fail"
                 st.session_state.site_geo["picked_idx"] = 0
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
             geo = st.session_state.site_geo
             cands = geo.get("cands", []) or []
-
             if geo.get("status") == "idle":
-                st.info(t("还没有搜索结果。请点击「Search/Locate」。", "No results yet. Click “Search/Locate”."))
+                st.info(t("可选：点击 Search/Locate 定位。", "Optional: click Search/Locate to locate the area."))
                 base_lat, base_lon = 40.7590, -73.8290
                 st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-
             elif not cands:
-                st.warning(t("没搜到该地址。建议输入更短/更模糊的关键词，例如：'7 Champagne Ct 12189'。",
-                             "No matches. Try shorter input, e.g., '7 Champagne Ct 12189'."))
+                st.warning(t("没搜到该地址。可继续使用手工输入指标完成判断。", "No match. You can still proceed using manual metrics."))
                 base_lat, base_lon = 40.7590, -73.8290
                 st.map(pd.DataFrame({"lat": [base_lat], "lon": [base_lon]}), zoom=12)
-
             else:
                 labels = [c["display_name"] for c in cands]
-                idx = int(geo.get("picked_idx", 0))
-                idx = max(0, min(idx, len(labels) - 1))
-
-                picked_label = st.selectbox(
-                    t("匹配到多个地址（请选择）", "Multiple matches (pick one)"),
-                    labels,
-                    index=idx
-                )
+                idx = max(0, min(int(geo.get("picked_idx", 0)), len(labels)-1))
+                picked_label = st.selectbox(t("匹配地址", "Matched address"), labels, index=idx)
                 chosen = cands[labels.index(picked_label)]
                 lat, lon = chosen["lat"], chosen["lon"]
-
                 s["lat"] = float(lat)
                 s["lon"] = float(lon)
-
                 st.caption(t(f"已定位坐标：{lat:.6f}, {lon:.6f}", f"Located at: {lat:.6f}, {lon:.6f}"))
                 st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=14)
 
-                if st.button(t("用标准地址覆盖输入框", "Replace input with normalized address")):
-                    s["address"] = chosen.get("display_name", s["address"])
-                    # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
-                st.divider()
-                e1, e2 = st.columns([1, 1])
-
-                with e1:
-                    if st.button(t("自动估算竞品&交通", "Auto-estimate competitors & traffic"), use_container_width=True):
+                with st.expander(t("自动估算竞品/交通（可选，不稳定时请手工输入）", "Auto-estimate competitors/traffic (optional; use manual inputs if unstable)"), expanded=False):
+                    if st.button(t("自动估算", "Auto-estimate"), use_container_width=True):
                         bt = p.get("business_type", "Other")
                         rad = float(s.get("radius_miles", 1.0))
-
                         comp = estimate_competitors_overpass(lat, lon, rad, bt)
                         s["competitors_debug"] = comp
                         if comp.get("ok"):
                             s["competitors"] = int(comp["count"])
-                        else:
-                            st.warning(t("竞品自动估算失败（Overpass 不稳定/限流很常见），已保留你手动输入的数值。",
-                                         "Competitor auto-estimation failed (Overpass is often rate-limited). Keeping your manual value."))
-
                         tp = estimate_traffic_proxy_overpass(lat, lon, rad)
                         s["traffic_debug"] = tp
                         if tp.get("ok"):
                             s["traffic"] = int(tp["traffic_est"])
-                        else:
-                            st.warning(t("交通自动估算失败（Overpass 不稳定/限流很常见），已保留你手动输入的数值。",
-                                         "Traffic auto-estimation failed (Overpass is often rate-limited). Keeping your manual value."))
-
-                        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
-                with e2:
-                    if st.button(t("清空估算结果", "Clear estimates"), use_container_width=True):
-                        s.pop("competitors_debug", None)
-                        s.pop("traffic_debug", None)
-                        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
-            with st.expander(t("Geocode Debug（排查用）", "Geocode Debug (troubleshooting)"), expanded=False):
-                st.write(geo.get("debug", {}))
-
-            with st.expander(t("估算调试信息（可选）", "Estimation Debug (optional)"), expanded=False):
-                st.write("competitors_debug =", s.get("competitors_debug", None))
-                st.write("traffic_debug =", s.get("traffic_debug", None))
-
-            st.caption(t("说明：地图=地理编码（地址→坐标）；竞品/交通=基于 OSM 的近似估算，失败很常见但不会影响手工输入。",
-                         "Note: Map is geocoding (address→coords). Competitors/traffic are OSM-based estimates; failures are common but won't break manual inputs."))
+                    st.write("competitors_debug =", s.get("competitors_debug", None))
+                    st.write("traffic_debug =", s.get("traffic_debug", None))
 
         score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
         risk_flags = []
-        if int(s["competitors"]) > 15: risk_flags.append(t("竞品密度偏高", "High competitive density"))
-        if s["rent_level"] == "High": risk_flags.append(t("固定成本偏高（租金）", "High fixed cost (rent)"))
-        if s["parking"] == "Low": risk_flags.append(t("停车不便可能影响转化", "Low parking convenience"))
+        if int(s["competitors"]) > 15:
+            risk_flags.append(t("竞品密度偏高", "High competitive density"))
+        if s["rent_level"] == "High":
+            risk_flags.append(t("租金压力高", "High rent pressure"))
+        if s["parking"] == "Low":
+            risk_flags.append(t("停车/可达性弱", "Weak parking/accessibility"))
         s["risk_flags"] = risk_flags
 
         c1, c2, c3 = st.columns(3)
         c1.metric(t("选址评分", "Site Score"), score)
         c2.metric(t("竞品数", "Competitors"), int(s["competitors"]))
-        c3.metric(t("流量", "Traffic"), int(s["traffic"]))
-
+        c3.metric(t("客流估计", "Traffic"), int(s["traffic"]))
         if risk_flags:
-            st.warning(t("风险提示：", "Risk flags: ") + "，".join(risk_flags))
+            st.warning(t("选址风险：", "Location risks: ") + "，".join(risk_flags))
         else:
-            st.success(t("当前输入下未发现明显风险标记。", "No major risk flags from current inputs."))
+            st.success(t("当前选址输入下未发现明显红旗。", "No major location red flags from current inputs."))
 
-    # Step 3
+    # Step 3: Launch Budget & Cash Runway
     elif st.session_state.open_step == 3:
-        inv = st.session_state.inventory
-        st.subheader(t("第 3 步：库存与现金（不跑 AI）", "Step 3: Inventory & Cash "))
+        p = st.session_state.profile
+        launch = st.session_state.launch
+        st.subheader(t("第 3 步：启动预算与现金跑道", "Step 3: Launch Budget & Cash Runway"))
+        st.markdown(
+            "<div class='card'>" + t(
+                "这里不再上传 ERP。开店前最重要的是：启动成本多少、每月固定成本多少、现金能撑几个月、收入做到多少才能打平。",
+                "No ERP upload here. Pre-launch feasibility is about startup cost, monthly fixed cost, cash runway, and break-even revenue."
+            ) + "</div>",
+            unsafe_allow_html=True
+        )
 
+        launch["funding_available"] = float(p.get("budget", launch.get("funding_available", 80000)) or 0)
         col1, col2 = st.columns([1, 1])
         with col1:
-            inv["cash_target_days"] = st.slider(t("目标现金周转天数", "Cash target (days)"), 10, 120, int(inv["cash_target_days"]))
-            inv["supplier_lead_time_days"] = st.slider(t("供应商交期（天）", "Supplier lead time (days)"), 1, 30, int(inv["supplier_lead_time_days"]))
-            inv["seasonality"] = st.selectbox(t("季节因素", "Seasonality"), ["Winter", "Spring", "Summer", "Fall"],
-                                            index=["Winter","Spring","Summer","Fall"].index(inv["seasonality"]))
+            st.markdown("### " + t("一次性启动成本", "One-Time Startup Costs"))
+            launch["buildout_cost"] = st.number_input(t("装修/改造", "Buildout / Renovation"), min_value=0.0, value=float(launch.get("buildout_cost", 22000)), step=1000.0)
+            launch["licenses_deposits"] = st.number_input(t("牌照/押金/法律费用", "Licenses / Deposits / Legal"), min_value=0.0, value=float(launch.get("licenses_deposits", 8000)), step=500.0)
+            launch["equipment_cost"] = st.number_input(t("设备采购", "Equipment"), min_value=0.0, value=float(launch.get("equipment_cost", 12000)), step=1000.0)
+            launch["initial_inventory_budget"] = st.number_input(t("首批备货预算", "Initial Inventory Budget"), min_value=0.0, value=float(launch.get("initial_inventory_budget", 15000)), step=1000.0)
+            launch["launch_marketing_budget"] = st.number_input(t("开业营销预算", "Launch Marketing Budget"), min_value=0.0, value=float(launch.get("launch_marketing_budget", 5000)), step=500.0)
         with col2:
-            inv["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), inv["notes"],
-                                     placeholder=t("例如：仓储限制、现金压力、最小起订量等", "Constraints: storage, cash pressure, MOQ, etc."))
+            st.markdown("### " + t("每月固定成本与收入假设", "Monthly Fixed Costs & Revenue Assumptions"))
+            launch["monthly_rent"] = st.number_input(t("月租金", "Monthly Rent"), min_value=0.0, value=float(launch.get("monthly_rent", 9500)), step=500.0)
+            launch["monthly_payroll"] = st.number_input(t("月人工", "Monthly Payroll"), min_value=0.0, value=float(launch.get("monthly_payroll", 12000)), step=500.0)
+            launch["monthly_utilities"] = st.number_input(t("水电网等", "Utilities"), min_value=0.0, value=float(launch.get("monthly_utilities", 1800)), step=100.0)
+            launch["monthly_insurance"] = st.number_input(t("保险", "Insurance"), min_value=0.0, value=float(launch.get("monthly_insurance", 700)), step=100.0)
+            launch["other_monthly_fixed"] = st.number_input(t("其他固定成本", "Other Fixed Costs"), min_value=0.0, value=float(launch.get("other_monthly_fixed", 2500)), step=100.0)
+            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, value=float(launch.get("expected_monthly_revenue", 52000)), step=1000.0)
+            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, int(launch.get("expected_gross_margin", 62)))
+            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, int(launch.get("cash_target_months", 3)))
 
-        st.subheader(t("ERP 数据", "ERP Data"))
-        cA, cB = st.columns([1, 1])
-        with cA:
-            if st.button(t("加载示例数据", "Load sample data")):
-                data = {
-                    "Item": ["Synthetic Oil", "Wiper Blades", "Brake Pads", "Tires", "Air Filter"],
-                    "Stock": [120, 450, 30, 8, 200],
-                    "Cost": [25, 8, 45, 120, 5],
-                    "Monthly_Sales": [40, 5, 25, 6, 15]
-                }
-                inv["df"] = pd.DataFrame(data)
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-        with cB:
-            uploaded = st.file_uploader(t("上传 CSV（Item,Stock,Cost,Monthly_Sales）", "Upload CSV (Item,Stock,Cost,Monthly_Sales)"),
-                                        type=["csv"])
-            if uploaded is not None:
-                inv["df"] = pd.read_csv(uploaded)
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
+        launch["notes"] = st.text_area(t("预算备注（可选）", "Budget Notes (optional)"), launch.get("notes", ""), placeholder=t("例如：房东免租期、设备租赁、供应商账期等", "Free-rent period, equipment lease, supplier credit terms, etc."))
 
-        if inv["df"] is None:
-            st.info(t("请先加载示例数据或上传 CSV。", "Load sample data or upload a CSV to continue."))
-            return
+        m = open_store_feasibility_metrics()
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(t("启动成本", "Startup Cost"), f"USD {m['startup_cost']:,.0f}")
+        c2.metric(t("月固定成本", "Monthly Fixed Cost"), f"USD {m['monthly_fixed_cost']:,.0f}")
+        c3.metric(t("现金跑道", "Cash Runway"), f"{m['runway_months']:.1f} mo")
+        c4.metric(t("资金缺口", "Funding Gap"), f"USD {m['funding_gap']:,.0f}")
 
-        df = inv["df"]
-        st.dataframe(df, use_container_width=True)
+        c5, c6, c7 = st.columns(3)
+        c5.metric(t("打平所需月收入", "Break-even Monthly Revenue"), f"USD {m['breakeven_revenue']:,.0f}" if np.isfinite(m['breakeven_revenue']) else "N/A")
+        c6.metric(t("预估月经营结果", "Estimated Monthly Result"), f"USD {m['monthly_profit_after_fixed']:,.0f}")
+        c7.metric(t("现金评分", "Cash Score"), int(m["cash_score"]))
 
-        health = inventory_health(df)
-        st.metric(t("库存总价值", "Total Inventory Value"), f"${health['total_value']:,.0f}")
-        st.metric(t("滞销库存价值", "Dead Stock Value"), f"${health['dead_value']:,.0f}")
+        if m["funding_gap"] > 0 or m["runway_months"] < launch["cash_target_months"]:
+            st.warning(t("现金跑道不足。建议降低启动成本、争取免租期/账期，或补充启动资金。", "Cash runway is insufficient. Reduce startup costs, negotiate free rent/payment terms, or secure additional funding."))
+        else:
+            st.success(t("启动资金覆盖目标现金跑道。", "Available funding covers the target cash runway."))
 
-        dead_n = len(health["dead_items"])
-        stockout_n = len(health["stockout_items"])
-        summary = f"total_value=${health['total_value']:,.0f}; dead_value=${health['dead_value']:,.0f}; dead_items={dead_n}; stockout_risk_items={stockout_n}"
-        st.session_state.outputs["inventory_summary"] = summary
-
-        if dead_n > 0:
-            st.warning(t(f"发现滞销品：{dead_n} 个", f"Dead stock items detected: {dead_n}"))
-            with st.expander(t("查看滞销明细", "View dead stock details")):
-                st.dataframe(health["dead_items"], use_container_width=True)
-
-        if stockout_n > 0:
-            st.error(t(f"发现缺货风险：{stockout_n} 个", f"Stockout-risk items detected: {stockout_n}"))
-            with st.expander(t("查看缺货风险明细", "View stockout-risk details")):
-                st.dataframe(health["stockout_items"], use_container_width=True)
-
-    # Step 4
+    # Step 4: Final Launch Decision
     else:
         pr = st.session_state.pricing
-        st.subheader(t("第 4 步：定价 & 一键总分析", "Step 4: Pricing & One-click Final Analysis"))
+        st.subheader(t("第 4 步：最终开店决策", "Step 4: Final Launch Decision"))
+        st.markdown(
+            "<div class='card'>" + t(
+                "这里只做定价假设和最终 Go / Caution / No-Go 判断。复杂运营和财务报表分析留给其他模块。",
+                "This step only handles pricing assumptions and the final Go / Caution / No-Go decision. Detailed operations and financial statements belong to other suites."
+            ) + "</div>",
+            unsafe_allow_html=True
+        )
 
         col1, col2 = st.columns([1, 1])
         with col1:
             pr["strategy"] = st.selectbox(
-                t("定价策略", "Strategy"),
+                t("定价策略", "Pricing Strategy"),
                 ["Competitive", "Value-based", "Premium", "Penetration"],
-                index=["Competitive","Value-based","Premium","Penetration"].index(pr["strategy"])
+                index=["Competitive","Value-based","Premium","Penetration"].index(pr.get("strategy", "Competitive"))
             )
-            pr["cost"] = st.number_input(t("单位成本（美元）", "Unit Cost (USD)"), min_value=0.0, value=float(pr["cost"]), step=1.0)
-            pr["competitor_price"] = st.number_input(t("竞品价格（美元）", "Competitor Price (USD)"), min_value=0.0, value=float(pr["competitor_price"]), step=1.0)
-
+            pr["cost"] = st.number_input(t("代表性产品单位成本（美元）", "Representative Unit Cost (USD)"), min_value=0.0, value=float(pr.get("cost", 100.0)), step=1.0)
+            pr["competitor_price"] = st.number_input(t("竞品价格（美元）", "Competitor Price (USD)"), min_value=0.0, value=float(pr.get("competitor_price", 135.0)), step=1.0)
         with col2:
-            pr["target_margin"] = st.slider(t("目标毛利率（%）", "Target Margin (%)"), 0, 80, int(pr["target_margin"]))
-            pr["elasticity"] = st.selectbox(t("需求弹性", "Demand Elasticity"), ["Low", "Medium", "High"],
-                                          index=["Low","Medium","High"].index(pr["elasticity"]))
-            pr["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), pr["notes"],
-                                     placeholder=t("例如：促销限制、捆绑策略、最低标价等", "Constraints: promos, bundles, MAP, etc."))
+            pr["target_margin"] = st.slider(t("目标加成率（%）", "Target Markup (%)"), 0, 100, int(pr.get("target_margin", 30)))
+            pr["elasticity"] = st.selectbox(t("需求价格敏感度", "Demand Price Sensitivity"), ["Low", "Medium", "High"], index=["Low","Medium","High"].index(pr.get("elasticity", "Medium")))
+            pr["notes"] = st.text_area(t("定价备注（可选）", "Pricing Notes (optional)"), pr.get("notes", ""), placeholder=t("例如：促销、组合销售、最低标价等", "Promotions, bundles, minimum advertised price, etc."))
 
-        rec_price = pr["cost"] * (1 + pr["target_margin"] / 100.0)
-        st.metric(t("推荐价格（简单计算）", "Recommended Price "), f"${rec_price:,.2f}")
+        m = open_store_feasibility_metrics()
+        decision = m["decision"]
+        decision_msg = {
+            "GO": t("可以推进，但仍需完成开业前检查清单。", "Proceed, but complete the pre-launch checklist."),
+            "CAUTION": t("谨慎推进，先修复主要风险。", "Proceed cautiously and fix the main risks first."),
+            "NO-GO": t("暂不建议开店，先重做资金/选址/利润假设。", "Do not launch yet; revisit funding, location, and margin assumptions first."),
+        }.get(decision, "")
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric(t("最终判断", "Decision"), decision)
+        c2.metric(t("总评分", "Overall"), int(m["overall_score"]))
+        c3.metric(t("选址", "Site"), int(m["site_score"]))
+        c4.metric(t("现金", "Cash"), int(m["cash_score"]))
+        c5.metric(t("利润", "Margin"), int(m["margin_score"]))
+        st.info(decision_msg)
+
+        st.markdown("### " + t("核心计算", "Core Calculations"))
+        metric_df = pd.DataFrame([
+            {"Metric": "Startup Cost", "Value": f"USD {m['startup_cost']:,.0f}", "Meaning": "One-time cost before opening"},
+            {"Metric": "Monthly Fixed Cost", "Value": f"USD {m['monthly_fixed_cost']:,.0f}", "Meaning": "Rent + payroll + fixed overhead"},
+            {"Metric": "Cash Runway", "Value": f"{m['runway_months']:.1f} months", "Meaning": "Remaining cash after startup costs"},
+            {"Metric": "Break-even Revenue", "Value": f"USD {m['breakeven_revenue']:,.0f}" if np.isfinite(m['breakeven_revenue']) else "N/A", "Meaning": "Revenue needed to cover fixed costs"},
+            {"Metric": "Recommended Price", "Value": f"USD {m['recommended_price']:,.2f}", "Meaning": "Cost × target markup"},
+            {"Metric": "Price vs Competitor", "Value": f"{m['price_vs_competitor_pct']:.1f}%", "Meaning": "Positive = priced above competitor"},
+        ])
+        st.dataframe(metric_df, use_container_width=True, hide_index=True)
+
+        if m["risks"]:
+            st.markdown("### " + t("主要风险", "Main Risks"))
+            for r in m["risks"]:
+                st.warning(r)
+        else:
+            st.success(t("当前输入下没有明显阻断性风险。", "No obvious blocking risks from current inputs."))
 
         st.divider()
-        st.subheader(t("最终输出（结论/证据/行动/风控）", "Final Output (Conclusion/Evidence/Actions/Risk)"))
-
-        if st.button(t("运行最终分析（开店）", "Run Final Analysis (Open a Store)"), type="primary"):
-            p = st.session_state.profile
-            s = st.session_state.site
-            inv = st.session_state.inventory
-            inv_df = inv["df"]
-            inv_snapshot = st.session_state.outputs.get("inventory_summary", "No inventory summary available.")
-
-            prompt = f"""
-Make a store-opening decision output using ONLY provided inputs.
-Return plain text with clear headings:
-
-A) Executive Summary
-- 3 bullet conclusions
-- Overall Score (0-100) and Confidence (Low/Med/High)
-
-B) Evidence (5-8 bullets)
-- Each bullet must cite a specific provided input (traffic/competitors/rent, inventory snapshot, pricing inputs, etc.)
-
-C) Action Plan (10 bullets)
-- Group by: Site / Inventory & Cash / Pricing
-- Each action must include a metric/target or a next-step instruction
-
-D) Risk Controls (4 bullets)
-
-Inputs:
-Business: type={p['business_type']}, stage={p['stage']}, city={p['city']}, budget=${p['budget']},
-target_customer={p['target_customer']}, differentiator={p['differentiator']}, notes={p['notes'] if p['notes'].strip() else 'None'}
-
-Site: address={s['address']}, radius={s['radius_miles']} miles, traffic={s['traffic']}, competitors={s['competitors']},
-parking={s['parking']}, rent={s['rent_level']}, source={s['foot_traffic_source']}, risk_flags={', '.join(s['risk_flags']) if s['risk_flags'] else 'None'}
-
-Inventory: cash_target_days={inv['cash_target_days']}, lead_time_days={inv['supplier_lead_time_days']},
-seasonality={inv['seasonality']}, notes={inv['notes'] if inv['notes'].strip() else 'None'}
-Inventory snapshot: {inv_snapshot}
-Inventory table:
-{inv_df.to_string(index=False) if inv_df is not None else 'Not provided'}
-
-Pricing: strategy={pr['strategy']}, cost={pr['cost']}, competitor_price={pr['competitor_price']},
-target_margin={pr['target_margin']}%, elasticity={pr['elasticity']}, notes={pr['notes'] if pr['notes'].strip() else 'None'}
-"""
-            with st.spinner(t("分析中…", "Analyzing...")):
-                out = ask_ai(prompt, mode="open_store")
-            st.session_state.outputs["final_open_store"] = out
-            st.success(t("完成。", "Done."))
-            st.markdown(out)
-
-        if st.session_state.outputs["final_open_store"]:
-            with st.expander(t("上一次输出", "Last output"), expanded=False):
-                st.write(st.session_state.outputs["final_open_store"])
-                st.divider()
-
-        st.subheader(t("可交付物：AI 报告", "Deliverable: AI Report"))
-        colA, colB, colC = st.columns([1, 1, 2])
-
+        st.subheader(t("AI 开店决策报告", "AI Launch Decision Report"))
+        colA, colB = st.columns([1, 1])
         with colA:
-            if st.button(t("生成 AI 报告", "Generate AI Report"), use_container_width=True):
+            if st.button(t("生成开店决策报告", "Generate Launch Decision Report"), type="primary", use_container_width=True):
                 with st.spinner(t("生成报告中…", "Generating report...")):
                     report_md = ai_report_open_store()
                 st.session_state.outputs["open_store_report_md"] = report_md
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""
-                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
-        with colC:
-            st.caption(t("说明：报告会基于你前面选择的业务画像/选址/库存/定价生成，不依赖你是否点过“最终分析”。",
-                         "Note: Report uses your inputs across steps; independent from the final analysis button."))
+                st.session_state.outputs["final_open_store"] = None
 
         if st.session_state.outputs.get("open_store_report_md", ""):
-            st.text_area(t("报告预览", "Report Preview"), st.session_state.outputs["open_store_report_md"], height=520)
+            st.markdown(st.session_state.outputs["open_store_report_md"])
             st.download_button(
                 label=t("下载 open_store_report.md", "Download open_store_report.md"),
                 data=st.session_state.outputs["open_store_report_md"],

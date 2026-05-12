@@ -887,53 +887,334 @@ Inventory table:
 """
     return ask_ai(prompt, mode="operations")
 
+
 def ai_report_finance(doc_text: str, focus: str, style: str, question: str) -> str:
     finance_ai = st.session_state.outputs.get("finance_ai_output", "")
     prompt = f"""
-You are producing a Finance Analysis Report for an SME owner. Output MUST be Markdown.
+You are producing a Finance Analysis Report for a U.S. small business owner.
+Output MUST be Markdown.
+
+Critical evidence rules:
+- Use the computed metrics and uploaded data excerpts below as the primary evidence.
+- Every key finding must cite at least one actual number from the uploaded data or computed metrics.
+- Do NOT invent revenue, costs, margins, customer behavior, platform order mix, commissions, or cash balances.
+- If a metric cannot be calculated from uploaded data, write: "Not available from uploaded data."
+- If using a general industry benchmark, label it clearly as "General benchmark", not as company-specific fact.
+- Separate actual-data findings from assumptions and recommendations.
+- Do not provide investment, legal, tax, or regulated financial advice. This is business analysis support only.
 
 Focus={focus}
 Style={style}
 User question={question if question.strip() else 'None'}
 
-Report structure:
-# Finance Analysis Report
-## 1) Executive Summary (5 bullets)
-## 2) What the data suggests (tables/bullets)
-- Only compute what you can from provided data excerpts
-
-## 3) Risks & Controls (8 bullets)
-## 4) Action Plan (12 bullets)
-- Each bullet must include owner + metric/target
-
-## 5) Follow-up Questions (5 items)
-
-User documents (excerpts):
+Uploaded data and computed metrics:
 {doc_text}
 
-Previous AI output (if any):
-{finance_ai if finance_ai.strip() else '[None]'}
+Previous AI output, if any:
+{finance_ai if isinstance(finance_ai, str) and finance_ai.strip() else '[None]'}
+
+Report structure:
+# Finance Analysis Report
+
+## 1) Executive Summary
+- 5 bullets.
+- Each bullet must include at least one actual number.
+
+## 2) Actual Data Summary
+Include a compact table where available:
+Metric | Actual Result | Source/Formula | Interpretation
+
+Required rows if available:
+- Total Revenue
+- Gross Margin
+- Delivery/App Fees Ratio
+- Rent Ratio
+- Payroll Ratio
+- Marketing Ratio
+- EBITDA or Estimated Operating Margin
+- Net Cash Flow
+- Cash Balance Trend
+
+## 3) Diagnosis
+Explain why the business is healthy or unhealthy.
+Use uploaded numbers, not vague language.
+
+## 4) Risks & Red Flags
+- 8 bullets.
+- Mark each as either "Actual data risk" or "Benchmark-based concern".
+
+## 5) Action Plan
+- 12 bullets.
+- Each bullet must include owner + metric/target + timing.
+
+## 6) Follow-up Questions
+- 5 questions that would materially improve accuracy.
 """
     return ask_ai(prompt, mode="finance")
 
+
+def _safe_numeric(series: pd.Series) -> pd.Series:
+    """Convert common accounting strings to numeric safely."""
+    if series is None:
+        return pd.Series(dtype="float64")
+    s = series.astype(str).str.replace(",", "", regex=False).str.replace("$", "", regex=False)
+    s = s.str.replace("%", "", regex=False).str.replace("(", "-", regex=False).str.replace(")", "", regex=False)
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _fmt_money(x) -> str:
+    try:
+        if pd.isna(x):
+            return "Not available"
+        return f"${float(x):,.2f}"
+    except Exception:
+        return "Not available"
+
+
+def _fmt_pct(x) -> str:
+    try:
+        if pd.isna(x):
+            return "Not available"
+        return f"{float(x):.1%}"
+    except Exception:
+        return "Not available"
+
+
+def _find_col(df: pd.DataFrame, aliases: list[str]):
+    """Find a column by flexible aliases, ignoring spaces, underscores, hyphens and case."""
+    def norm(x):
+        return str(x).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    col_map = {norm(c): c for c in df.columns}
+    for a in aliases:
+        key = norm(a)
+        if key in col_map:
+            return col_map[key]
+    # partial matching fallback
+    for c in df.columns:
+        c_norm = norm(c)
+        for a in aliases:
+            a_norm = norm(a)
+            if a_norm and (a_norm in c_norm or c_norm in a_norm):
+                return c
+    return None
+
+
+def _build_sheet_preview(df: pd.DataFrame, max_rows: int = 25) -> str:
+    if df is None or df.empty:
+        return "[Empty sheet]"
+    safe_df = df.copy()
+    if len(safe_df) > max_rows:
+        safe_df = safe_df.head(max_rows)
+    return safe_df.to_string(index=False)
+
+
+def analyze_financial_dataframe(df: pd.DataFrame, sheet_name: str = "Uploaded Data") -> str:
+    """
+    Compute SME finance metrics before sending the result to AI.
+    AI should interpret these metrics, not guess them from raw table text.
+    """
+    if df is None or df.empty:
+        return f"## Sheet: {sheet_name}\n[Empty sheet]\n"
+
+    outputs = []
+    outputs.append(f"## Sheet: {sheet_name}")
+    outputs.append(f"- Rows: {len(df)}")
+    outputs.append(f"- Columns: {', '.join([str(c) for c in df.columns])}")
+
+    revenue_col = _find_col(df, [
+        "Revenue", "Total Revenue", "Total_Revenue", "Sales", "Total Sales", "Net Sales",
+        "Platform Sales", "Store Sales", "Monthly Revenue"
+    ])
+    cogs_col = _find_col(df, [
+        "COGS", "Cost of Goods Sold", "Cost_of_Goods_Sold", "Cost", "Product Cost", "Ingredient Cost"
+    ])
+    gross_profit_col = _find_col(df, ["Gross Profit", "Gross_Profit", "GP"])
+    delivery_col = _find_col(df, [
+        "Delivery App Fees", "Delivery_App_Fees", "Delivery Fees", "Platform Fees", "App Fees",
+        "Third Party Fees", "Commission"
+    ])
+    rent_col = _find_col(df, ["Rent", "Monthly Rent", "Occupancy", "Occupancy Cost"])
+    payroll_col = _find_col(df, ["Payroll", "Labor", "Labor Cost", "Staff Cost", "Wages"])
+    marketing_col = _find_col(df, ["Marketing", "Marketing Spend", "Ads", "Advertising"])
+    other_exp_col = _find_col(df, ["Other Expenses", "Other_Expenses", "Operating Expenses", "Opex"])
+    ebitda_col = _find_col(df, ["EBITDA", "Operating Profit", "Operating Income"])
+    net_income_col = _find_col(df, ["Net Income", "Net_Income", "Profit", "Net Profit"])
+    cashflow_col = _find_col(df, ["Net Cash Flow", "Net_Cash_Flow", "Cash Flow", "Monthly Cash Flow"])
+    ending_cash_col = _find_col(df, ["Ending Cash", "Ending_Cash", "Cash Balance", "Ending Cash Balance"])
+    month_col = _find_col(df, ["Month", "Date", "Period"])
+
+    metric_lines = []
+    ratio_rows = []
+
+    def add_metric(name, value, formula="", interpretation=""):
+        ratio_rows.append((name, formula, value, interpretation))
+
+    if revenue_col:
+        revenue_series = _safe_numeric(df[revenue_col])
+        total_revenue = revenue_series.sum(skipna=True)
+        metric_lines.append(f"- Total Revenue: {_fmt_money(total_revenue)}")
+
+        if cogs_col:
+            cogs_series = _safe_numeric(df[cogs_col])
+            total_cogs = cogs_series.sum(skipna=True)
+            gross_profit_calc = total_revenue - total_cogs
+            gross_margin_calc = gross_profit_calc / total_revenue if total_revenue else np.nan
+            metric_lines.append(f"- Total COGS: {_fmt_money(total_cogs)}")
+            metric_lines.append(f"- Calculated Gross Profit: {_fmt_money(gross_profit_calc)}")
+            metric_lines.append(f"- Calculated Gross Margin: {_fmt_pct(gross_margin_calc)}")
+            add_metric("Gross Margin", "Calculated Gross Profit / Total Revenue", _fmt_pct(gross_margin_calc),
+                       "Core profitability after direct costs.")
+
+            gm_series = (revenue_series - cogs_series) / revenue_series.replace(0, np.nan)
+            gm_series = gm_series.dropna()
+            if len(gm_series) >= 2:
+                metric_lines.append(f"- Gross Margin Trend: {_fmt_pct(gm_series.iloc[0])} → {_fmt_pct(gm_series.iloc[-1])}")
+
+        if gross_profit_col:
+            gp_series = _safe_numeric(df[gross_profit_col])
+            total_gp = gp_series.sum(skipna=True)
+            gp_margin = total_gp / total_revenue if total_revenue else np.nan
+            metric_lines.append(f"- Reported Gross Profit: {_fmt_money(total_gp)}")
+            metric_lines.append(f"- Reported Gross Margin: {_fmt_pct(gp_margin)}")
+            add_metric("Reported Gross Margin", "Reported Gross Profit / Total Revenue", _fmt_pct(gp_margin),
+                       "Uses the uploaded gross profit column.")
+
+        expense_cols = [
+            ("Delivery/App Fees", delivery_col, "Delivery/App Fees / Total Revenue"),
+            ("Rent", rent_col, "Rent / Total Revenue"),
+            ("Payroll", payroll_col, "Payroll / Total Revenue"),
+            ("Marketing", marketing_col, "Marketing / Total Revenue"),
+            ("Other Expenses", other_exp_col, "Other Expenses / Total Revenue"),
+        ]
+
+        for label, col, formula in expense_cols:
+            if col:
+                amount = _safe_numeric(df[col]).sum(skipna=True)
+                pct = amount / total_revenue if total_revenue else np.nan
+                metric_lines.append(f"- {label}: {_fmt_money(amount)} ({_fmt_pct(pct)} of revenue)")
+                add_metric(f"{label} Ratio", formula, _fmt_pct(pct), "Shows cost pressure relative to revenue.")
+
+        if ebitda_col:
+            ebitda = _safe_numeric(df[ebitda_col]).sum(skipna=True)
+            ebitda_margin = ebitda / total_revenue if total_revenue else np.nan
+            metric_lines.append(f"- EBITDA: {_fmt_money(ebitda)} ({_fmt_pct(ebitda_margin)} EBITDA margin)")
+            add_metric("EBITDA Margin", "EBITDA / Total Revenue", _fmt_pct(ebitda_margin),
+                       "Operating cash profitability before financing/tax/depreciation assumptions.")
+        else:
+            # If EBITDA is not provided, try a rough operating profit from available columns.
+            available_expenses = []
+            for col in [cogs_col, delivery_col, rent_col, payroll_col, marketing_col, other_exp_col]:
+                if col:
+                    available_expenses.append(_safe_numeric(df[col]).sum(skipna=True))
+            if available_expenses:
+                rough_ebitda = total_revenue - sum(available_expenses)
+                rough_margin = rough_ebitda / total_revenue if total_revenue else np.nan
+                metric_lines.append(f"- Estimated Operating Profit from Available Expense Columns: {_fmt_money(rough_ebitda)} ({_fmt_pct(rough_margin)} margin)")
+                add_metric("Estimated Operating Margin", "Revenue - available expense columns / Revenue", _fmt_pct(rough_margin),
+                           "Approximate only; depends on uploaded expense columns.")
+
+        if net_income_col:
+            ni = _safe_numeric(df[net_income_col]).sum(skipna=True)
+            ni_margin = ni / total_revenue if total_revenue else np.nan
+            metric_lines.append(f"- Net Income: {_fmt_money(ni)} ({_fmt_pct(ni_margin)} net margin)")
+            add_metric("Net Margin", "Net Income / Total Revenue", _fmt_pct(ni_margin), "Bottom-line profitability.")
+
+        if cashflow_col:
+            ncf_series = _safe_numeric(df[cashflow_col])
+            total_ncf = ncf_series.sum(skipna=True)
+            metric_lines.append(f"- Net Cash Flow: {_fmt_money(total_ncf)}")
+            add_metric("Net Cash Flow", "Sum of uploaded net cash flow", _fmt_money(total_ncf),
+                       "Shows whether cash increased or decreased over the period.")
+
+        if ending_cash_col:
+            cash_series = _safe_numeric(df[ending_cash_col]).dropna()
+            if len(cash_series) > 0:
+                metric_lines.append(f"- Latest Ending Cash: {_fmt_money(cash_series.iloc[-1])}")
+                if len(cash_series) >= 2:
+                    metric_lines.append(f"- Cash Balance Trend: {_fmt_money(cash_series.iloc[0])} → {_fmt_money(cash_series.iloc[-1])}")
+                    add_metric("Cash Balance Change", "Latest ending cash - first ending cash",
+                               _fmt_money(cash_series.iloc[-1] - cash_series.iloc[0]),
+                               "Shows cash runway deterioration or improvement.")
+
+        if month_col and revenue_col and len(df) >= 2:
+            first_rev = revenue_series.dropna().iloc[0] if len(revenue_series.dropna()) else np.nan
+            last_rev = revenue_series.dropna().iloc[-1] if len(revenue_series.dropna()) else np.nan
+            if pd.notna(first_rev) and pd.notna(last_rev) and first_rev != 0:
+                growth = (last_rev / first_rev) - 1
+                metric_lines.append(f"- Revenue Trend: {_fmt_money(first_rev)} → {_fmt_money(last_rev)} ({_fmt_pct(growth)} change)")
+
+    else:
+        metric_lines.append("- Revenue column not detected. Financial ratios requiring revenue are not available from uploaded data.")
+
+    outputs.append("\n### Computed Metrics")
+    outputs.extend(metric_lines)
+
+    if ratio_rows:
+        ratio_df = pd.DataFrame(ratio_rows, columns=["Metric", "Formula", "Actual Result", "Interpretation"])
+        outputs.append("\n### Metrics/Ratios Table")
+        outputs.append(ratio_df.to_string(index=False))
+
+    outputs.append("\n### Data Preview")
+    outputs.append(_build_sheet_preview(df, max_rows=25))
+
+    return "\n".join(outputs) + "\n"
+
+
+def analyze_financial_excel(file) -> str:
+    """Read all workbook sheets and compute available metrics for each sheet."""
+    try:
+        # Important: reset pointer before reading. Streamlit UploadedFile behaves like a file object.
+        try:
+            file.seek(0)
+        except Exception:
+            pass
+        sheets = pd.read_excel(file, sheet_name=None)
+    except Exception as e:
+        return f"[Failed to read Excel workbook: {e}]"
+
+    outputs = []
+    outputs.append("## Workbook Overview")
+    outputs.append(f"- Sheets detected: {', '.join(list(sheets.keys()))}")
+
+    for sheet_name, df in sheets.items():
+        outputs.append(analyze_financial_dataframe(df, sheet_name=str(sheet_name)))
+
+    return "\n".join(outputs)
+
+
 def read_uploaded_to_text(files) -> str:
+    """
+    Convert uploaded files into evidence-rich text.
+    Key upgrade:
+    - Excel workbooks: read ALL sheets, compute ratios before AI.
+    - CSV: compute ratios directly if financial columns are detected.
+    """
     chunks = []
     for f in files:
         name = f.name.lower()
         try:
             if name.endswith(".csv"):
+                try:
+                    f.seek(0)
+                except Exception:
+                    pass
                 df = pd.read_csv(f)
-                chunks.append(f"## {f.name}\n{df.head(50).to_string(index=False)}\n")
+                chunks.append(f"# File: {f.name}\n")
+                chunks.append(analyze_financial_dataframe(df, sheet_name=f.name))
             elif name.endswith(".xlsx") or name.endswith(".xls"):
-                df = pd.read_excel(f)
-                chunks.append(f"## {f.name}\n{df.head(50).to_string(index=False)}\n")
+                chunks.append(f"# File: {f.name}\n")
+                chunks.append(analyze_financial_excel(f))
             elif name.endswith(".txt") or name.endswith(".md"):
+                try:
+                    f.seek(0)
+                except Exception:
+                    pass
                 text = f.read().decode("utf-8", errors="ignore")
-                chunks.append(f"## {f.name}\n{text[:8000]}\n")
+                chunks.append(f"# File: {f.name}\n{text[:10000]}\n")
             else:
-                chunks.append(f"## {f.name}\n[Unsupported file type for text extraction in this version]\n")
+                chunks.append(f"# File: {f.name}\n[Unsupported file type for text extraction in this version]\n")
         except Exception as e:
-            chunks.append(f"## {f.name}\n[Failed to parse: {e}]\n")
+            chunks.append(f"# File: {f.name}\n[Failed to parse: {e}]\n")
     return "\n".join(chunks)
 
 # =========================================================
@@ -980,7 +1261,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v5.3 Geocoding + Overpass (robust)")
+    st.caption("v5.4 Finance Engine + Geocoding + Overpass")
 
 # =========================================================
 # Header + Top Ask AI
@@ -1627,18 +1908,44 @@ def render_finance():
     if st.button(t("开始分析", "Analyze"), type="primary"):
         doc_text = read_uploaded_to_text(files) if files else "[No files uploaded]"
         prompt = f"""
-Focus={focus}; Style={style}
+You are analyzing uploaded financial data for a U.S. small business owner.
+
+Critical evidence rules:
+- Use the computed metrics and uploaded data excerpts below as the primary evidence.
+- Every key finding must cite at least one actual number from the uploaded data or computed metrics.
+- Do NOT invent revenue, costs, margins, customer behavior, platform order mix, commissions, or cash balances.
+- If a metric cannot be calculated from uploaded data, write: "Not available from uploaded data."
+- If using a general industry benchmark, label it clearly as "General benchmark", not as company-specific fact.
+- Separate actual-data findings from assumptions and recommendations.
+- Do not provide investment, legal, tax, or regulated financial advice. This is business analysis support only.
+
+Focus={focus}
+Style={style}
 User question: {question if question.strip() else 'None'}
 
-User documents (excerpts):
+Uploaded data and computed metrics:
 {doc_text}
 
 Return:
-1) Key findings (5 bullets)
-2) Metrics/ratios you can compute from provided data (if any)
-3) Risks & red flags (5 bullets)
-4) Action plan (10 bullets with owners/metrics)
-5) 3 follow-up questions to improve accuracy
+1) Actual Data Summary
+- Revenue, gross margin, delivery/app fees, rent, payroll, marketing, EBITDA/operating margin, cash flow, and cash balance trend if available.
+
+2) Key Findings
+- 5 bullets.
+- Each bullet must include actual numbers.
+
+3) Metrics/Ratios Table
+- Metric | Formula | Actual Result | Interpretation
+
+4) Risks & Red Flags
+- 5 bullets.
+- Clearly distinguish actual-data risks from benchmark-based concerns.
+
+5) Action Plan
+- 10 bullets with owner + metric/target + timing.
+
+6) Follow-up Questions
+- 3 questions to improve accuracy.
 """
         with st.spinner(t("分析中…", "Analyzing...")):
             out = ask_ai(prompt, mode="finance")

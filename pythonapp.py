@@ -1658,15 +1658,21 @@ def render_open_store():
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
-        if st.button(t("◀ 上一步", "◀ Back"), use_container_width=True):
-            st.session_state.open_step = max(1, st.session_state.open_step - 1)
+        if st.session_state.open_step > 1:
+            if st.button(t("◀ 上一步", "◀ Back"), use_container_width=True):
+                st.session_state.open_step = max(1, st.session_state.open_step - 1)
+        else:
+            st.button(t("◀ 上一步", "◀ Back"), use_container_width=True, disabled=True)
     with nav2:
-        if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
-            st.session_state.open_step = min(3, st.session_state.open_step + 1)
+        if st.session_state.open_step < 3:
+            if st.button(t("下一步 ▶", "Next ▶"), use_container_width=True):
+                st.session_state.open_step = min(3, st.session_state.open_step + 1)
+        else:
+            st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
     with nav3:
         st.caption(t(
-            "三页完成：先看生意和选址，再看钱和定价，最后给 Go / Caution / No-Go。",
-            "Three pages only: concept & location, money & pricing, then Go / Caution / No-Go."
+            "共 3 页：①概念与选址 → ②预算与定价 → ③结论与报告。第三页已经是最后一页，不再有隐藏的第 4 页。",
+            "3 pages total: ① Concept & Location → ② Budget & Pricing → ③ Decision & Report. Page 3 is the final page; there is no hidden Page 4."
         ))
 
     def show_location_map(lat, lon, label="Target Location"):

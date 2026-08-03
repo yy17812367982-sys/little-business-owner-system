@@ -9,23 +9,19 @@ from datetime import datetime
 from google import genai
 import requests
 
+from business_logic import (
+    calculate_open_store_feasibility,
+    score_from_inputs_site as calculate_site_score,
+)
+
 # =========================================================
 # Page config
 # =========================================================
 st.set_page_config(
-    page_title="SME Financial Research Framework",
+    page_title="Small Business Decision Toolkit",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
-)
-st.info(
-    """
-    📢 U.S. Small Business Financial Research Initiative (Development Stage)
-        This platform is currently under research and development to explore structured financial data interpretation models for U.S. small businesses.
-    
-    **Objective:** Studying data-driven frameworks to improve financial transparency and operational decision-making efficiency.  
-    **Developer:** Yang Yu (Quantitative Finance & Systems Research)  
-    **Contact:** yy17812367982@gmail.com
-    """
 )
 
 # =========================================================
@@ -40,7 +36,12 @@ st.markdown(
 html, body{ height: auto !important; overflow-x: hidden !important; }
 div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
 .stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{ padding-top: 4.5rem !important; padding-bottom: 3rem !important; }
+.block-container{
+  width: min(1180px, calc(100% - 2rem)) !important;
+  max-width: 1180px !important;
+  padding-top: 4.5rem !important;
+  padding-bottom: 3rem !important;
+}
 
 /* =============================
    1) Background
@@ -59,6 +60,10 @@ div[data-testid="stAppViewContainer"]{ position: relative; z-index: 1; }
 div[data-testid="stAppViewContainer"], div[data-testid="stMain"],
 div[data-testid="stHeader"], div[data-testid="stToolbar"]{
   background: transparent !important;
+}
+#MainMenu, [data-testid="stToolbarActions"], .stAppDeployButton{
+  visibility: hidden !important;
+  display: none !important;
 }
 
 /* =============================
@@ -101,7 +106,8 @@ header[data-testid="stHeader"] > div {
 }
 
 /* 2) 改造原生打开按钮（collapsed 控件） */
-[data-testid="stSidebarCollapsedControl"]{
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stExpandSidebarButton"]{
   position: fixed !important;
   top: 16px !important;
   left: 16px !important;
@@ -115,6 +121,8 @@ header[data-testid="stHeader"] > div {
   border-radius: 8px !important;
 
   display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   pointer-events: auto !important;
   cursor: pointer !important;
   transition: all 0.2s ease;
@@ -124,7 +132,8 @@ header[data-testid="stHeader"] > div {
 }
 
 /* ✅关键：让真正可点击的 button 覆盖整个盒子 */
-[data-testid="stSidebarCollapsedControl"] button{
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="stExpandSidebarButton"] button{
   position: absolute !important;
   inset: 0 !important;             /* top/right/bottom/left = 0 */
   width: 100% !important;
@@ -144,12 +153,28 @@ header[data-testid="stHeader"] > div {
 
 /* 隐藏原生 SVG 图标 */
 [data-testid="stSidebarCollapsedControl"] button svg,
-[data-testid="stSidebarCollapsedControl"] button img{
+[data-testid="stSidebarCollapsedControl"] button img,
+[data-testid="stExpandSidebarButton"] button svg,
+[data-testid="stExpandSidebarButton"] button img{
   display: none !important;
 }
 
 /* ✅把“☰ Menu”画到 button 上（点击区域=整个按钮） */
-[data-testid="stSidebarCollapsedControl"] button::before{
+[data-testid="stSidebarCollapsedControl"] button::before,
+[data-testid="stExpandSidebarButton"] button::before{
+  content: "☰ Menu";
+  color: #ffffff !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  font-family: "Source Sans Pro", sans-serif;
+  letter-spacing: 0.5px;
+}
+
+/* Streamlit 1.50+ uses the button itself as stExpandSidebarButton. */
+[data-testid="stExpandSidebarButton"] > *{
+  display: none !important;
+}
+[data-testid="stExpandSidebarButton"]::before{
   content: "☰ Menu";
   color: #ffffff !important;
   font-size: 16px !important;
@@ -159,7 +184,8 @@ header[data-testid="stHeader"] > div {
 }
 
 /* hover */
-[data-testid="stSidebarCollapsedControl"]:hover{
+[data-testid="stSidebarCollapsedControl"]:hover,
+[data-testid="stExpandSidebarButton"]:hover{
   background-color: rgba(0,0,0,0.8) !important;
   border-color: rgba(255,255,255,0.6) !important;
   transform: translateY(1px);
@@ -170,14 +196,12 @@ header[data-testid="stHeader"] > div {
    ★ 隐藏展开侧边栏后的关闭按钮 (<) ★
    ============================= */
 [data-testid="stSidebarExpandedControl"]{
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
-  display: none !important;
+  display: flex !important;
 }
 
 /* =============================
@@ -218,6 +242,48 @@ div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #
   backdrop-filter: blur(10px);
   color: rgba(255,255,255,0.90) !important;
   text-shadow: none !important;
+}
+
+.hero-card{
+  background: linear-gradient(135deg, rgba(2,132,199,0.80), rgba(15,23,42,0.82));
+  border: 1px solid rgba(186,230,253,0.40);
+  border-radius: 22px;
+  padding: 24px 26px;
+  margin: 0 0 18px 0;
+  box-shadow: 0 18px 46px rgba(0,0,0,0.34);
+  backdrop-filter: blur(14px);
+}
+.hero-card h1{ margin: 0 0 8px 0 !important; font-size: clamp(2rem, 4vw, 3.25rem) !important; }
+.hero-card p{ margin: 0 !important; font-size: 1.08rem; line-height: 1.55; max-width: 820px; }
+.hero-points{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.hero-chip{
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px;
+  padding: 7px 11px;
+  color:#fff;
+  font-size:.92rem;
+  font-weight:700;
+}
+.trust-card{
+  background: rgba(3,105,161,0.22);
+  border: 1px solid rgba(125,211,252,0.35);
+  border-radius: 14px;
+  padding: 13px 15px;
+  margin: 10px 0 16px 0;
+}
+.demo-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  background: rgba(245,158,11,0.18);
+  border: 1px solid rgba(251,191,36,0.50);
+  border-radius:999px;
+  padding:6px 10px;
+  margin-bottom:10px;
+  color:#fef3c7;
+  font-size:.9rem;
+  font-weight:800;
 }
 
 button{
@@ -360,6 +426,29 @@ div[data-testid="stDataFrame"] * {
 @media (max-width: 760px){
   .open-step-wrap{ grid-template-columns: 1fr; }
   .open-step-pill{ justify-content: flex-start; }
+  .block-container{
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 4.25rem 1rem 2rem 1rem !important;
+  }
+  .stApp{ background-attachment: scroll !important; }
+  section[data-testid="stSidebar"]{ width: min(88vw, 320px) !important; }
+  div[data-testid="stHorizontalBlock"]{
+    flex-wrap: wrap !important;
+    gap: .75rem !important;
+  }
+  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]{
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .hero-card{ padding: 19px 17px; border-radius: 16px; }
+  .hero-card h1{ font-size: 2rem !important; line-height:1.08 !important; }
+  .hero-card p{ font-size: 1rem; }
+  .hero-points{ display:grid; grid-template-columns:1fr; }
+  button, [role="button"]{ min-height:44px !important; }
+  div[data-testid="stMetric"]{ min-width: 0 !important; }
+  div[data-testid="stDataFrame"]{ overflow-x:auto !important; }
 }
 
 </style>
@@ -394,14 +483,19 @@ if not API_KEY:
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 SYSTEM_POLICY = """
-You are "Yangyu's AI" — an AI assistant branded for an SME decision platform.
+You are the Small Business Decision Assistant built into this SME decision platform.
 
 Rules:
 - NEVER mention any underlying model/provider/vendor or internal API names.
 - If asked "Who are you?", "What model are you?", "Are you Gemini?" or similar:
-  answer: "I'm Yangyu's AI assistant." (optionally: built into this platform to help SMEs).
+  answer: "I'm the Small Business Decision Assistant built into this platform."
 - Keep outputs structured and actionable; prefer bullet points, metrics, and next steps.
 - If user requests sensitive/illegal help, refuse briefly and offer safe alternatives.
+- Never invent local laws, permit requirements, market prices, vendor facts, traffic thresholds, or citations.
+- Use only facts supplied by the user or the application. Clearly label all other numbers as estimates or general benchmarks.
+- For local regulatory or market claims, add a "Verify with" note naming the appropriate official authority or primary source.
+- State the data date when it is provided. If no date or source is available, say that the claim is not yet verified.
+- Do not provide legal, tax, investment, or regulated financial advice.
 """
 
 MODEL_CANDIDATES_PRO = [
@@ -868,12 +962,24 @@ if "inventory" not in st.session_state:
 if "pricing" not in st.session_state:
     st.session_state.pricing = {
         "strategy": "Competitive",
-        "cost": 100.0,
-        "target_margin": 30,
-        "competitor_price": 135.0,
+        "cost": 1.75,
+        "planned_price": 5.25,
+        "target_margin": 65,
+        "competitor_price": 5.50,
         "elasticity": "Medium",
         "notes": ""
     }
+
+# Migrate the original decimal-error demo values for sessions that were already open.
+_legacy_cost = float(st.session_state.pricing.get("cost", 0) or 0)
+_legacy_competitor = float(st.session_state.pricing.get("competitor_price", 0) or 0)
+if abs(_legacy_cost - 100.0) < 0.001 and abs(_legacy_competitor - 135.0) < 0.001:
+    st.session_state.pricing.update({
+        "cost": 1.75,
+        "planned_price": 5.25,
+        "target_margin": 65,
+        "competitor_price": 5.50,
+    })
 
 # Open-a-store launch feasibility inputs.
 # This is intentionally lighter than the Operations and Finance suites:
@@ -915,6 +1021,9 @@ if "outputs" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+if "open_store_inputs_reviewed" not in st.session_state:
+    st.session_state.open_store_inputs_reviewed = False
+
 if "site_geo" not in st.session_state:
     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
@@ -922,24 +1031,7 @@ if "site_geo" not in st.session_state:
 # Helpers
 # =========================================================
 def score_from_inputs_site(traffic: int, competitors: int, rent_level: str, parking: str) -> int:
-    score = 55
-    if traffic >= 40000: score += 10
-    elif traffic >= 25000: score += 6
-    else: score += 2
-
-    if competitors <= 6: score += 12
-    elif competitors <= 12: score += 6
-    else: score -= 6
-
-    if rent_level == "Low": score += 8
-    elif rent_level == "Medium": score += 3
-    else: score -= 6
-
-    if parking == "High": score += 6
-    elif parking == "Medium": score += 2
-    else: score -= 4
-
-    return int(max(0, min(100, score)))
+    return calculate_site_score(traffic, competitors, rent_level, parking)
 
 def inventory_health(df: pd.DataFrame) -> dict:
     df2 = df.copy()
@@ -958,136 +1050,13 @@ def inventory_health(df: pd.DataFrame) -> dict:
     }
 
 def open_store_feasibility_metrics() -> dict:
-    """Compute pre-launch feasibility metrics for the Open a Store suite."""
-    p = st.session_state.profile
-    s = st.session_state.site
-    launch = st.session_state.launch
-    pr = st.session_state.pricing
-
-    budget = float(p.get("budget", 0) or 0)
-    funding_available = float(launch.get("funding_available", budget) or budget)
-
-    if "startup_cost_estimate" in launch:
-        startup_cost = float(launch.get("startup_cost_estimate", 0) or 0)
-    else:
-        startup_cost = (
-            float(launch.get("buildout_cost", 0) or 0)
-            + float(launch.get("licenses_deposits", 0) or 0)
-            + float(launch.get("equipment_cost", 0) or 0)
-            + float(launch.get("initial_inventory_budget", 0) or 0)
-            + float(launch.get("launch_marketing_budget", 0) or 0)
-        )
-
-    if "monthly_fixed_cost_estimate" in launch:
-        monthly_fixed_cost = float(launch.get("monthly_fixed_cost_estimate", 0) or 0)
-    else:
-        monthly_fixed_cost = (
-            float(launch.get("monthly_rent", 0) or 0)
-            + float(launch.get("monthly_payroll", 0) or 0)
-            + float(launch.get("monthly_utilities", 0) or 0)
-            + float(launch.get("monthly_insurance", 0) or 0)
-            + float(launch.get("other_monthly_fixed", 0) or 0)
-        )
-
-    remaining_cash = funding_available - startup_cost
-    runway_months = remaining_cash / monthly_fixed_cost if monthly_fixed_cost > 0 else np.inf
-    target_cash_need = monthly_fixed_cost * float(launch.get("cash_target_months", 3) or 3)
-    funding_gap = max(0.0, startup_cost + target_cash_need - funding_available)
-
-    expected_revenue = float(launch.get("expected_monthly_revenue", 0) or 0)
-    expected_gm = float(launch.get("expected_gross_margin", 0) or 0) / 100.0
-    contribution_profit = expected_revenue * expected_gm
-    monthly_profit_after_fixed = contribution_profit - monthly_fixed_cost
-    breakeven_revenue = monthly_fixed_cost / expected_gm if expected_gm > 0 else np.inf
-
-    site_score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
-
-    # Pricing sanity check. In the simplified workflow, users enter a planned price directly.
-    cost = float(pr.get("cost", 0) or 0)
-    competitor_price = float(pr.get("competitor_price", 0) or 0)
-    target_margin_pct = float(pr.get("target_margin", 0) or 0)
-    recommended_price = cost * (1 + target_margin_pct / 100.0)
-    planned_price = float(pr.get("planned_price", recommended_price) or recommended_price)
-    implied_margin = (planned_price - cost) / planned_price if planned_price > 0 else 0.0
-    price_vs_competitor = (planned_price - competitor_price) / competitor_price if competitor_price > 0 else 0.0
-
-    # Scores: deliberately simple and explainable for a pre-launch decision.
-    cash_score = 100
-    if runway_months < 1:
-        cash_score = 20
-    elif runway_months < 2:
-        cash_score = 45
-    elif runway_months < float(launch.get("cash_target_months", 3) or 3):
-        cash_score = 65
-    else:
-        cash_score = 85
-    if funding_gap > 0:
-        cash_score = max(15, cash_score - 20)
-
-    margin_score = 50
-    if monthly_profit_after_fixed > 0 and expected_gm >= 0.55:
-        margin_score = 85
-    elif monthly_profit_after_fixed > 0:
-        margin_score = 70
-    elif expected_gm >= 0.55:
-        margin_score = 55
-    else:
-        margin_score = 35
-
-    competition_score = 80
-    competitors = int(s.get("competitors", 0) or 0)
-    if competitors > 20:
-        competition_score = 35
-    elif competitors > 12:
-        competition_score = 55
-    elif competitors > 6:
-        competition_score = 70
-
-    overall_score = int(round(site_score * 0.35 + cash_score * 0.35 + margin_score * 0.20 + competition_score * 0.10))
-    if overall_score >= 75 and funding_gap <= 0 and monthly_profit_after_fixed >= 0:
-        decision = "GO"
-    elif overall_score >= 55:
-        decision = "CAUTION"
-    else:
-        decision = "NO-GO"
-
-    risks = []
-    if funding_gap > 0:
-        risks.append(f"Funding gap of USD {funding_gap:,.0f} against target cash runway")
-    if runway_months < float(launch.get("cash_target_months", 3) or 3):
-        risks.append(f"Cash runway is {runway_months:.1f} months, below the target of {launch.get('cash_target_months', 3)} months")
-    if monthly_profit_after_fixed < 0:
-        risks.append(f"Expected monthly gross profit does not cover fixed costs; estimated shortfall is USD {abs(monthly_profit_after_fixed):,.0f}/month")
-    if s.get("rent_level") == "High":
-        risks.append("Rent level is marked High, increasing break-even pressure")
-    if competitors > 12:
-        risks.append(f"Competitive density is high with {competitors} competitors in the selected radius")
-    if price_vs_competitor > 0.10:
-        risks.append(f"Recommended price is {price_vs_competitor:.1%} above competitor price")
-
-    return {
-        "startup_cost": startup_cost,
-        "monthly_fixed_cost": monthly_fixed_cost,
-        "remaining_cash": remaining_cash,
-        "runway_months": runway_months,
-        "target_cash_need": target_cash_need,
-        "funding_gap": funding_gap,
-        "expected_revenue": expected_revenue,
-        "expected_gross_margin_pct": expected_gm * 100,
-        "contribution_profit": contribution_profit,
-        "monthly_profit_after_fixed": monthly_profit_after_fixed,
-        "breakeven_revenue": breakeven_revenue,
-        "site_score": site_score,
-        "cash_score": cash_score,
-        "margin_score": margin_score,
-        "competition_score": competition_score,
-        "overall_score": overall_score,
-        "decision": decision,
-        "recommended_price": planned_price,
-        "implied_margin_pct": implied_margin * 100,
-        "price_vs_competitor_pct": price_vs_competitor * 100,
-        "risks": risks,
-    }
+    """Compute pre-launch metrics from one tested source of truth."""
+    return calculate_open_store_feasibility(
+        st.session_state.profile,
+        st.session_state.site,
+        st.session_state.launch,
+        st.session_state.pricing,
+    )
 
 
 
@@ -1127,6 +1096,14 @@ def ai_report_open_store(user_question: str = "") -> str:
     pr = st.session_state.pricing
     m = open_store_feasibility_metrics()
 
+    if not m.get("decision_ready", False):
+        issues = "\n".join(f"- {item}" for item in m.get("input_errors", []))
+        return (
+            "# Review Inputs Before Generating a Report\n\n"
+            "The application found blocking input errors:\n\n"
+            f"{issues}\n\nCorrect these values and generate the report again."
+        )
+
     prompt = f"""
 You are producing a professional pre-launch feasibility report for a U.S. small business owner.
 Output MUST be Markdown.
@@ -1134,9 +1111,12 @@ Output MUST be Markdown.
 Important rules:
 - This is a PRE-LAUNCH decision report, not an operations report and not a full financial statement analysis.
 - Use only the provided inputs and computed metrics.
+- Do not invent Austin laws, permit timelines, rent benchmarks, traffic thresholds, vendor facts, or other local claims.
+- If a recommendation depends on local rules or market data, label it "Needs verification" and name the relevant official authority or primary source to check.
 - Do not use dollar signs. Use "USD" before amounts to avoid Markdown rendering issues.
 - Do not overstate risk. Use "GO", "CAUTION", or "NO-GO" as the launch decision.
 - Every key finding must cite at least one specific input or computed number.
+- Explicitly disclose any assumption warnings contained in the computed metrics.
 
 Report structure:
 # Open-Store Feasibility Report
@@ -1752,13 +1732,14 @@ with st.sidebar:
 
     st.markdown("### " + t("功能集合", "Suites"))
     suite_label = st.radio(
-        "",
+        t("选择功能", "Choose a suite"),
         options=[
             t("开店（决策流）", "Open a Store"),
             t("运营（跑起来）", "Operations"),
             t("财务（分析）", "Finance"),
         ],
-        index={"open_store": 0, "operations": 1, "finance": 2}.get(st.session_state.active_suite, 0)
+        index={"open_store": 0, "operations": 1, "finance": 2}.get(st.session_state.active_suite, 0),
+        label_visibility="collapsed",
     )
 
     mapping = {
@@ -1772,25 +1753,44 @@ with st.sidebar:
         # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     st.markdown("---")
-    st.image("https://cdn-icons-png.flaticon.com/512/2362/2362378.png", width=48)
-
-    st.text_input(
-        t("用户名", "Username"),
-        key="username",
-        placeholder=t("输入用户名", "Enter a username"),
-        on_change=on_username_submit
-    )
-    if st.session_state.register_msg:
-        st.warning(st.session_state.register_msg)
-
-    st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
-    st.caption("v6.0 Simplified Open-Store Feasibility + Operations Control Center + Finance Engine")
+    st.caption(t(
+        "研究原型。请勿上传社会安全号码、税号、银行卡号或密码。",
+        "Research prototype. Do not upload Social Security numbers, tax IDs, payment-card data, or passwords."
+    ))
 
 # =========================================================
 # Header + Top Ask AI
 # =========================================================
-st.title("SME Financial Research Framework")
+st.markdown(
+    """
+    <section class="hero-card">
+      <h1>{}</h1>
+      <p>{}</p>
+      <div class="hero-points">
+        <span class="hero-chip">{}</span>
+        <span class="hero-chip">{}</span>
+        <span class="hero-chip">{}</span>
+      </div>
+    </section>
+    """.format(
+        t("在投入资金前，看清你的小生意是否可行", "Know whether your small-business idea can work before you invest"),
+        t(
+            "用四步梳理选址、启动资金、现金跑道和定价，并生成一份可执行的风险报告。通常约 5 分钟。",
+            "Review location, launch funding, cash runway, and pricing in four steps, then get an actionable risk report. Usually about five minutes."
+        ),
+        t("✓ 4 步可行性检查", "✓ Four-step feasibility check"),
+        t("✓ 清晰展示假设与评分", "✓ Transparent assumptions and scores"),
+        t("✓ 可下载行动报告", "✓ Downloadable action report"),
+    ),
+    unsafe_allow_html=True,
+)
+
+with st.expander(t("关于本研究原型", "About this research prototype"), expanded=False):
+    st.markdown(t(
+        "本工具由 Yang Yu 开发，用于研究美国小企业的结构化决策方法。它提供信息与研究支持，不构成法律、税务、投资或受监管的财务建议。联系：yy17812367982@gmail.com",
+        "Developed by Yang Yu to research structured decision methods for U.S. small businesses. It provides informational research support, not legal, tax, investment, or regulated financial advice. Contact: yy17812367982@gmail.com"
+    ))
 
 if "show_top_chat" not in st.session_state:
     st.session_state.show_top_chat = False
@@ -1805,7 +1805,7 @@ if "clear_top_ask_ai" not in st.session_state:
 if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
-with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
+with st.expander(t("咨询小企业决策助手", "Ask the Small Business Decision Assistant"), expanded=False):
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
@@ -1836,31 +1836,28 @@ with st.expander(t("问 AI（入口）", "Ask AI (Top Entry)"), expanded=False):
             st.session_state.chat_history.append({"role": "ai", "text": ans})
             st.session_state.clear_top_ask_ai = True
             st.session_state.top_last_status = "ready"
-            st.session_state.show_top_chat = False
-            st.session_state.top_chat_collapsed = True
-            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-
-    c1, c2, c3, c4 = st.columns([1.2, 1.2, 1.2, 6.4])
-    with c1:
-        if st.button(t("展示", "Show"), use_container_width=True):
             st.session_state.show_top_chat = True
             st.session_state.top_chat_collapsed = False
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
+
+    c1, c2, c3 = st.columns([1.5, 1.2, 6.3])
+    with c1:
+        if st.session_state.chat_history:
+            toggle_label = t("收起回答", "Hide answer") if st.session_state.show_top_chat else t("显示回答", "Show answer")
+            if st.button(toggle_label, use_container_width=True):
+                st.session_state.show_top_chat = not st.session_state.show_top_chat
+                st.session_state.top_chat_collapsed = not st.session_state.show_top_chat
+                # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
     with c2:
-        if st.button(t("收起", "Hide"), use_container_width=True):
-            st.session_state.show_top_chat = False
-            st.session_state.top_chat_collapsed = True
-            # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-    with c3:
-        if st.button(t("清空", "Clear"), use_container_width=True):
+        if st.session_state.chat_history and st.button(t("清空", "Clear"), use_container_width=True):
             st.session_state.chat_history = []
             st.session_state.show_top_chat = False
             st.session_state.top_chat_collapsed = True
             st.session_state.top_last_status = ""
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
-    with c4:
+    with c3:
         if st.session_state.top_last_status == "ready":
-            st.success(t("已生成回答。点「展示」查看。", "Answer ready. Click “Show” to view."), icon="✅")
+            st.success(t("回答已生成并显示在下方。", "Answer ready and shown below."), icon="✅")
 
 if st.session_state.show_top_chat and st.session_state.chat_history:
     st.markdown("### " + t("对话记录", "Conversation"))
@@ -1876,11 +1873,10 @@ if st.session_state.show_top_chat and st.session_state.chat_history:
                 unsafe_allow_html=True
             )
         else:
-            ai_label = t("Yangyu 的 AI:", "Yangyu's AI:")
-            st.markdown(
-                "<div class='card'><b>{}</b><br>{}</div>".format(ai_label, safe_text),
-                unsafe_allow_html=True
-            )
+            ai_label = t("小企业决策助手：", "Small Business Decision Assistant:")
+            with st.container(border=True):
+                st.markdown(f"**{ai_label}**")
+                st.markdown(text)
 
 # =========================================================
 # Suite 1: Open a Store
@@ -1891,6 +1887,16 @@ def render_open_store():
         st.session_state.open_step = 4
 
     st.header(t("开店可行性评估", "Open a Store Feasibility"))
+    st.markdown(
+        '<span class="demo-badge">🧪 {}</span>'.format(
+            t("已预载演示场景", "Preloaded demo scenario")
+        ),
+        unsafe_allow_html=True,
+    )
+    st.caption(t(
+        "当前字段是 Austin 咖啡店示例，不是你的真实业务数据。请逐项替换；最终报告生成前需要确认。",
+        "The current fields are an Austin coffee-shop example, not your business data. Replace each assumption and confirm it before generating a final report."
+    ))
 
     step_titles = [
         t("业务概念", "Concept"),
@@ -1933,9 +1939,20 @@ def render_open_store():
     # without reintroducing forced st.rerun() calls.
     def _open_store_prev():
         st.session_state.open_step = max(1, int(st.session_state.get("open_step", 1)) - 1)
+        st.session_state.open_nav_error = ""
 
     def _open_store_next():
-        st.session_state.open_step = min(4, int(st.session_state.get("open_step", 1)) + 1)
+        current_step = int(st.session_state.get("open_step", 1))
+        if current_step == 3:
+            check = open_store_feasibility_metrics()
+            if not check.get("decision_ready", False):
+                st.session_state.open_nav_error = t(
+                    "请先修正预算与定价页中的输入错误。",
+                    "Correct the input errors on the Budget & Pricing page before continuing."
+                )
+                return
+        st.session_state.open_nav_error = ""
+        st.session_state.open_step = min(4, current_step + 1)
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
@@ -1961,6 +1978,9 @@ def render_open_store():
             "共 4 段：①业务概念 → ②选址地图 → ③预算定价 → ④结论报告。每段对应一个页面。",
             "4 segments total: ① Concept → ② Location Map → ③ Budget & Pricing → ④ Decision & Report. Each segment matches one page."
         ))
+
+    if st.session_state.get("open_nav_error"):
+        st.error(st.session_state.open_nav_error)
 
     def show_location_map(lat, lon, label="Target Location"):
         """Show a cleaner, darker Texas-centered location map with graceful fallback."""
@@ -2168,7 +2188,7 @@ def render_open_store():
 
         with col2:
             st.markdown("### " + t("代表性产品定价", "Representative Product Pricing"))
-            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 3.2)), step=0.1)
+            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 1.75)), step=0.05)
             pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, value=float(pr.get("planned_price", 5.25)), step=0.1)
             pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr.get("competitor_price", 5.5)), step=0.1)
             pr["strategy"] = st.selectbox(
@@ -2193,6 +2213,11 @@ def render_open_store():
         c6.metric(t("计划售价", "Planned Price"), f"USD {m['recommended_price']:,.2f}")
         c7.metric(t("计划毛利率", "Product Margin"), f"{m['implied_margin_pct']:.1f}%")
 
+        if m.get("input_errors"):
+            st.error(t("请先修正以下输入：", "Correct these inputs before continuing:") + "\n\n- " + "\n- ".join(m["input_errors"]))
+        for warning in m.get("input_warnings", []):
+            st.warning(warning)
+
         if m["funding_gap"] > 0 or m["runway_months"] < launch["cash_target_months"]:
             st.warning(t("现金跑道偏紧：先降低启动成本、谈免租期/账期，或补充启动资金。", "Cash runway is tight: reduce startup cost, negotiate free rent/payment terms, or secure additional funding."))
         else:
@@ -2207,6 +2232,7 @@ def render_open_store():
             "GO": t("可以推进，但仍需完成开业前检查清单。", "Proceed, but complete the pre-launch checklist."),
             "CAUTION": t("谨慎推进，先修复主要风险。", "Proceed cautiously and fix the main risks first."),
             "NO-GO": t("暂不建议开店，先重做资金、选址或利润假设。", "Do not launch yet; revisit funding, location, or margin assumptions first."),
+            "REVIEW INPUTS": t("当前输入存在错误，系统不会生成决策报告。请返回预算与定价页修正。", "The current inputs contain errors. No decision report will be generated until they are corrected."),
         }.get(decision, "")
 
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -2215,7 +2241,10 @@ def render_open_store():
         c3.metric(t("选址", "Site"), int(m["site_score"]))
         c4.metric(t("现金", "Cash"), int(m["cash_score"]))
         c5.metric(t("利润", "Margin"), int(m["margin_score"]))
-        st.info(decision_msg)
+        if decision == "REVIEW INPUTS":
+            st.error(decision_msg)
+        else:
+            st.info(decision_msg)
 
         st.markdown("### " + t("核心依据", "Decision Evidence"))
         metric_df = pd.DataFrame([
@@ -2224,9 +2253,25 @@ def render_open_store():
             {"Metric": "Monthly Fixed Cost", "Value": f"USD {m['monthly_fixed_cost']:,.0f}", "Meaning": "Fixed monthly cash burden"},
             {"Metric": "Cash Runway", "Value": f"{m['runway_months']:.1f} months", "Meaning": "Remaining cash after startup costs"},
             {"Metric": "Break-even Revenue", "Value": f"USD {m['breakeven_revenue']:,.0f}" if np.isfinite(m['breakeven_revenue']) else "N/A", "Meaning": "Revenue needed to cover fixed costs"},
+            {"Metric": "Unit Cost", "Value": f"USD {m['unit_cost']:,.2f}", "Meaning": "Representative product cost"},
             {"Metric": "Planned Price", "Value": f"USD {m['recommended_price']:,.2f}", "Meaning": "Representative product price"},
+            {"Metric": "Product Margin", "Value": f"{m['implied_margin_pct']:.1f}%", "Meaning": "(Price - unit cost) / price"},
+            {"Metric": "Expected Business Gross Margin", "Value": f"{m['expected_gross_margin_pct']:.1f}%", "Meaning": "User-provided total-business assumption"},
         ])
         st.dataframe(metric_df, use_container_width=True, hide_index=True)
+
+        with st.expander(t("评分方法", "How the score is calculated"), expanded=False):
+            score_df = pd.DataFrame([
+                {"Component": "Site", "Score": int(m["site_score"]), "Weight": "35%"},
+                {"Component": "Cash", "Score": int(m["cash_score"]), "Weight": "35%"},
+                {"Component": "Margin", "Score": int(m["margin_score"]), "Weight": "20%"},
+                {"Component": "Competition", "Score": int(m["competition_score"]), "Weight": "10%"},
+            ])
+            st.dataframe(score_df, use_container_width=True, hide_index=True)
+            st.caption(t(
+                "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。输入错误会阻止最终判断。",
+                "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%. Blocking input errors prevent a final decision."
+            ))
 
         if m["risks"]:
             st.markdown("### " + t("主要风险", "Main Risks"))
@@ -2251,9 +2296,28 @@ def render_open_store():
             key="open_store_question",
             height=120
         )
+        st.session_state.open_store_inputs_reviewed = st.checkbox(
+            t(
+                "我已检查所有示例字段，并确认它们现在代表我的业务场景。",
+                "I reviewed every demo field and confirm that the inputs now represent my business scenario."
+            ),
+            value=bool(st.session_state.get("open_store_inputs_reviewed", False)),
+            key="open_store_inputs_reviewed_checkbox",
+        )
+        report_ready = bool(st.session_state.open_store_inputs_reviewed and m.get("decision_ready", False))
+        if not report_ready:
+            st.caption(t(
+                "修正所有输入错误并勾选确认后，才可生成 AI 报告。",
+                "Correct all input errors and confirm the assumptions before generating an AI report."
+            ))
         colA, colB = st.columns([1, 1])
         with colA:
-            if st.button(t("生成开店决策报告", "Generate Launch Decision Report"), type="primary", use_container_width=True):
+            if st.button(
+                t("生成开店决策报告", "Generate Launch Decision Report"),
+                type="primary",
+                use_container_width=True,
+                disabled=not report_ready,
+            ):
                 with st.spinner(t("生成报告中…", "Generating report...")):
                     st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
         with colB:
@@ -2283,6 +2347,24 @@ def render_operations():
               "This suite connects inventory, replenishment, overstock, cash tied in stock, and action plans for day-to-day SME operations diagnosis.")
         ),
         unsafe_allow_html=True
+    )
+
+    st.markdown(
+        """
+        <div class="trust-card"><b>{}</b><br>{}<br><br><b>{}</b> {}</div>
+        """.format(
+            t("上传前请阅读", "Before you upload"),
+            t(
+                "本应用代码不会把上传文件写入数据库或磁盘。只有点击“分析”或“生成报告”后，解析后的内容才会发送到已配置的 Google Gemini API。托管平台和 AI 服务仍可能按各自条款处理数据。",
+                "This application does not write uploaded files to a database or disk. Parsed content is sent to the configured Google Gemini API only after you click Analyze or Generate Report. The hosting platform and AI service may still process data under their own terms."
+            ),
+            t("请勿上传：", "Do not upload:"),
+            t(
+                "社会安全号码、税号、银行账户或银行卡号、密码、医疗信息，或任何不必要的个人身份信息。",
+                "Social Security numbers, tax IDs, bank or payment-card numbers, passwords, medical data, or unnecessary personal identifiers."
+            ),
+        ),
+        unsafe_allow_html=True,
     )
 
     inv = st.session_state.inventory
@@ -2484,11 +2566,36 @@ def render_finance():
         unsafe_allow_html=True
     )
 
+    st.markdown(
+        """
+        <div class="trust-card"><b>{}</b><br>{}<br><br><b>{}</b> {}</div>
+        """.format(
+            t("上传前请阅读", "Before you upload"),
+            t(
+                "本应用代码不会把上传文件写入数据库或磁盘。只有点击“分析”或“生成报告”后，解析后的内容才会发送到已配置的 Google Gemini API。托管平台和 AI 服务仍可能按各自条款处理数据。",
+                "This application does not write uploaded files to a database or disk. Parsed content is sent to the configured Google Gemini API only after you click Analyze or Generate Report. The hosting platform and AI service may still process data under their own terms."
+            ),
+            t("请勿上传：", "Do not upload:"),
+            t(
+                "社会安全号码、税号、银行账户或银行卡号、密码、医疗信息，或任何不必要的个人身份信息。",
+                "Social Security numbers, tax IDs, bank or payment-card numbers, passwords, medical data, or unnecessary personal identifiers."
+            ),
+        ),
+        unsafe_allow_html=True,
+    )
+
     files = st.file_uploader(
         t("上传资料（可多选）", "Upload files (multi)"),
         type=["csv", "xlsx", "xls", "txt", "md"],
         accept_multiple_files=True
     )
+    finance_consent = st.checkbox(t(
+        "我已删除敏感个人信息，并同意将解析后的内容发送给已配置的 AI 服务进行分析。",
+        "I removed sensitive personal information and consent to sending parsed content to the configured AI service for analysis."
+    ))
+    finance_ready = bool(files and finance_consent)
+    if not files:
+        st.caption(t("请先上传至少一个文件。单个文件上限为 25MB。", "Upload at least one file first. The per-file limit is 25MB."))
 
     question = st.text_area(
         t("你希望重点分析什么？", "What should we focus on?"),
@@ -2499,27 +2606,29 @@ def render_finance():
     with col1:
         st.write(t("常用分析主题", "Common focus"))
         focus = st.selectbox(
-            "",
+            t("常用分析主题", "Common focus"),
             options=[
                 t("现金流与跑道", "Cash flow & runway"),
                 t("利润率与定价", "Margins & pricing"),
                 t("费用结构与降本", "Cost structure & savings"),
                 t("应收应付与周转", "AR/AP & working capital"),
                 t("风险与内控建议", "Risk & controls")
-            ]
+            ],
+            label_visibility="collapsed",
         )
     with col2:
         st.write(t("输出风格", "Output style"))
         style = st.selectbox(
-            "",
+            t("输出风格", "Output style"),
             options=[
                 t("老板能执行的清单", "Owner-executable checklist"),
                 t("财务经理风格（更细）", "Finance manager style (detailed)"),
                 t("极简三段论", "Minimal: 3-part summary")
-            ]
+            ],
+            label_visibility="collapsed",
         )
 
-    if st.button(t("开始分析", "Analyze"), type="primary"):
+    if st.button(t("开始分析", "Analyze"), type="primary", disabled=not finance_ready):
         doc_text = read_uploaded_to_text(files) if files else "[No files uploaded]"
         prompt = f"""
 You are analyzing uploaded financial data for a U.S. small business owner.
@@ -2574,7 +2683,12 @@ Return:
 
     colA, colB = st.columns([1, 1])
     with colA:
-        if st.button(t("生成财务报告", "Generate Finance Report"), type="primary", use_container_width=True):
+        if st.button(
+            t("生成财务报告", "Generate Finance Report"),
+            type="primary",
+            use_container_width=True,
+            disabled=not finance_ready,
+        ):
             doc_text = read_uploaded_to_text(files) if files else "[No files uploaded]"
             with st.spinner(t("生成中…", "Generating...")):
                 st.session_state.outputs["finance_report_md"] = ai_report_finance(

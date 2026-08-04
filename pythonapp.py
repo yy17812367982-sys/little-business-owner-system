@@ -1,8 +1,6 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
-import json
 import os
 import time
 import random
@@ -21,8 +19,19 @@ from business_logic import (
 # =========================================================
 # Page config
 # =========================================================
+_SUITE_PAGE_TITLES = {
+    "open_store": "Open a Store · Small Business Decision Toolkit",
+    "operations": "Operations Control Center · Small Business Decision Toolkit",
+    "finance": "Financial Analysis · Small Business Decision Toolkit",
+}
+if "active_suite" not in st.session_state:
+    st.session_state.active_suite = "open_store"
+
 st.set_page_config(
-    page_title="Open a Store · Small Business Decision Toolkit",
+    page_title=_SUITE_PAGE_TITLES.get(
+        st.session_state.active_suite,
+        _SUITE_PAGE_TITLES["open_store"],
+    ),
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -914,9 +923,6 @@ DEFAULT_TEXAS_LABEL = "South Congress, Austin, TX"
 # =========================================================
 # State init
 # =========================================================
-if "active_suite" not in st.session_state:
-    st.session_state.active_suite = "open_store"
-
 if "username" not in st.session_state:
     st.session_state.username = ""
 if "register_msg" not in st.session_state:
@@ -1755,31 +1761,34 @@ def read_uploaded_to_text(files) -> str:
 # =========================================================
 # Sidebar
 # =========================================================
+def _select_suite():
+    st.session_state.active_suite = {
+        t("开店（决策流）", "Open a Store"): "open_store",
+        t("运营（跑起来）", "Operations"): "operations",
+        t("财务（分析）", "Finance"): "finance",
+    }[st.session_state.suite_selector]
+
+
 with st.sidebar:
     st.button(t("🌐 切换语言", "🌐 Switch Language"), on_click=toggle_language)
     st.markdown("---")
 
     st.markdown("### " + t("功能集合", "Suites"))
-    suite_label = st.radio(
+    st.radio(
         t("选择功能", "Choose a suite"),
         options=[
             t("开店（决策流）", "Open a Store"),
             t("运营（跑起来）", "Operations"),
             t("财务（分析）", "Finance"),
         ],
-        index={"open_store": 0, "operations": 1, "finance": 2}.get(st.session_state.active_suite, 0),
+        index={"open_store": 0, "operations": 1, "finance": 2}.get(
+            st.session_state.active_suite,
+            0,
+        ),
         label_visibility="collapsed",
+        key="suite_selector",
+        on_change=_select_suite,
     )
-
-    mapping = {
-        t("开店（决策流）", "Open a Store"): "open_store",
-        t("运营（跑起来）", "Operations"): "operations",
-        t("财务（分析）", "Finance"): "finance",
-    }
-    new_suite = mapping[suite_label]
-    if new_suite != st.session_state.active_suite:
-        st.session_state.active_suite = new_suite
-        # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
 
     st.markdown("---")
     st.success(t("🟢 系统在线", "🟢 System Online"))
@@ -1787,23 +1796,6 @@ with st.sidebar:
         "研究原型。请勿上传社会安全号码、税号、银行卡号或密码。",
         "Research prototype. Do not upload Social Security numbers, tax IDs, payment-card data, or passwords."
     ))
-
-_SUITE_PAGE_TITLES = {
-    "open_store": "Open a Store · Small Business Decision Toolkit",
-    "operations": "Operations Control Center · Small Business Decision Toolkit",
-    "finance": "Financial Analysis · Small Business Decision Toolkit",
-}
-_active_page_title = _SUITE_PAGE_TITLES.get(
-    st.session_state.active_suite,
-    _SUITE_PAGE_TITLES["open_store"],
-)
-components.html(
-    "<script>window.parent.document.title = "
-    + json.dumps(_active_page_title)
-    + ";</script>",
-    height=0,
-    width=0,
-)
 
 # =========================================================
 # Header + Top Ask AI

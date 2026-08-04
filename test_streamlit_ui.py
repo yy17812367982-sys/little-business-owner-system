@@ -36,6 +36,7 @@ class DanielFollowUpUITests(unittest.TestCase):
 
     def test_operations_ai_actions_require_explicit_consent(self):
         self.app.radio[0].set_value("Operations").run()
+        self.assertEqual(self.app.session_state["active_suite"], "operations")
         self.app.button(key="ops_load_cafe_sample").click().run()
 
         ai_labels = {"Run Operations Diagnosis", "Generate Operations Report"}

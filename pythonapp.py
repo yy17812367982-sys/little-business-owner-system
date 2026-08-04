@@ -2441,6 +2441,19 @@ def render_operations():
         unsafe_allow_html=True,
     )
 
+    operations_consent = st.checkbox(
+        t(
+            "我已删除敏感个人信息，并同意将解析后的运营数据发送给已配置的 AI 服务进行分析。",
+            "I removed sensitive personal information and consent to sending parsed operations data to the configured AI service for analysis.",
+        ),
+        key="operations_ai_consent",
+    )
+    if not operations_consent:
+        st.caption(t(
+            "本地库存仪表盘仍可使用；勾选授权后才能运行 AI 诊断或生成 AI 报告。",
+            "The local inventory dashboard remains available. Consent is required only for AI diagnosis and AI report generation.",
+        ))
+
     inv = st.session_state.inventory
     if "ops_diagnosis_md" not in st.session_state.outputs:
         st.session_state.outputs["ops_diagnosis_md"] = ""
@@ -2589,7 +2602,12 @@ def render_operations():
         )
         c1, c2 = st.columns([1, 1])
         with c1:
-            if st.button(t("运行运营诊断", "Run Operations Diagnosis"), type="primary", use_container_width=True):
+            if st.button(
+                t("运行运营诊断", "Run Operations Diagnosis"),
+                type="primary",
+                use_container_width=True,
+                disabled=not operations_consent,
+            ):
                 with st.spinner(t("分析中…", "Analyzing...")):
                     out = ai_operations_diagnosis(q)
                 st.session_state.outputs["ops_ai_output"] = out
@@ -2608,7 +2626,12 @@ def render_operations():
     st.subheader(t("可交付物：运营报告", "Deliverable: Operations Report"))
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button(t("生成运营报告", "Generate Operations Report"), type="primary", use_container_width=True):
+        if st.button(
+            t("生成运营报告", "Generate Operations Report"),
+            type="primary",
+            use_container_width=True,
+            disabled=not operations_consent,
+        ):
             with st.spinner(t("生成中…", "Generating...")):
                 st.session_state.outputs["ops_report_md"] = ai_report_operations()
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race

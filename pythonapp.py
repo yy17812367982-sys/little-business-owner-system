@@ -7,8 +7,10 @@ import random
 import re
 from datetime import datetime
 from google import genai
+from google.genai import types
 import requests
 
+from ai_reliability import AIServiceUnavailable, request_ai_text
 from business_logic import (
     calculate_open_store_feasibility,
     score_from_inputs_site as calculate_site_score,
@@ -554,10 +556,18 @@ def sanitize_ai_markdown_output(text: str) -> str:
     return out
 
 
-def ask_ai(user_prompt: str, mode: str = "general") -> str:
+def ask_ai(user_prompt: str, mode: str = "general", raise_on_failure: bool = False) -> str:
     if not API_KEY or not client:
-        return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
-                 "AI service is not configured (missing GEMINI_API_KEY or client).")
+        error = AIServiceUnavailable(
+            code="AI_NOT_CONFIGURED",
+            user_message=t(
+                "AI 服务尚未配置。您的输入仍已保存，请稍后重试。",
+                "The AI service is not configured. Your inputs are still saved; please retry later.",
+            ),
+        )
+        if raise_on_failure:
+            raise error
+        return error.user_message
 
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
@@ -569,30 +579,32 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
     models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
-    last_err = None
-
-    for model_name in models:
-        for _ in range(2):
-            try:
-                resp = client.models.generate_content(model=model_name, contents=prompt)
-                text = getattr(resp, "text", None)
-                if text and str(text).strip():
-                    return sanitize_ai_markdown_output(text)
-                last_err = f"Empty response from {model_name}"
-            except Exception as e:
-                msg = str(e)
-                last_err = f"{model_name}: {msg}"
-                if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
-                    time.sleep(1.2 + random.random())
-                    continue
-                if ("Not available" in msg) or ("PERMISSION_DENIED" in msg) or ("403" in msg):
-                    break
-                break
-
-    return t(
-        f"AI 暂时不可用。可能原因：免费额度/限流、或所选模型需要开通 Paid。最后错误：{last_err}",
-        f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
+    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "15000")), 60_000))
+    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "3")), 5))
+    request_config = types.GenerateContentConfig(
+        http_options=types.HttpOptions(
+            timeout=timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
     )
+
+    try:
+        response_text = request_ai_text(
+            client.models.generate_content,
+            models,
+            prompt,
+            request_config,
+            max_attempts=max_attempts,
+        )
+        return sanitize_ai_markdown_output(response_text)
+    except AIServiceUnavailable as error:
+        error.user_message = t(
+            "AI 服务未能及时完成请求。您的输入仍已保存，请稍后重试。",
+            error.user_message,
+        )
+        if raise_on_failure:
+            raise error
+        return error.user_message
 
 # =========================================================
 # Geocoding (fuzzy + multi provider)
@@ -1150,7 +1162,9 @@ Launch Budget Inputs: {launch}
 Pricing Inputs: {pr}
 Computed Metrics: {m}
 """
-    return clean_currency_for_markdown(ask_ai(prompt, mode="open_store"))
+    return clean_currency_for_markdown(
+        ask_ai(prompt, mode="open_store", raise_on_failure=True)
+    )
 
 
 def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -2310,20 +2324,40 @@ def render_open_store():
                 "修正所有输入错误并勾选确认后，才可生成 AI 报告。",
                 "Correct all input errors and confirm the assumptions before generating an AI report."
             ))
+        report_error = st.session_state.get("open_store_report_error", "")
+        if report_error:
+            st.error(report_error)
+            st.caption(t(
+                "您可以直接重试；已填写的业务数据不会丢失。",
+                "You can retry now; the business inputs you entered have been preserved."
+            ))
         colA, colB = st.columns([1, 1])
         with colA:
             if st.button(
-                t("生成开店决策报告", "Generate Launch Decision Report"),
+                t(
+                    "重试生成开店决策报告" if report_error else "生成开店决策报告",
+                    "Retry Launch Decision Report" if report_error else "Generate Launch Decision Report",
+                ),
                 type="primary",
                 use_container_width=True,
                 disabled=not report_ready,
             ):
+                st.session_state.open_store_report_error = ""
                 with st.spinner(t("生成报告中…", "Generating report...")):
-                    st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
+                    try:
+                        st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
+                    except AIServiceUnavailable as error:
+                        st.session_state.open_store_report_error = error.user_message
+                    except Exception:
+                        st.session_state.open_store_report_error = t(
+                            "报告暂时无法生成。您的输入仍已保存，请稍后重试。",
+                            "The report could not be generated right now. Your inputs are still saved; please retry in a moment.",
+                        )
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""
                 st.session_state.outputs["final_open_store"] = None
+                st.session_state.open_store_report_error = ""
 
         if st.session_state.outputs.get("open_store_report_md", ""):
             st.markdown(st.session_state.outputs["open_store_report_md"])

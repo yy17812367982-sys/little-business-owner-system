@@ -8,7 +8,8 @@ from ai_reliability import AIServiceUnavailable, request_ai_text
 
 class AIRequestReliabilityTests(unittest.TestCase):
     def test_stable_flash_model_is_inside_bounded_attempt_window(self):
-        module = ast.parse(Path("pythonapp.py").read_text(encoding="utf-8"))
+        source = Path("pythonapp.py").read_text(encoding="utf-8")
+        module = ast.parse(source)
         assignments = {
             target.id: ast.literal_eval(node.value)
             for node in module.body
@@ -18,6 +19,14 @@ class AIRequestReliabilityTests(unittest.TestCase):
         }
 
         self.assertIn("gemini-2.5-flash", assignments["MODEL_CANDIDATES_PRO"][:3])
+
+    def test_report_defaults_have_a_one_minute_maximum_window(self):
+        source = Path("pythonapp.py").read_text(encoding="utf-8")
+
+        self.assertIn('AI_REQUEST_TIMEOUT_MS", "30000"', source)
+        self.assertIn('AI_MAX_MODEL_ATTEMPTS", "2"', source)
+        self.assertIn("thinking_budget=0", source)
+        self.assertIn("max_output_tokens=4096", source)
 
     def test_returns_first_non_empty_response(self):
         calls = []

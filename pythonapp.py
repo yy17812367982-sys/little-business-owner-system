@@ -1,14 +1,18 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
+import json
 import os
 import time
 import random
 import re
 from datetime import datetime
 from google import genai
+from google.genai import types
 import requests
 
+from ai_reliability import AIServiceUnavailable, request_ai_text
 from business_logic import (
     calculate_open_store_feasibility,
     score_from_inputs_site as calculate_site_score,
@@ -18,7 +22,7 @@ from business_logic import (
 # Page config
 # =========================================================
 st.set_page_config(
-    page_title="Small Business Decision Toolkit",
+    page_title="Open a Store · Small Business Decision Toolkit",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -554,10 +558,18 @@ def sanitize_ai_markdown_output(text: str) -> str:
     return out
 
 
-def ask_ai(user_prompt: str, mode: str = "general") -> str:
+def ask_ai(user_prompt: str, mode: str = "general", raise_on_failure: bool = False) -> str:
     if not API_KEY or not client:
-        return t("AI 服务未配置（缺少 GEMINI_API_KEY 或未初始化 client）。",
-                 "AI service is not configured (missing GEMINI_API_KEY or client).")
+        error = AIServiceUnavailable(
+            code="AI_NOT_CONFIGURED",
+            user_message=t(
+                "AI 服务尚未配置。您的输入仍已保存，请稍后重试。",
+                "The AI service is not configured. Your inputs are still saved; please retry later.",
+            ),
+        )
+        if raise_on_failure:
+            raise error
+        return error.user_message
 
     mode_hint = {
         "general": "General Q&A. Be concise and practical.",
@@ -569,30 +581,32 @@ def ask_ai(user_prompt: str, mode: str = "general") -> str:
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
     models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
-    last_err = None
-
-    for model_name in models:
-        for _ in range(2):
-            try:
-                resp = client.models.generate_content(model=model_name, contents=prompt)
-                text = getattr(resp, "text", None)
-                if text and str(text).strip():
-                    return sanitize_ai_markdown_output(text)
-                last_err = f"Empty response from {model_name}"
-            except Exception as e:
-                msg = str(e)
-                last_err = f"{model_name}: {msg}"
-                if ("429" in msg) or ("RESOURCE_EXHAUSTED" in msg) or ("rate" in msg.lower()):
-                    time.sleep(1.2 + random.random())
-                    continue
-                if ("Not available" in msg) or ("PERMISSION_DENIED" in msg) or ("403" in msg):
-                    break
-                break
-
-    return t(
-        f"AI 暂时不可用。可能原因：免费额度/限流、或所选模型需要开通 Paid。最后错误：{last_err}",
-        f"AI temporarily unavailable. Possible causes: free quota/rate limit, or selected model requires Paid. Last error: {last_err}"
+    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "15000")), 60_000))
+    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "3")), 5))
+    request_config = types.GenerateContentConfig(
+        http_options=types.HttpOptions(
+            timeout=timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
     )
+
+    try:
+        response_text = request_ai_text(
+            client.models.generate_content,
+            models,
+            prompt,
+            request_config,
+            max_attempts=max_attempts,
+        )
+        return sanitize_ai_markdown_output(response_text)
+    except AIServiceUnavailable as error:
+        error.user_message = t(
+            "AI 服务未能及时完成请求。您的输入仍已保存，请稍后重试。",
+            error.user_message,
+        )
+        if raise_on_failure:
+            raise error
+        return error.user_message
 
 # =========================================================
 # Geocoding (fuzzy + multi provider)
@@ -1007,6 +1021,17 @@ if "launch" not in st.session_state:
         "notes": ""
     }
 
+_OPEN_STORE_WIDGET_FIELDS = {
+    "open_funding_widget": ("launch", "funding_available", 80000.0),
+    "open_startup_cost_widget": ("launch", "startup_cost_estimate", 62000.0),
+    "open_fixed_cost_widget": ("launch", "monthly_fixed_cost_estimate", 26500.0),
+    "open_revenue_widget": ("launch", "expected_monthly_revenue", 52000.0),
+    "open_gross_margin_widget": ("launch", "expected_gross_margin", 62),
+    "open_cash_target_widget": ("launch", "cash_target_months", 3),
+    "open_unit_cost_widget": ("pricing", "cost", 1.75),
+    "open_planned_price_widget": ("pricing", "planned_price", 5.25),
+    "open_competitor_price_widget": ("pricing", "competitor_price", 5.50),
+}
 if "outputs" not in st.session_state:
     st.session_state.outputs = {
         "final_open_store": None,
@@ -1150,7 +1175,9 @@ Launch Budget Inputs: {launch}
 Pricing Inputs: {pr}
 Computed Metrics: {m}
 """
-    return clean_currency_for_markdown(ask_ai(prompt, mode="open_store"))
+    return clean_currency_for_markdown(
+        ask_ai(prompt, mode="open_store", raise_on_failure=True)
+    )
 
 
 def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -1759,6 +1786,23 @@ with st.sidebar:
         "Research prototype. Do not upload Social Security numbers, tax IDs, payment-card data, or passwords."
     ))
 
+_SUITE_PAGE_TITLES = {
+    "open_store": "Open a Store · Small Business Decision Toolkit",
+    "operations": "Operations Control Center · Small Business Decision Toolkit",
+    "finance": "Financial Analysis · Small Business Decision Toolkit",
+}
+_active_page_title = _SUITE_PAGE_TITLES.get(
+    st.session_state.active_suite,
+    _SUITE_PAGE_TITLES["open_store"],
+)
+components.html(
+    "<script>window.parent.document.title = "
+    + json.dumps(_active_page_title)
+    + ";</script>",
+    height=0,
+    width=0,
+)
+
 # =========================================================
 # Header + Top Ask AI
 # =========================================================
@@ -1886,6 +1930,14 @@ def render_open_store():
     if st.session_state.open_step > 4:
         st.session_state.open_step = 4
 
+    # Keyed widgets are updated before this script reruns. Synchronizing them
+    # here lets navigation reflect blocking errors immediately, even though the
+    # Budget & Pricing controls are rendered below the navigation bar.
+    for widget_key, (bucket, field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
+        if widget_key in st.session_state:
+            st.session_state[bucket][field] = st.session_state[widget_key]
+    st.session_state.profile["budget"] = int(st.session_state.launch["funding_available"])
+
     st.header(t("开店可行性评估", "Open a Store Feasibility"))
     st.markdown(
         '<span class="demo-badge">🧪 {}</span>'.format(
@@ -1954,6 +2006,11 @@ def render_open_store():
         st.session_state.open_nav_error = ""
         st.session_state.open_step = min(4, current_step + 1)
 
+    next_is_blocked = bool(
+        st.session_state.open_step == 3
+        and not open_store_feasibility_metrics().get("decision_ready", False)
+    )
+
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
         st.button(
@@ -1970,6 +2027,7 @@ def render_open_store():
                 use_container_width=True,
                 on_click=_open_store_next,
                 key="open_store_next_btn",
+                disabled=next_is_blocked,
             )
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
@@ -1981,6 +2039,11 @@ def render_open_store():
 
     if st.session_state.get("open_nav_error"):
         st.error(st.session_state.open_nav_error)
+    if next_is_blocked:
+        st.caption(t(
+            "修正下方标出的输入错误后，才可继续。",
+            "Fix the input errors highlighted below to continue."
+        ))
 
     def show_location_map(lat, lon, label="Target Location"):
         """Show a cleaner, darker Texas-centered location map with graceful fallback."""
@@ -2178,19 +2241,19 @@ def render_open_store():
         col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown("### " + t("资金与收入假设", "Funding & Revenue Assumptions"))
-            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, value=float(launch.get("funding_available", p.get("budget", 80000))), step=1000.0)
+            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, value=float(launch.get("funding_available", p.get("budget", 80000))), step=1000.0, key="open_funding_widget")
             p["budget"] = int(launch["funding_available"])
-            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, value=float(launch.get("startup_cost_estimate", 62000)), step=1000.0)
-            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, value=float(launch.get("monthly_fixed_cost_estimate", 26500)), step=500.0)
-            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, value=float(launch.get("expected_monthly_revenue", 52000)), step=1000.0)
-            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, int(launch.get("expected_gross_margin", 62)))
-            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, int(launch.get("cash_target_months", 3)))
+            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, value=float(launch.get("startup_cost_estimate", 62000)), step=1000.0, key="open_startup_cost_widget")
+            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, value=float(launch.get("monthly_fixed_cost_estimate", 26500)), step=500.0, key="open_fixed_cost_widget")
+            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, value=float(launch.get("expected_monthly_revenue", 52000)), step=1000.0, key="open_revenue_widget")
+            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, int(launch.get("expected_gross_margin", 62)), key="open_gross_margin_widget")
+            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, int(launch.get("cash_target_months", 3)), key="open_cash_target_widget")
 
         with col2:
             st.markdown("### " + t("代表性产品定价", "Representative Product Pricing"))
-            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 1.75)), step=0.05)
-            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, value=float(pr.get("planned_price", 5.25)), step=0.1)
-            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr.get("competitor_price", 5.5)), step=0.1)
+            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 1.75)), step=0.05, key="open_unit_cost_widget")
+            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, value=float(pr.get("planned_price", 5.25)), step=0.1, key="open_planned_price_widget")
+            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr.get("competitor_price", 5.5)), step=0.1, key="open_competitor_price_widget")
             pr["strategy"] = st.selectbox(
                 t("定价策略", "Pricing Strategy"),
                 ["Competitive", "Value-based", "Premium", "Penetration"],
@@ -2268,10 +2331,17 @@ def render_open_store():
                 {"Component": "Competition", "Score": int(m["competition_score"]), "Weight": "10%"},
             ])
             st.dataframe(score_df, use_container_width=True, hide_index=True)
+            score_status = t(
+                "当前没有阻止最终判断的输入错误。",
+                "There are currently no blocking input errors.",
+            ) if m.get("decision_ready", False) else t(
+                "当前输入错误会阻止最终判断。",
+                "Current input errors prevent a final decision.",
+            )
             st.caption(t(
-                "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。输入错误会阻止最终判断。",
-                "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%. Blocking input errors prevent a final decision."
-            ))
+                "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。",
+                "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%.",
+            ) + " " + score_status)
 
         if m["risks"]:
             st.markdown("### " + t("主要风险", "Main Risks"))
@@ -2310,20 +2380,42 @@ def render_open_store():
                 "修正所有输入错误并勾选确认后，才可生成 AI 报告。",
                 "Correct all input errors and confirm the assumptions before generating an AI report."
             ))
+        report_error = st.session_state.get("open_store_report_error", "")
+        if report_error:
+            st.error(report_error)
+            st.caption(t(
+                "您可以直接重试；已填写的业务数据不会丢失。",
+                "You can retry now; the business inputs you entered have been preserved."
+            ))
         colA, colB = st.columns([1, 1])
         with colA:
             if st.button(
-                t("生成开店决策报告", "Generate Launch Decision Report"),
+                t(
+                    "重试生成开店决策报告" if report_error else "生成开店决策报告",
+                    "Retry Launch Decision Report" if report_error else "Generate Launch Decision Report",
+                ),
                 type="primary",
                 use_container_width=True,
                 disabled=not report_ready,
             ):
+                st.session_state.open_store_report_error = ""
                 with st.spinner(t("生成报告中…", "Generating report...")):
-                    st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
+                    try:
+                        st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
+                    except AIServiceUnavailable as error:
+                        st.session_state.open_store_report_error = error.user_message
+                        st.rerun()
+                    except Exception:
+                        st.session_state.open_store_report_error = t(
+                            "报告暂时无法生成。您的输入仍已保存，请稍后重试。",
+                            "The report could not be generated right now. Your inputs are still saved; please retry in a moment.",
+                        )
+                        st.rerun()
         with colB:
             if st.button(t("清空报告", "Clear Report"), use_container_width=True):
                 st.session_state.outputs["open_store_report_md"] = ""
                 st.session_state.outputs["final_open_store"] = None
+                st.session_state.open_store_report_error = ""
 
         if st.session_state.outputs.get("open_store_report_md", ""):
             st.markdown(st.session_state.outputs["open_store_report_md"])
@@ -2366,6 +2458,19 @@ def render_operations():
         ),
         unsafe_allow_html=True,
     )
+
+    operations_consent = st.checkbox(
+        t(
+            "我已删除敏感个人信息，并同意将解析后的运营数据发送给已配置的 AI 服务进行分析。",
+            "I removed sensitive personal information and consent to sending parsed operations data to the configured AI service for analysis.",
+        ),
+        key="operations_ai_consent",
+    )
+    if not operations_consent:
+        st.caption(t(
+            "本地库存仪表盘仍可使用；勾选授权后才能运行 AI 诊断或生成 AI 报告。",
+            "The local inventory dashboard remains available. Consent is required only for AI diagnosis and AI report generation.",
+        ))
 
     inv = st.session_state.inventory
     if "ops_diagnosis_md" not in st.session_state.outputs:
@@ -2515,7 +2620,12 @@ def render_operations():
         )
         c1, c2 = st.columns([1, 1])
         with c1:
-            if st.button(t("运行运营诊断", "Run Operations Diagnosis"), type="primary", use_container_width=True):
+            if st.button(
+                t("运行运营诊断", "Run Operations Diagnosis"),
+                type="primary",
+                use_container_width=True,
+                disabled=not operations_consent,
+            ):
                 with st.spinner(t("分析中…", "Analyzing...")):
                     out = ai_operations_diagnosis(q)
                 st.session_state.outputs["ops_ai_output"] = out
@@ -2534,7 +2644,12 @@ def render_operations():
     st.subheader(t("可交付物：运营报告", "Deliverable: Operations Report"))
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button(t("生成运营报告", "Generate Operations Report"), type="primary", use_container_width=True):
+        if st.button(
+            t("生成运营报告", "Generate Operations Report"),
+            type="primary",
+            use_container_width=True,
+            disabled=not operations_consent,
+        ):
             with st.spinner(t("生成中…", "Generating...")):
                 st.session_state.outputs["ops_report_md"] = ai_report_operations()
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race

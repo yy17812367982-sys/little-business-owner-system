@@ -513,10 +513,10 @@ MODEL_CANDIDATES_PRO = [
 ]
 
 MODEL_CANDIDATES_FAST = [
-    "gemini-3-flash-preview",
-    "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-pro",
 ]
 
@@ -581,9 +581,11 @@ def ask_ai(user_prompt: str, mode: str = "general", raise_on_failure: bool = Fal
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
     models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
-    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "15000")), 60_000))
-    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "3")), 5))
+    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "30000")), 60_000))
+    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "2")), 5))
     request_config = types.GenerateContentConfig(
+        max_output_tokens=4096,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
         http_options=types.HttpOptions(
             timeout=timeout_ms,
             retry_options=types.HttpRetryOptions(attempts=1),

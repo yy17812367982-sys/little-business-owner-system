@@ -1,10 +1,24 @@
+import ast
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from ai_reliability import AIServiceUnavailable, request_ai_text
 
 
 class AIRequestReliabilityTests(unittest.TestCase):
+    def test_stable_flash_model_is_inside_bounded_attempt_window(self):
+        module = ast.parse(Path("pythonapp.py").read_text(encoding="utf-8"))
+        assignments = {
+            target.id: ast.literal_eval(node.value)
+            for node in module.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name) and target.id == "MODEL_CANDIDATES_PRO"
+        }
+
+        self.assertIn("gemini-2.5-flash", assignments["MODEL_CANDIDATES_PRO"][:3])
+
     def test_returns_first_non_empty_response(self):
         calls = []
 

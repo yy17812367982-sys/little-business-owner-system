@@ -2315,10 +2315,17 @@ def render_open_store():
                 {"Component": "Competition", "Score": int(m["competition_score"]), "Weight": "10%"},
             ])
             st.dataframe(score_df, use_container_width=True, hide_index=True)
+            score_status = t(
+                "当前没有阻止最终判断的输入错误。",
+                "There are currently no blocking input errors.",
+            ) if m.get("decision_ready", False) else t(
+                "当前输入错误会阻止最终判断。",
+                "Current input errors prevent a final decision.",
+            )
             st.caption(t(
-                "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。输入错误会阻止最终判断。",
-                "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%. Blocking input errors prevent a final decision."
-            ))
+                "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。",
+                "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%.",
+            ) + " " + score_status)
 
         if m["risks"]:
             st.markdown("### " + t("主要风险", "Main Risks"))

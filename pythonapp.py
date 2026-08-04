@@ -503,13 +503,13 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
-    # Current Gemini 3 family first. If an account has not enabled these yet,
-    # the app automatically falls back to stable Gemini 2.5 models.
-    "gemini-3.1-pro-preview",
-    "gemini-2.5-pro",
-    "gemini-3-flash-preview",
+    # Stable, low-latency models come first so the bounded retry window always
+    # reaches production-accessible options before preview models.
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
 ]
 
 MODEL_CANDIDATES_FAST = [

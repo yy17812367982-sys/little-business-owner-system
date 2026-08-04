@@ -1019,6 +1019,21 @@ if "launch" not in st.session_state:
         "notes": ""
     }
 
+_OPEN_STORE_WIDGET_FIELDS = {
+    "open_funding_widget": ("launch", "funding_available", 80000.0),
+    "open_startup_cost_widget": ("launch", "startup_cost_estimate", 62000.0),
+    "open_fixed_cost_widget": ("launch", "monthly_fixed_cost_estimate", 26500.0),
+    "open_revenue_widget": ("launch", "expected_monthly_revenue", 52000.0),
+    "open_gross_margin_widget": ("launch", "expected_gross_margin", 62),
+    "open_cash_target_widget": ("launch", "cash_target_months", 3),
+    "open_unit_cost_widget": ("pricing", "cost", 1.75),
+    "open_planned_price_widget": ("pricing", "planned_price", 5.25),
+    "open_competitor_price_widget": ("pricing", "competitor_price", 5.50),
+}
+for _widget_key, (_bucket, _field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
+    if _widget_key not in st.session_state:
+        st.session_state[_widget_key] = st.session_state[_bucket].get(_field, _default)
+
 if "outputs" not in st.session_state:
     st.session_state.outputs = {
         "final_open_store": None,
@@ -1900,6 +1915,13 @@ def render_open_store():
     if st.session_state.open_step > 4:
         st.session_state.open_step = 4
 
+    # Keyed widgets are updated before this script reruns. Synchronizing them
+    # here lets navigation reflect blocking errors immediately, even though the
+    # Budget & Pricing controls are rendered below the navigation bar.
+    for widget_key, (bucket, field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
+        st.session_state[bucket][field] = st.session_state[widget_key]
+    st.session_state.profile["budget"] = int(st.session_state.launch["funding_available"])
+
     st.header(t("开店可行性评估", "Open a Store Feasibility"))
     st.markdown(
         '<span class="demo-badge">🧪 {}</span>'.format(
@@ -1968,6 +1990,11 @@ def render_open_store():
         st.session_state.open_nav_error = ""
         st.session_state.open_step = min(4, current_step + 1)
 
+    next_is_blocked = bool(
+        st.session_state.open_step == 3
+        and not open_store_feasibility_metrics().get("decision_ready", False)
+    )
+
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
         st.button(
@@ -1984,6 +2011,7 @@ def render_open_store():
                 use_container_width=True,
                 on_click=_open_store_next,
                 key="open_store_next_btn",
+                disabled=next_is_blocked,
             )
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
@@ -1995,6 +2023,11 @@ def render_open_store():
 
     if st.session_state.get("open_nav_error"):
         st.error(st.session_state.open_nav_error)
+    if next_is_blocked:
+        st.caption(t(
+            "修正下方标出的输入错误后，才可继续。",
+            "Fix the input errors highlighted below to continue."
+        ))
 
     def show_location_map(lat, lon, label="Target Location"):
         """Show a cleaner, darker Texas-centered location map with graceful fallback."""
@@ -2192,19 +2225,19 @@ def render_open_store():
         col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown("### " + t("资金与收入假设", "Funding & Revenue Assumptions"))
-            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, value=float(launch.get("funding_available", p.get("budget", 80000))), step=1000.0)
+            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, step=1000.0, key="open_funding_widget")
             p["budget"] = int(launch["funding_available"])
-            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, value=float(launch.get("startup_cost_estimate", 62000)), step=1000.0)
-            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, value=float(launch.get("monthly_fixed_cost_estimate", 26500)), step=500.0)
-            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, value=float(launch.get("expected_monthly_revenue", 52000)), step=1000.0)
-            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, int(launch.get("expected_gross_margin", 62)))
-            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, int(launch.get("cash_target_months", 3)))
+            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
+            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
+            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, step=1000.0, key="open_revenue_widget")
+            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, key="open_gross_margin_widget")
+            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, key="open_cash_target_widget")
 
         with col2:
             st.markdown("### " + t("代表性产品定价", "Representative Product Pricing"))
-            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 1.75)), step=0.05)
-            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, value=float(pr.get("planned_price", 5.25)), step=0.1)
-            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr.get("competitor_price", 5.5)), step=0.1)
+            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, step=0.05, key="open_unit_cost_widget")
+            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, step=0.1, key="open_planned_price_widget")
+            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, step=0.1, key="open_competitor_price_widget")
             pr["strategy"] = st.selectbox(
                 t("定价策略", "Pricing Strategy"),
                 ["Competitive", "Value-based", "Premium", "Penetration"],

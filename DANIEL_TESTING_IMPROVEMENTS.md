@@ -20,6 +20,18 @@ Daniel evaluated the Small Business Decision Toolkit from the perspective of a U
 8. Simplified the AI assistant experience and made its settings easier to understand.
 9. Added clearer financial-upload privacy information, including how uploaded data may be processed.
 
+## Completed optimization details
+
+- **Decision workflow:** The opening message now states that the toolkit evaluates location, launch funding, cash runway, pricing, and launch readiness before investment.
+- **Research notice presentation:** Product value and the four-step workflow remain visually primary, while research and compliance details are placed in supporting locations.
+- **Demo-data labeling:** The Austin coffee-shop example is identified as a preloaded demonstration scenario and users are asked to replace its assumptions with their own.
+- **U.S. pricing assumptions:** Representative unit cost, selling price, competitor price, startup cost, fixed cost, revenue, and margin inputs are presented in a consistent U.S. small-business scenario.
+- **Below-cost pricing guard:** Selling prices at or below unit cost are treated as blocking input errors, preventing an invalid final decision or report.
+- **Score transparency:** The final decision shows Site, Cash, Margin, and Competition component scores, their weights, and the current blocking-input status.
+- **Margin terminology:** Product Margin is defined from representative unit economics, while Expected Business Gross Margin is identified as the total-business assumption.
+- **AI assistant experience:** AI interactions use task-focused questions and action buttons, with bounded attempts and clear retry states instead of exposing provider configuration choices.
+- **Financial-upload privacy:** The Finance workflow explains local file handling, identifies when parsed content is sent to the configured AI service, lists prohibited sensitive data, and requires explicit consent.
+
 ## Follow-up verification
 
 The updated workflow was reviewed through automated UI and business-logic checks and through a complete test of the deployed Streamlit application. Subsequent reliability work also added bounded report generation, visible retry and error states, explicit Operations consent, and suite-specific accessibility titles.

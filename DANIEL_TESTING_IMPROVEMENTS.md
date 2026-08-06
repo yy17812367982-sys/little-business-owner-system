@@ -29,6 +29,7 @@ Daniel evaluated the Small Business Decision Toolkit from the perspective of a U
 - **Below-cost pricing guard:** Selling prices at or below unit cost are treated as blocking input errors, preventing an invalid final decision or report.
 - **Score transparency:** The final decision shows Site, Cash, Margin, and Competition component scores, their weights, and the current blocking-input status.
 - **Margin terminology:** Product Margin is defined from representative unit economics, while Expected Business Gross Margin is identified as the total-business assumption.
+- **AI assistant experience:** AI interactions use task-focused questions and action buttons, with bounded attempts and clear retry states instead of exposing provider configuration choices.
 
 ## Follow-up verification
 

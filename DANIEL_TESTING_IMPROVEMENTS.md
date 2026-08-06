@@ -20,6 +20,10 @@ Daniel evaluated the Small Business Decision Toolkit from the perspective of a U
 8. Simplified the AI assistant experience and made its settings easier to understand.
 9. Added clearer financial-upload privacy information, including how uploaded data may be processed.
 
+## Completed optimization details
+
+- **Decision workflow:** The opening message now states that the toolkit evaluates location, launch funding, cash runway, pricing, and launch readiness before investment.
+
 ## Follow-up verification
 
 The updated workflow was reviewed through automated UI and business-logic checks and through a complete test of the deployed Streamlit application. Subsequent reliability work also added bounded report generation, visible retry and error states, explicit Operations consent, and suite-specific accessibility titles.

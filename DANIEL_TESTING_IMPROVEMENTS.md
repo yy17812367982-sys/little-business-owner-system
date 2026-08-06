@@ -23,6 +23,7 @@ Daniel evaluated the Small Business Decision Toolkit from the perspective of a U
 ## Completed optimization details
 
 - **Decision workflow:** The opening message now states that the toolkit evaluates location, launch funding, cash runway, pricing, and launch readiness before investment.
+- **Research notice presentation:** Product value and the four-step workflow remain visually primary, while research and compliance details are placed in supporting locations.
 
 ## Follow-up verification
 

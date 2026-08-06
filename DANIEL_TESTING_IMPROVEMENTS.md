@@ -26,6 +26,7 @@ Daniel evaluated the Small Business Decision Toolkit from the perspective of a U
 - **Research notice presentation:** Product value and the four-step workflow remain visually primary, while research and compliance details are placed in supporting locations.
 - **Demo-data labeling:** The Austin coffee-shop example is identified as a preloaded demonstration scenario and users are asked to replace its assumptions with their own.
 - **U.S. pricing assumptions:** Representative unit cost, selling price, competitor price, startup cost, fixed cost, revenue, and margin inputs are presented in a consistent U.S. small-business scenario.
+- **Below-cost pricing guard:** Selling prices at or below unit cost are treated as blocking input errors, preventing an invalid final decision or report.
 
 ## Follow-up verification
 

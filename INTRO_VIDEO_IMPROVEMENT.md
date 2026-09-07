@@ -14,6 +14,7 @@ Implemented by Yang Yu in response to the request for a warmer first impression.
 - The video starts automatically and muted when a new browser session opens.
 - The small MP4 is delivered with the opening screen to avoid a separate cloud-media buffering delay.
 - The opening fills the viewport, then automatically enters the normal homepage after playback.
+- Portrait phones receive a dedicated 9:16 edit with the message above the storefront, plus a full-frame fit so the composition remains legible instead of being cropped to one corner.
 - Session state prevents the opening from replaying during form edits, step changes, or suite navigation.
 - The MP4 has no audio track, and playback is capped so visitors cannot be trapped on the opening screen.
 

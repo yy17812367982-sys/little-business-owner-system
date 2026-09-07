@@ -40,7 +40,7 @@ st.set_page_config(
     ),
     page_icon="🌿",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
 # Warm visual language shared across the three suites.
@@ -68,6 +68,10 @@ def toggle_language():
 intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
 if intro_video_path.exists() and not st.session_state.get("intro_complete", False):
     intro_video_data = base64.b64encode(intro_video_path.read_bytes()).decode("ascii")
+    intro_mobile_path = intro_video_path.with_name("little-shop-intro-mobile.mp4")
+    intro_mobile_data = base64.b64encode(
+        (intro_mobile_path if intro_mobile_path.exists() else intro_video_path).read_bytes()
+    ).decode("ascii")
     st.markdown(
         """
         <style>
@@ -86,8 +90,12 @@ if intro_video_path.exists() and not st.session_state.get("intro_complete", Fals
         <html><head><style>
         html, body {{ width:100%; height:100%; margin:0; overflow:hidden; background:#f4efe3; }}
         video {{ display:block; width:100%; height:100%; object-fit:cover; }}
+        @media (max-aspect-ratio: 3/4) {{
+          video {{ object-fit:contain; }}
+        }}
         </style></head><body>
         <video autoplay muted playsinline preload="auto">
+          <source media="(max-aspect-ratio: 3/4)" src="data:video/mp4;base64,{intro_mobile_data}" type="video/mp4">
           <source src="data:video/mp4;base64,{intro_video_data}" type="video/mp4">
         </video>
         </body></html>

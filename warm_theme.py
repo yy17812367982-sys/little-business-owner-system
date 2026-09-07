@@ -9,6 +9,16 @@ html, body { overflow-x:hidden; }
 .block-container { max-width:1160px; padding-top:3.4rem; padding-bottom:3rem; }
 [data-testid="stHeader"] { background:rgba(250,247,240,.95); }
 [data-testid="stSidebar"] { background:#f0f0e6; border-right:1px solid var(--line); }
+[data-testid="stExpandSidebarButton"] { width:auto !important; min-width:92px;
+  min-height:42px; margin:9px 0 0 10px; padding:8px 13px !important;
+  border:1px solid #294b37 !important; border-radius:12px !important;
+  background:#365c45 !important; color:#fff !important;
+  box-shadow:0 4px 14px rgba(41,75,55,.18); }
+[data-testid="stExpandSidebarButton"]::after { content:"Menu"; margin-left:7px;
+  color:#fff; font-size:.88rem; font-weight:700; letter-spacing:.01em; }
+[data-testid="stExpandSidebarButton"] svg { fill:#fff !important; color:#fff !important; }
+[data-testid="stExpandSidebarButton"]:hover { background:#294b37 !important;
+  border-color:#294b37 !important; }
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 { font-size:1rem; }
 h1, h2, h3 { color:var(--ink); letter-spacing:-.025em; }
 h1 { font-family:Georgia,"Times New Roman",serif; font-weight:500; }
@@ -80,6 +90,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   padding:15px 10px 25px; }
 @media(max-width:760px) {
   .block-container { padding:3.2rem 1rem 2rem; }
+  [data-testid="stExpandSidebarButton"] { min-width:82px; min-height:40px;
+    margin-left:8px; padding:7px 11px !important; }
+  [data-testid="stExpandSidebarButton"]::after { font-size:.8rem; }
   .hero-card { padding:24px 21px; border-radius:20px; }
   .hero-card h1 { font-size:2.2rem; }
   .hero-card p { font-size:1rem; }

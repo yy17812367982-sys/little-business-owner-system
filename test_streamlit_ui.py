@@ -27,6 +27,10 @@ class DanielFollowUpUITests(unittest.TestCase):
         self.assertNotIn("components.html", intro_section)
         self.assertIn("yy-opening-film", intro_section)
 
+    def test_cloud_runtime_includes_session_info_race_fix(self):
+        requirements = Path("requirements.txt").read_text(encoding="utf-8")
+        self.assertIn("streamlit==1.52.2", requirements)
+
     def _go_to_budget_page(self):
         self.app.button(key="open_store_next_btn").click().run()
         self.app.button(key="open_store_next_btn").click().run()

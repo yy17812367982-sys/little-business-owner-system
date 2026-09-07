@@ -29,6 +29,12 @@ FLOWER_FIELDS = {
 CUSTOMER_REASON = "Personal apology bouquets, same-day delivery, and anniversary reminders."
 CUSTOMER_EVIDENCE = "Twelve neighbors asked for a trial bouquet; no paid orders yet."
 MOCK_REPORT = "# Flower shop plan\n\nReview the ordinary month before signing a lease."
+EVIDENCE_BOUNDARY = (
+    "**Evidence boundary:** The decision, scores, and financial figures above are based on your entered data "
+    "and the toolkit's calculations. Any other target or benchmark suggested by the AI is a planning idea—"
+    "not verified market evidence—and must be set or checked by the owner before use."
+)
+EXPECTED_OPEN_STORE_REPORT = f"{MOCK_REPORT}\n\n---\n\n{EVIDENCE_BOUNDARY}"
 
 
 class JennyFeedbackUITests(unittest.TestCase):
@@ -149,8 +155,8 @@ class JennyFeedbackUITests(unittest.TestCase):
         self.ready_report()
         self.button("Generate Launch Decision Report").click().run()
         self.assert_no_exception()
-        self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], MOCK_REPORT)
-        self.assertTrue(any(markdown.value == MOCK_REPORT for markdown in self.app.markdown))
+        self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], EXPECTED_OPEN_STORE_REPORT)
+        self.assertTrue(any(EVIDENCE_BOUNDARY in markdown.value for markdown in self.app.markdown))
         self.assertEqual(self.provider.call_count, 1)
         sent_prompt = self.provider.call_args.kwargs["contents"]
         self.assertIn(CUSTOMER_REASON, sent_prompt)
@@ -166,7 +172,7 @@ class JennyFeedbackUITests(unittest.TestCase):
         self.app.number_input(key="open_planned_price_widget").set_value(80.0).run()
         self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], "")
         self.next()
-        self.assertFalse(any(markdown.value == MOCK_REPORT for markdown in self.app.markdown))
+        self.assertFalse(any(EVIDENCE_BOUNDARY in markdown.value for markdown in self.app.markdown))
         self.assertEqual(self.provider.call_count, 1)
 
     def test_report_timeout_shows_retry_preserves_values_then_succeeds(self):
@@ -182,7 +188,7 @@ class JennyFeedbackUITests(unittest.TestCase):
         self.provider.side_effect = None
         self.button("Retry Launch Decision Report").click().run()
         self.assert_no_exception()
-        self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], MOCK_REPORT)
+        self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], EXPECTED_OPEN_STORE_REPORT)
         self.assertEqual(self.app.session_state["open_store_report_error"], "")
 
     def test_top_ai_success_and_missing_configuration_are_distinct(self):

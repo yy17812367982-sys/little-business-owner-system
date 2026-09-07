@@ -832,10 +832,10 @@ Use a table: Business Concept / Location / Launch Budget / Pricing Assumptions.
 ### Flower Waste / Seasonal Scenario (when applicable)
 
 ## 4) Pre-Launch Risk Controls
-6 bullets with owner + metric/target.
+6 bullets. Use only supplied or computed metrics. If a new target would be useful, write "Owner to set" without adding a number.
 
 ## 5) 30-Day Pre-Launch Action Plan
-10 bullets. Each bullet must be executable and include timing or target.
+10 executable bullets. Use Week 1 / Week 2 / Week 3 / Week 4 timing only and do not introduce new numeric targets or benchmarks.
 
 User question or focus:
 {user_question.strip() if user_question and user_question.strip() else "Please evaluate whether this store should be opened, identify the biggest risks, and provide a pre-launch action plan."}
@@ -847,9 +847,14 @@ Launch Budget Inputs: {launch}
 Pricing Inputs: {pr}
 Computed Metrics: {m}
 """
-    return clean_currency_for_markdown(
+    report = clean_currency_for_markdown(
         ask_ai(prompt, mode="open_store", raise_on_failure=True)
     )
+    evidence_boundary = t(
+        "**证据边界：** 上述最终判断、评分和财务数字来自您填写的数据与本工具的计算。AI 另外提出的任何目标或基准都只是规划建议，并非已验证的市场证据；采用前应由店主自行设定或核实。",
+        "**Evidence boundary:** The decision, scores, and financial figures above are based on your entered data and the toolkit's calculations. Any other target or benchmark suggested by the AI is a planning idea—not verified market evidence—and must be set or checked by the owner before use.",
+    )
+    return f"{report.rstrip()}\n\n---\n\n{evidence_boundary}"
 
 
 def normalize_inventory_df(df: pd.DataFrame) -> pd.DataFrame:

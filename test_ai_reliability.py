@@ -7,7 +7,7 @@ from ai_reliability import AIServiceUnavailable, request_ai_text
 
 
 class AIRequestReliabilityTests(unittest.TestCase):
-    def test_stable_flash_model_is_inside_bounded_attempt_window(self):
+    def test_current_stable_models_are_inside_bounded_attempt_window(self):
         source = Path("pythonapp.py").read_text(encoding="utf-8")
         module = ast.parse(source)
         assignments = {
@@ -15,18 +15,22 @@ class AIRequestReliabilityTests(unittest.TestCase):
             for node in module.body
             if isinstance(node, ast.Assign)
             for target in node.targets
-            if isinstance(target, ast.Name) and target.id == "MODEL_CANDIDATES_PRO"
+            if isinstance(target, ast.Name)
+            and target.id in {"MODEL_CANDIDATES_PRO", "MODEL_CANDIDATES_FAST"}
         }
 
-        self.assertIn("gemini-2.5-flash", assignments["MODEL_CANDIDATES_PRO"][:3])
+        self.assertIn("gemini-3.7-flash", assignments["MODEL_CANDIDATES_PRO"][:3])
+        self.assertEqual(assignments["MODEL_CANDIDATES_FAST"][0], "gemini-3.5-flash-lite")
+        self.assertFalse(any("preview" in model for models in assignments.values() for model in models))
 
-    def test_report_defaults_have_a_one_minute_maximum_window(self):
+    def test_ai_defaults_try_three_endpoints_inside_a_short_bounded_window(self):
         source = Path("pythonapp.py").read_text(encoding="utf-8")
 
-        self.assertIn('AI_REQUEST_TIMEOUT_MS", "30000"', source)
-        self.assertIn('AI_MAX_MODEL_ATTEMPTS", "2"', source)
+        self.assertIn('AI_REQUEST_TIMEOUT_MS", "15000"', source)
+        self.assertIn('AI_MAX_MODEL_ATTEMPTS", "3"', source)
         self.assertIn("thinking_budget=0", source)
         self.assertIn("max_output_tokens=4096", source)
+        self.assertIn('mode == "general"', source)
 
     def test_returns_first_non_empty_response(self):
         calls = []

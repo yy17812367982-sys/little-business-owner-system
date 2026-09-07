@@ -95,21 +95,22 @@ Rules:
 """
 
 MODEL_CANDIDATES_PRO = [
-    # Stable, low-latency models come first so the bounded retry window always
-    # reaches production-accessible options before preview models.
+    # Stable models only. Current low-latency options come first so a temporary
+    # problem on one endpoint cannot consume the whole user-visible wait.
+    "gemini-3.7-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "gemini-2.5-pro",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview",
 ]
 
 MODEL_CANDIDATES_FAST = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-pro",
+    "gemini-2.5-flash-lite",
+    "gemini-3.7-flash",
+    "gemini-2.5-flash",
 ]
 
 if "ai_quality" not in st.session_state:
@@ -172,9 +173,12 @@ def ask_ai(user_prompt: str, mode: str = "general", raise_on_failure: bool = Fal
 
     prompt = f"{SYSTEM_POLICY}\n\nContext:\n- Mode: {mode_hint}\n\nUser:\n{user_prompt}"
 
-    models = MODEL_CANDIDATES_PRO if st.session_state.ai_quality == "pro" else MODEL_CANDIDATES_FAST
-    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "30000")), 60_000))
-    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "2")), 5))
+    # Everyday questions should reach the fastest stable model first. Reports
+    # keep the higher-quality ordering, while both paths retain fallbacks.
+    use_fast_models = mode == "general" or st.session_state.ai_quality != "pro"
+    models = MODEL_CANDIDATES_FAST if use_fast_models else MODEL_CANDIDATES_PRO
+    timeout_ms = max(5_000, min(int(os.getenv("AI_REQUEST_TIMEOUT_MS", "15000")), 60_000))
+    max_attempts = max(1, min(int(os.getenv("AI_MAX_MODEL_ATTEMPTS", "3")), 5))
     request_config = types.GenerateContentConfig(
         max_output_tokens=4096,
         thinking_config=types.ThinkingConfig(thinking_budget=0),

@@ -171,7 +171,7 @@ class JennyFeedbackUITests(unittest.TestCase):
         self.provider.side_effect = TimeoutError("simulated timeout")
         self.button("Generate Launch Decision Report").click().run()
         self.assert_no_exception()
-        self.assertEqual(self.provider.call_count, 2)
+        self.assertEqual(self.provider.call_count, 3)
         self.assertEqual(self.app.session_state["outputs"]["open_store_report_md"], "")
         self.assertTrue(self.app.error)
         self.assertFalse(self.button("Retry Launch Decision Report").disabled)

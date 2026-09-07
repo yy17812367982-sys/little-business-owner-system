@@ -1,5 +1,6 @@
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
@@ -16,6 +17,15 @@ class DanielFollowUpUITests(unittest.TestCase):
     def test_intro_completes_before_homepage_tests_continue(self):
         self.assertTrue(self.app.session_state["intro_complete"])
         self.assertTrue(any("A little idea" in heading.value for heading in self.app.markdown))
+
+    def test_intro_does_not_force_a_rerun_during_session_startup(self):
+        source = Path("pythonapp.py").read_text(encoding="utf-8")
+        intro_section = source.split("# Show the storefront film once", 1)[1].split(
+            "# API Key + client", 1
+        )[0]
+        self.assertNotIn("st.rerun()", intro_section)
+        self.assertNotIn("components.html", intro_section)
+        self.assertIn("yy-opening-film", intro_section)
 
     def _go_to_budget_page(self):
         self.app.button(key="open_store_next_btn").click().run()

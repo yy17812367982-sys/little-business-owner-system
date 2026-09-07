@@ -18,6 +18,45 @@ def _as_float(value: Any, default: float = 0.0) -> float:
     return number if math.isfinite(number) else default
 
 
+def _seasonal_inputs(launch: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate optional scenario inputs without silently accepting NaN or infinity.
+
+    Invalid values receive a safe calculation default AND a blocking error; the
+    fallback must never turn an invalid scenario into a launch recommendation.
+    """
+    errors: List[str] = []
+    enabled = launch.get("perishable_enabled", False)
+    if not isinstance(enabled, bool):
+        errors.append("Perishable inventory must be enabled or disabled.")
+        enabled = False
+
+    normalized: Dict[str, Any] = {"perishable_enabled": enabled}
+    fields = (
+        ("spoilage_rate_pct", "Spoilage rate", 0.0, 0.0, 80.0),
+        ("holiday_sales_multiplier", "Holiday sales multiplier", 1.0, 0.1, 5.0),
+        ("holiday_cost_multiplier", "Holiday wholesale cost multiplier", 1.0, 0.1, 5.0),
+        ("holiday_months", "Holiday months", 0.0, 0.0, 12.0),
+    )
+    for key, label, default, minimum, maximum in fields:
+        value = launch.get(key, default)
+        try:
+            number = float(value)
+        except (ValueError, TypeError, OverflowError):
+            number = math.nan
+        if (
+            isinstance(value, bool)
+            or not math.isfinite(number)
+            or not minimum <= number <= maximum
+            or (key == "holiday_months" and not number.is_integer())
+        ):
+            whole = "a whole number " if key == "holiday_months" else "a finite number "
+            errors.append(f"{label} must be {whole}between {minimum:g} and {maximum:g}.")
+            number = default
+        normalized[key] = int(number) if key == "holiday_months" else number
+    normalized["errors"] = errors
+    return normalized
+
+
 def score_from_inputs_site(
     traffic: int,
     competitors: int,
@@ -123,8 +162,17 @@ def calculate_open_store_feasibility(
     startup_cost = _as_float(launch.get("startup_cost_estimate"))
     monthly_fixed_cost = _as_float(launch.get("monthly_fixed_cost_estimate"))
     expected_revenue = _as_float(launch.get("expected_monthly_revenue"))
-    expected_gm = _as_float(launch.get("expected_gross_margin")) / 100.0
+    raw_gm = _as_float(launch.get("expected_gross_margin")) / 100.0
     target_months = max(1.0, _as_float(launch.get("cash_target_months"), 3.0))
+    seasonal = _seasonal_inputs(launch)
+    waste_fraction = seasonal["spoilage_rate_pct"] / 100.0 if seasonal["perishable_enabled"] else 0.0
+    retained_fraction = 1.0 - waste_fraction
+    raw_unit_cost = _as_float(pricing.get("cost"))
+    effective_unit_cost = raw_unit_cost / retained_fraction
+    # The entered margin excludes inventory waste. Sales are fulfilled sales,
+    # so enough inventory must be purchased to replace the unsold fraction.
+    # Preserve ordinary results exactly when the optional waste feature is off.
+    expected_gm = 1.0 - (1.0 - raw_gm) / retained_fraction if waste_fraction else raw_gm
 
     input_errors: List[str] = []
     input_warnings: List[str] = []
@@ -136,10 +184,16 @@ def calculate_open_store_feasibility(
         input_errors.append("Monthly fixed cost must be greater than USD 0.")
     if expected_revenue <= 0:
         input_errors.append("Expected monthly revenue must be greater than USD 0.")
-    if not 0 < expected_gm < 1:
+    if not 0 < raw_gm < 1:
         input_errors.append("Expected gross margin must be between 0% and 100%.")
+    input_errors.extend(seasonal["errors"])
 
-    pricing_check = validate_pricing(pricing)
+    pricing_check = validate_pricing({**pricing, "cost": effective_unit_cost})
+    if waste_fraction:
+        pricing_check["errors"] = [
+            message.replace("unit cost (", "effective unit cost after spoilage (")
+            for message in pricing_check["errors"]
+        ]
     input_errors.extend(pricing_check["errors"])
     input_warnings.extend(pricing_check["warnings"])
 
@@ -158,6 +212,28 @@ def calculate_open_store_feasibility(
         if expected_gm > 0
         else math.inf
     )
+    raw_cogs = expected_revenue * (1.0 - raw_gm)
+    ordinary_cogs = raw_cogs / retained_fraction
+    monthly_spoilage_extra_cost = ordinary_cogs - raw_cogs
+    peak_revenue = expected_revenue * seasonal["holiday_sales_multiplier"]
+    peak_cogs = ordinary_cogs * seasonal["holiday_sales_multiplier"] * seasonal["holiday_cost_multiplier"]
+    peak_gross_margin = (peak_revenue - peak_cogs) / peak_revenue if peak_revenue > 0 else 0.0
+    peak_profit_after_fixed = peak_revenue - peak_cogs - monthly_fixed_cost
+    modeled_annual_profit = (
+        monthly_profit_after_fixed * (12 - seasonal["holiday_months"])
+        + peak_profit_after_fixed * seasonal["holiday_months"]
+    )
+    if waste_fraction:
+        input_warnings.append(
+            f"Spoilage adds USD {monthly_spoilage_extra_cost:,.0f} to ordinary monthly inventory costs; "
+            "the entered product cost and business gross margin must exclude this waste "
+            "to avoid counting it twice."
+        )
+    if seasonal["holiday_months"] > 0 and peak_profit_after_fixed < 0:
+        input_warnings.append(
+            f"The holiday scenario loses USD {abs(peak_profit_after_fixed):,.0f} per peak month; "
+            "higher sales do not guarantee profit when wholesale costs also rise."
+        )
 
     site_score = score_from_inputs_site(
         int(_as_float(site.get("traffic"))),
@@ -287,6 +363,40 @@ def calculate_open_store_feasibility(
         "decision_ready": decision_ready,
         "recommended_price": planned_price,
         "unit_cost": pricing_check["cost"],
+        "raw_unit_cost": raw_unit_cost,
+        "effective_unit_cost": effective_unit_cost,
+        "raw_gross_margin_pct": raw_gm * 100,
+        "ordinary_adjusted_gross_margin_pct": expected_gm * 100,
+        "ordinary_cogs": ordinary_cogs,
+        "monthly_spoilage_extra_cost": monthly_spoilage_extra_cost,
+        "peak_revenue": peak_revenue,
+        "peak_cogs": peak_cogs,
+        "peak_gross_margin_pct": peak_gross_margin * 100,
+        "peak_profit_after_fixed": peak_profit_after_fixed,
+        "modeled_annual_profit": modeled_annual_profit,
+        "perishable_enabled": seasonal["perishable_enabled"],
+        "spoilage_rate_pct": seasonal["spoilage_rate_pct"],
+        "applied_spoilage_rate_pct": waste_fraction * 100,
+        "holiday_sales_multiplier": seasonal["holiday_sales_multiplier"],
+        "holiday_cost_multiplier": seasonal["holiday_cost_multiplier"],
+        "holiday_months": seasonal["holiday_months"],
+        "scenario_assumptions": [
+            "Launch decisions and scores use the ordinary month, never holiday profits.",
+            "When perishable inventory is enabled, all costs of goods represented by the entered "
+            "gross margin and the representative product cost are assumed perishable. "
+            "Enter both before spoilage; do not include the same waste twice.",
+            "Spoilage is the fraction of purchased inventory lost: effective unit cost equals "
+            "raw unit cost / (1 - waste rate), and ordinary costs of goods equal "
+            "ordinary revenue * (1 - entered gross margin) / (1 - waste rate).",
+            "The holiday sales multiplier is an unverified sales-volume scenario at unchanged "
+            "selling prices. It increases both revenue and inventory needs. The holiday wholesale "
+            "cost multiplier then changes costs of goods per unit; spoilage is applied only once.",
+            "Monthly fixed costs and spoilage rates stay constant in ordinary and holiday months. "
+            "Any extra holiday staffing, delivery, or rent must be allowed for separately.",
+            "Modeled annual operating profit equals ordinary monthly profit * (12 - holiday months) "
+            "+ holiday monthly profit * holiday months. It excludes startup spending, financing "
+            "and taxes, and is not a cash-flow forecast.",
+        ],
         "competitor_price": competitor_price,
         "implied_margin_pct": product_margin * 100,
         "implied_markup_pct": pricing_check["implied_markup"] * 100,

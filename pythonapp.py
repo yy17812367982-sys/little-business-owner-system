@@ -5,6 +5,9 @@ import os
 import time
 import random
 import re
+import json
+import hashlib
+from copy import deepcopy
 from datetime import datetime
 from google import genai
 from google.genai import types
@@ -32,442 +35,16 @@ st.set_page_config(
         st.session_state.active_suite,
         _SUITE_PAGE_TITLES["open_store"],
     ),
-    page_icon="📊",
+    page_icon="🌿",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# =========================================================
-# UI: CSS Only (Native Button Transformation)
-# =========================================================
-st.markdown(
-    r"""
-<style>
-/* =============================
-   0) Global Reset & Scroll
-   ============================= */
-html, body{ height: auto !important; overflow-x: hidden !important; }
-div[data-testid="stAppViewContainer"]{ height: auto !important; min-height: 100vh !important; }
-.stApp{ height: auto !important; overflow-y: visible !important; }
-.block-container{
-  width: min(1180px, calc(100% - 2rem)) !important;
-  max-width: 1180px !important;
-  padding-top: 4.5rem !important;
-  padding-bottom: 3rem !important;
-}
+# Warm visual language shared across the three suites.
+from warm_theme import WARM_CSS
+from owner_experience import render_mood_board, render_partner_ecosystem
 
-/* =============================
-   1) Background
-   ============================= */
-.stApp{
-  background-image:url("https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop");
-  background-size:cover;
-  background-position:center;
-  background-attachment:fixed;
-}
-.stApp::before{
-  content:""; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.52); pointer-events: none; z-index: 0;
-}
-div[data-testid="stAppViewContainer"]{ position: relative; z-index: 1; }
-div[data-testid="stAppViewContainer"], div[data-testid="stMain"],
-div[data-testid="stHeader"], div[data-testid="stToolbar"]{
-  background: transparent !important;
-}
-#MainMenu, [data-testid="stToolbarActions"], .stAppDeployButton{
-  visibility: hidden !important;
-  display: none !important;
-}
-
-/* =============================
-   2) Typography
-   ============================= */
-div[data-testid="stAppViewContainer"] :where(h1,h2,h3,h4,p,label,small,li){
-  color:#fff !important; text-shadow: 0 0 6px rgba(0,0,0,0.65);
-}
-div[data-testid="stCaption"], div[data-testid="stCaption"] *{
-  color: rgba(255,255,255,0.55) !important; text-shadow: none !important;
-}
-.stMarkdown p{ 
-  color: rgba(255,255,255,0.88) !important; 
-  text-shadow: 0 2px 8px rgba(0,0,0,0.75) !important; 
-}
-a, a *{ color: rgba(180,220,255,0.95) !important; }
-
-/* =============================
-   3) Sidebar Styles
-   ============================= */
-section[data-testid="stSidebar"]{
-  background: rgba(0,0,0,0.85) !important;
-  backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(255,255,255,0.10);
-  z-index: 99999 !important;
-}
-
-/* =============================
-   ★ 核心：原生按钮整容术 ★
-   ============================= */
-
-/* 1) Header 不挡点击，但内部按钮可点 */
-header[data-testid="stHeader"] {
-  background: transparent !important;
-  pointer-events: none !important;
-  z-index: 1000000 !important;
-}
-header[data-testid="stHeader"] > div {
-  pointer-events: auto !important;
-}
-
-/* 2) 改造原生打开按钮（collapsed 控件） */
-[data-testid="stSidebarCollapsedControl"],
-[data-testid="stExpandSidebarButton"]{
-  position: fixed !important;
-  top: 16px !important;
-  left: 16px !important;
-  z-index: 1000002 !important;
-
-  width: 110px !important;
-  height: 44px !important;
-
-  background-color: rgba(0,0,0,0.6) !important;
-  border: 1px solid rgba(255,255,255,0.3) !important;
-  border-radius: 8px !important;
-
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease;
-
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* ✅关键：让真正可点击的 button 覆盖整个盒子 */
-[data-testid="stSidebarCollapsedControl"] button,
-[data-testid="stExpandSidebarButton"] button{
-  position: absolute !important;
-  inset: 0 !important;             /* top/right/bottom/left = 0 */
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-
-  background: transparent !important;
-  border: none !important;
-
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-
-  cursor: pointer !important;
-}
-
-/* 隐藏原生 SVG 图标 */
-[data-testid="stSidebarCollapsedControl"] button svg,
-[data-testid="stSidebarCollapsedControl"] button img,
-[data-testid="stExpandSidebarButton"] button svg,
-[data-testid="stExpandSidebarButton"] button img{
-  display: none !important;
-}
-
-/* ✅把“☰ Menu”画到 button 上（点击区域=整个按钮） */
-[data-testid="stSidebarCollapsedControl"] button::before,
-[data-testid="stExpandSidebarButton"] button::before{
-  content: "☰ Menu";
-  color: #ffffff !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  font-family: "Source Sans Pro", sans-serif;
-  letter-spacing: 0.5px;
-}
-
-/* Streamlit 1.50+ uses the button itself as stExpandSidebarButton. */
-[data-testid="stExpandSidebarButton"] > *{
-  display: none !important;
-}
-[data-testid="stExpandSidebarButton"]::before{
-  content: "☰ Menu";
-  color: #ffffff !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  font-family: "Source Sans Pro", sans-serif;
-  letter-spacing: 0.5px;
-}
-
-/* hover */
-[data-testid="stSidebarCollapsedControl"]:hover,
-[data-testid="stExpandSidebarButton"]:hover{
-  background-color: rgba(0,0,0,0.8) !important;
-  border-color: rgba(255,255,255,0.6) !important;
-  transform: translateY(1px);
-}
-
-
-/* =============================
-   ★ 隐藏展开侧边栏后的关闭按钮 (<) ★
-   ============================= */
-[data-testid="stSidebarExpandedControl"]{
-  display: flex !important;
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button{
-  display: flex !important;
-}
-
-/* =============================
-   4) Other Components
-   ============================= */
-div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="select"], div[data-baseweb="textarea"],
-div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div{
-  background: rgba(0,0,0,0.33) !important;
-  border: 1px solid rgba(255,255,255,0.14) !important;
-  border-radius: 12px !important;
-  backdrop-filter: blur(8px);
-}
-.stTextInput input, .stNumberInput input, .stTextArea textarea{
-  background: transparent !important;
-  color: rgba(255,255,255,0.95) !important;
-}
-.stTextInput input::placeholder, .stTextArea textarea::placeholder{
-  color: rgba(255,255,255,0.50) !important;
-}
-
-div[data-baseweb="menu"], div[role="listbox"]{
-  background: #ffffff !important;
-  border-radius: 8px !important;
-}
-div[data-baseweb="menu"] *, div[role="listbox"] *{
-  color: #111 !important; text-shadow: none !important;
-}
-div[data-baseweb="menu"] div[role="option"]:hover,
-div[role="listbox"] div[role="option"]:hover{ background: #f0f2f6 !important; }
-div[data-baseweb="menu"] div[role="option"][aria-selected="true"]{ background: #e6efff !important; }
-
-.card{
-  background: rgba(0,0,0,0.32);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 16px;
-  padding: 14px 16px;
-  margin: 8px 0;
-  backdrop-filter: blur(10px);
-  color: rgba(255,255,255,0.90) !important;
-  text-shadow: none !important;
-}
-
-.hero-card{
-  background: linear-gradient(135deg, rgba(2,132,199,0.80), rgba(15,23,42,0.82));
-  border: 1px solid rgba(186,230,253,0.40);
-  border-radius: 22px;
-  padding: 24px 26px;
-  margin: 0 0 18px 0;
-  box-shadow: 0 18px 46px rgba(0,0,0,0.34);
-  backdrop-filter: blur(14px);
-}
-.hero-card h1{ margin: 0 0 8px 0 !important; font-size: clamp(2rem, 4vw, 3.25rem) !important; }
-.hero-card p{ margin: 0 !important; font-size: 1.08rem; line-height: 1.55; max-width: 820px; }
-.hero-points{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
-.hero-chip{
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 999px;
-  padding: 7px 11px;
-  color:#fff;
-  font-size:.92rem;
-  font-weight:700;
-}
-.trust-card{
-  background: rgba(3,105,161,0.22);
-  border: 1px solid rgba(125,211,252,0.35);
-  border-radius: 14px;
-  padding: 13px 15px;
-  margin: 10px 0 16px 0;
-}
-.demo-badge{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  background: rgba(245,158,11,0.18);
-  border: 1px solid rgba(251,191,36,0.50);
-  border-radius:999px;
-  padding:6px 10px;
-  margin-bottom:10px;
-  color:#fef3c7;
-  font-size:.9rem;
-  font-weight:800;
-}
-
-button{
-  background: rgba(0,0,0,0.30) !important;
-  border: 1px solid rgba(255,255,255,0.16) !important;
-  color: rgba(255,255,255,0.95) !important;
-  border-radius: 10px !important;
-  backdrop-filter: blur(8px);
-}
-button:hover{ background: rgba(255,255,255,0.15) !important; }
-
-::-webkit-scrollbar{ width:6px; height:6px; }
-::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.25); border-radius:10px; }
-::-webkit-scrollbar-track{ background: transparent; }
-
-/* =============================
-   Metrics visibility fix (A)
-   ============================= */
-
-/* 指标标题 */
-div[data-testid="stMetricLabel"] *{
-  color: rgba(255,255,255,0.92) !important;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
-}
-
-/* 指标数值 */
-div[data-testid="stMetricValue"] *{
-  color: rgba(255,255,255,0.98) !important;
-  font-weight: 800 !important;
-  text-shadow: 0 2px 14px rgba(0,0,0,0.95) !important;
-}
-
-/* 指标 delta（如果有） */
-div[data-testid="stMetricDelta"] *{
-  text-shadow: 0 2px 10px rgba(0,0,0,0.85) !important;
-}
-
-/* =============================
-   Markdown table visibility fix
-   ============================= */
-
-/* Markdown 表格整体 */
-div[data-testid="stMarkdownContainer"] table {
-  background: rgba(0,0,0,0.55) !important;
-  border-collapse: collapse !important;
-  border: 1px solid rgba(255,255,255,0.25) !important;
-  border-radius: 12px !important;
-  overflow: hidden !important;
-  width: 100% !important;
-  margin: 12px 0 22px 0 !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
-}
-
-/* 表头 */
-div[data-testid="stMarkdownContainer"] thead,
-div[data-testid="stMarkdownContainer"] thead tr,
-div[data-testid="stMarkdownContainer"] th {
-  background: rgba(0,0,0,0.82) !important;
-  color: rgba(255,255,255,0.98) !important;
-  font-weight: 800 !important;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.95) !important;
-}
-
-/* 表格内容 */
-div[data-testid="stMarkdownContainer"] td {
-  background: rgba(0,0,0,0.52) !important;
-  color: rgba(255,255,255,0.95) !important;
-  font-weight: 550 !important;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
-}
-
-/* 表格边框 */
-div[data-testid="stMarkdownContainer"] th,
-div[data-testid="stMarkdownContainer"] td {
-  border: 1px solid rgba(255,255,255,0.20) !important;
-  padding: 10px 14px !important;
-  vertical-align: top !important;
-}
-
-/* 表格里的加粗文字 */
-div[data-testid="stMarkdownContainer"] table strong,
-div[data-testid="stMarkdownContainer"] table b {
-  color: #ffffff !important;
-  font-weight: 900 !important;
-}
-
-/* 表格里的代码/公式 */
-div[data-testid="stMarkdownContainer"] table code {
-  background: rgba(255,255,255,0.92) !important;
-  color: #0f172a !important;
-  padding: 2px 6px !important;
-  border-radius: 6px !important;
-  text-shadow: none !important;
-}
-
-/* Markdown 表格外层滚动区域 */
-div[data-testid="stMarkdownContainer"] {
-  overflow-x: auto !important;
-}
-
-/* Dataframe/table fallback visibility */
-div[data-testid="stDataFrame"] * {
-  color: rgba(255,255,255,0.95) !important;
-}
-
-
-/* =============================
-   Open Store segmented progress bar
-   ============================= */
-.open-step-wrap{
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0 18px 0;
-}
-.open-step-pill{
-  min-height: 42px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255,255,255,0.20);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-weight: 800;
-  letter-spacing: .2px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-  backdrop-filter: blur(10px);
-}
-.open-step-badge{
-  font-size: 14px;
-  line-height: 1;
-}
-.open-step-text{
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.55);
-}
-@media (max-width: 760px){
-  .open-step-wrap{ grid-template-columns: 1fr; }
-  .open-step-pill{ justify-content: flex-start; }
-  .block-container{
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 4.25rem 1rem 2rem 1rem !important;
-  }
-  .stApp{ background-attachment: scroll !important; }
-  section[data-testid="stSidebar"]{ width: min(88vw, 320px) !important; }
-  div[data-testid="stHorizontalBlock"]{
-    flex-wrap: wrap !important;
-    gap: .75rem !important;
-  }
-  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]{
-    flex: 1 1 100% !important;
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-  .hero-card{ padding: 19px 17px; border-radius: 16px; }
-  .hero-card h1{ font-size: 2rem !important; line-height:1.08 !important; }
-  .hero-card p{ font-size: 1rem; }
-  .hero-points{ display:grid; grid-template-columns:1fr; }
-  button, [role="button"]{ min-height:44px !important; }
-  div[data-testid="stMetric"]{ min-width: 0 !important; }
-  div[data-testid="stDataFrame"]{ overflow-x:auto !important; }
-}
-
-</style>
-""",
-    unsafe_allow_html=True
-)
+st.markdown(WARM_CSS, unsafe_allow_html=True)
 
 # =========================================================
 # Language
@@ -484,14 +61,18 @@ def toggle_language():
 # =========================================================
 # API Key + client
 # =========================================================
-API_KEY = ""
-try:
-    API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-except Exception:
-    API_KEY = ""
-
-if not API_KEY:
-    API_KEY = os.getenv("GEMINI_API_KEY", "")
+API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Local development without a secrets file should stay clean. Streamlit Cloud
+# exposes root-level secrets as environment variables; a checked local file is
+# retained as a fallback for developers who use Streamlit's secrets format.
+if not API_KEY and (
+    os.path.exists(os.path.join(".streamlit", "secrets.toml"))
+    or os.path.exists(os.path.join(os.path.expanduser("~"), ".streamlit", "secrets.toml"))
+):
+    try:
+        API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        API_KEY = ""
 
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
@@ -502,7 +83,9 @@ Rules:
 - NEVER mention any underlying model/provider/vendor or internal API names.
 - If asked "Who are you?", "What model are you?", "Are you Gemini?" or similar:
   answer: "I'm the Small Business Decision Assistant built into this platform."
-- Keep outputs structured and actionable; prefer bullet points, metrics, and next steps.
+- Speak like a kind, practical shop-owning mentor. Use everyday language and explain financial terms in one short sentence.
+- Begin with the user's specific idea or question, then offer manageable next steps. Be encouraging without hiding losses or funding risks.
+- Keep outputs concise, structured, and actionable.
 - If user requests sensitive/illegal help, refuse briefly and offer safe alternatives.
 - Never invent local laws, permit requirements, market prices, vendor facts, traffic thresholds, or citations.
 - Use only facts supplied by the user or the application. Clearly label all other numbers as estimates or general benchmarks.
@@ -1039,7 +622,49 @@ _OPEN_STORE_WIDGET_FIELDS = {
     "open_unit_cost_widget": ("pricing", "cost", 1.75),
     "open_planned_price_widget": ("pricing", "planned_price", 5.25),
     "open_competitor_price_widget": ("pricing", "competitor_price", 5.50),
+    "open_perishable_widget": ("launch", "perishable_enabled", False),
+    "open_spoilage_widget": ("launch", "spoilage_rate_pct", 0.0),
+    "open_peak_sales_widget": ("launch", "holiday_sales_multiplier", 1.0),
+    "open_peak_cost_widget": ("launch", "holiday_cost_multiplier", 1.0),
+    "open_peak_months_widget": ("launch", "holiday_months", 0),
 }
+# Keep keyed inputs when Streamlit removes widgets on a different workflow page.
+for _widget_key, (_bucket, _field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
+    if _widget_key not in st.session_state:
+        st.session_state[_widget_key] = st.session_state[_bucket].get(_field, _default)
+    else:
+        # Re-save the key so Streamlit keeps this conditional-page widget alive.
+        st.session_state[_widget_key] = st.session_state[_widget_key]
+
+# Persistent concept fields also make the scenario label reflect user edits.
+_CONCEPT_WIDGET_FIELDS = {
+    "open_business_type": ("business_type", "Coffee Shop"),
+    "open_target_customer": ("target_customer", ""),
+    "open_differentiator": ("differentiator", ""),
+    "open_concept_notes": ("notes", ""),
+    "open_custom_business_type": ("custom_business_type", ""),
+    "open_customer_reason": ("customer_reason", ""),
+    "open_customer_evidence": ("customer_evidence", ""),
+}
+for _widget_key, (_field, _default) in _CONCEPT_WIDGET_FIELDS.items():
+    if _widget_key in st.session_state:
+        st.session_state.profile[_field] = st.session_state[_widget_key]
+    else:
+        st.session_state[_widget_key] = st.session_state.profile.get(_field, _default)
+
+if "original_demo_inputs" not in st.session_state:
+    st.session_state.original_demo_inputs = deepcopy({
+        "profile": st.session_state.profile,
+        "launch": st.session_state.launch,
+        "pricing": st.session_state.pricing,
+        "site": st.session_state.site,
+    })
+
+def current_plan_fingerprint():
+    return hashlib.sha256(json.dumps({
+        "profile": st.session_state.profile, "site": st.session_state.site,
+        "launch": st.session_state.launch, "pricing": st.session_state.pricing,
+    }, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 if "outputs" not in st.session_state:
     st.session_state.outputs = {
         "final_open_store": None,
@@ -1050,6 +675,28 @@ if "outputs" not in st.session_state:
         "finance_ai_output": "",
         "finance_report_md": ""
     }
+
+def clear_open_store_report_for_changed_inputs():
+    """Never leave an old AI report attached to a newly edited plan."""
+    if st.session_state.outputs.get("open_store_report_md"):
+        st.session_state.outputs["open_store_report_md"] = ""
+    st.session_state.open_store_report_error = ""
+    st.session_state.pop("open_store_report_fingerprint", None)
+    st.session_state.pop("open_store_report_question", None)
+    st.session_state.open_store_inputs_reviewed = False
+
+def persist_open_store_widgets():
+    """Copy temporary page widgets into state before conditional widgets disappear."""
+    changed = False
+    for widget_key, (bucket, field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
+        if widget_key in st.session_state:
+            value = st.session_state[widget_key]
+            if st.session_state[bucket].get(field) != value:
+                st.session_state[bucket][field] = value
+                changed = True
+    if changed:
+        clear_open_store_report_for_changed_inputs()
+    st.session_state.profile["budget"] = int(st.session_state.launch["funding_available"])
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -1138,7 +785,8 @@ def ai_report_open_store(user_question: str = "") -> str:
         )
 
     prompt = f"""
-You are producing a professional pre-launch feasibility report for a U.S. small business owner.
+You are helping a small business owner turn their idea into a practical opening plan.
+Write in warm, plain language. Explain terms briefly. Keep financial warnings accurate.
 Output MUST be Markdown.
 
 Important rules:
@@ -1150,6 +798,12 @@ Important rules:
 - Do not overstate risk. Use "GO", "CAUTION", or "NO-GO" as the launch decision.
 - Every key finding must cite at least one specific input or computed number.
 - Explicitly disclose any assumption warnings contained in the computed metrics.
+- Use exactly the computed Decision and scores; never upgrade the verdict based on storytelling or a holiday scenario.
+- Explain why customers might choose this shop, referring to its customer_reason, differentiator and mood board brief.
+- Treat customer_evidence as user-reported validation, not verified proof. Suggest one small real-world test if it is missing.
+- Include only partner businesses supplied in partner_ecosystem. Map listings are not confirmed partnership agreements.
+- Explain ordinary-month spoilage costs and compare the holiday scenario if enabled; do not present peak-month revenue as year-round revenue.
+- Follow the supplied scenario_assumptions, including fixed costs and excluded taxes, debt and extra holiday labor. Do not invent a visual image from an uploaded mood board.
 
 Report structure:
 # Open-Store Feasibility Report
@@ -1166,6 +820,9 @@ Use a table: Business Concept / Location / Launch Budget / Pricing Assumptions.
 ### Launch Budget & Cash Runway
 ### Margin and Break-even
 ### Pricing Sanity Check
+### Why Customers Would Choose This Shop
+### Local Partnerships and Small Experiments
+### Flower Waste / Seasonal Scenario (when applicable)
 
 ## 4) Pre-Launch Risk Controls
 6 bullets with owner + metric/target.
@@ -1803,6 +1460,7 @@ with st.sidebar:
 st.markdown(
     """
     <section class="hero-card">
+      <div class="hero-eyebrow">SMALL BUSINESS DECISION TOOLKIT · BY YANG YU</div>
       <h1>{}</h1>
       <p>{}</p>
       <div class="hero-points">
@@ -1812,14 +1470,14 @@ st.markdown(
       </div>
     </section>
     """.format(
-        t("在投入资金前，看清你的小生意是否可行", "Know whether your small-business idea can work before you invest"),
+        t("你的小店梦想，从这里慢慢成形。", "A little idea. A place of your own."),
         t(
-            "用四步梳理选址、启动资金、现金跑道和定价，并生成一份可执行的风险报告。通常约 5 分钟。",
-            "Review location, launch funding, cash runway, and pricing in four steps, then get an actionable risk report. Usually about five minutes."
+            "花店、咖啡馆，或你一直惦记的小生意。我们陪你一步步理清想法、看懂开销，找到值得迈出的下一步。",
+            "The flower shop, café, or little business you keep thinking about. Let's shape your idea, work through the numbers, and find your next step together."
         ),
-        t("✓ 4 步可行性检查", "✓ Four-step feasibility check"),
-        t("✓ 清晰展示假设与评分", "✓ Transparent assumptions and scores"),
-        t("✓ 可下载行动报告", "✓ Downloadable action report"),
+        t("四步，慢慢来", "Four steps, at your pace"),
+        t("看得懂的数字", "Numbers in plain language"),
+        t("带走你的小店计划", "A plan to take with you"),
     ),
     unsafe_allow_html=True,
 )
@@ -1844,6 +1502,8 @@ if "top_last_status" not in st.session_state:
     st.session_state.top_last_status = ""
 
 with st.expander(t("咨询小企业决策助手", "Ask the Small Business Decision Assistant"), expanded=False):
+    st.caption(t("不用懂术语。像和懂生意的朋友聊天一样，把卡住你的问题说出来。",
+                 "No special words needed. Ask the question that's on your mind, just as you would ask a friend."))
     if st.session_state.clear_top_ask_ai:
         st.session_state.clear_top_ask_ai = False
         st.session_state["top_ask_ai"] = ""
@@ -1855,10 +1515,10 @@ with st.expander(t("咨询小企业决策助手", "Ask the Small Business Decisi
                 t("你想问什么？", "Ask anything..."),
                 key="top_ask_ai",
                 placeholder=t("例如：这个地址适合开店吗？我该怎么降库存？",
-                              "E.g., Is this site viable? How do I reduce dead stock?")
+                              "E.g., I lose 15 out of every 100 flowers. How should I price my bouquets?")
             )
         with colB:
-            submitted = st.form_submit_button(t("发送", "Send"), use_container_width=True)
+            submitted = st.form_submit_button(t("发送", "Send"), type="primary", use_container_width=True)
 
     if submitted:
         st.session_state.top_submit_id += 1
@@ -1869,11 +1529,16 @@ with st.expander(t("咨询小企业决策助手", "Ask the Small Business Decisi
         if q:
             st.session_state.chat_history.append({"role": "user", "text": q})
             mode = st.session_state.active_suite
-            with st.spinner(t("分析中…", "Analyzing...")):
-                ans = ask_ai(q, mode=mode)
-            st.session_state.chat_history.append({"role": "ai", "text": ans})
-            st.session_state.clear_top_ask_ai = True
-            st.session_state.top_last_status = "ready"
+            with st.spinner(t("我们一起想一想…", "Let's work through this…")):
+                try:
+                    ans = ask_ai(q, mode=mode, raise_on_failure=True)
+                    st.session_state.chat_history.append({"role": "ai", "text": ans})
+                    st.session_state.clear_top_ask_ai = True
+                    st.session_state.top_last_status = "ready"
+                except AIServiceUnavailable as error:
+                    st.session_state.top_last_status = "error"
+                    st.error(error.user_message)
+                    st.caption(t("问题还在输入框中，点击发送即可重试。", "Your question is still in the box. Press Send to try again."))
             st.session_state.show_top_chat = True
             st.session_state.top_chat_collapsed = False
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
@@ -1919,6 +1584,29 @@ if st.session_state.show_top_chat and st.session_state.chat_history:
 # =========================================================
 # Suite 1: Open a Store
 # =========================================================
+def render_seasonal_comparison(metrics):
+    """Keep ordinary-month and seasonal calculations visible in both steps."""
+    st.markdown("#### " + t("普通月份和旺季，放在一起看", "An ordinary month beside a busy one"))
+    comparison = pd.DataFrame([
+        {t("情景", "Scenario"): t("普通月 · 用于开店评分", "Ordinary month · used for your score"),
+         t("收入", "Revenue"): f"USD {metrics['expected_revenue']:,.0f}",
+         t("商品成本", "Product costs"): f"USD {metrics['ordinary_cogs']:,.0f}",
+         t("付完固定费用后", "After fixed costs"): f"USD {metrics['monthly_profit_after_fixed']:,.0f}"},
+        {t("情景", "Scenario"): t("旺季月 · 假设测算", "Busy month · what-if scenario"),
+         t("收入", "Revenue"): f"USD {metrics['peak_revenue']:,.0f}",
+         t("商品成本", "Product costs"): f"USD {metrics['peak_cogs']:,.0f}",
+         t("付完固定费用后", "After fixed costs"): f"USD {metrics['peak_profit_after_fixed']:,.0f}"},
+    ])
+    st.dataframe(comparison, hide_index=True, use_container_width=True)
+    first, second, third = st.columns(3)
+    first.metric(t("普通月额外损耗成本", "Monthly waste cost"), f"USD {metrics['monthly_spoilage_extra_cost']:,.0f}")
+    second.metric(t("计入损耗后的单位成本", "Cost including waste"), f"USD {metrics['effective_unit_cost']:,.2f}")
+    third.metric(t("全年情景结果", "Annual scenario result"), f"USD {metrics['modeled_annual_profit']:,.0f}")
+    st.caption(t(
+        f"全年测算 = {12 - metrics['holiday_months']}个普通月 + {metrics['holiday_months']}个旺季月。不是收入预测，也不包含税费、融资成本和额外旺季用工。",
+        f"Annual scenario = {12 - metrics['holiday_months']} ordinary months + {metrics['holiday_months']} busy months. This is a what-if, before taxes, financing and extra seasonal staffing."
+    ))
+
 def render_open_store():
     # Four-page workflow: Concept -> Location -> Budget/Pricing -> Decision/Report.
     if st.session_state.open_step > 4:
@@ -1927,21 +1615,28 @@ def render_open_store():
     # Keyed widgets are updated before this script reruns. Synchronizing them
     # here lets navigation reflect blocking errors immediately, even though the
     # Budget & Pricing controls are rendered below the navigation bar.
-    for widget_key, (bucket, field, _default) in _OPEN_STORE_WIDGET_FIELDS.items():
-        if widget_key in st.session_state:
-            st.session_state[bucket][field] = st.session_state[widget_key]
-    st.session_state.profile["budget"] = int(st.session_state.launch["funding_available"])
+    persist_open_store_widgets()
 
-    st.header(t("开店可行性评估", "Open a Store Feasibility"))
+    st.header(t("一起规划你的小店", "Let's plan your shop"))
+    original = st.session_state.original_demo_inputs
+    customized = any(
+        st.session_state[bucket].get(field) != value
+        for bucket, values in original.items()
+        for field, value in values.items()
+    )
     st.markdown(
-        '<span class="demo-badge">🧪 {}</span>'.format(
-            t("已预载演示场景", "Preloaded demo scenario")
+        '<span class="demo-badge">{}</span>'.format(
+            t("你的计划 · 从示例开始", "Your plan · started from an example") if customized
+            else t("试一试 · Austin 咖啡店示例", "Try it out · Austin café example")
         ),
         unsafe_allow_html=True,
     )
     st.caption(t(
-        "当前字段是 Austin 咖啡店示例，不是你的真实业务数据。请逐项替换；最终报告生成前需要确认。",
-        "The current fields are an Austin coffee-shop example, not your business data. Replace each assumption and confirm it before generating a final report."
+        "你已经在调整自己的计划。尚未替换的数字仍可能是示例，请在生成报告前逐项核对。",
+        "You're making this plan your own. Any numbers you haven't changed may still be examples—check each one before generating your report."
+    ) if customized else t(
+        "先用这个虚构示例试一试，或直接换成你自己的想法和数字。",
+        "Explore this illustrative example, or replace the idea and numbers with your own."
     ))
 
     step_titles = [
@@ -1951,12 +1646,6 @@ def render_open_store():
         t("结论报告", "Decision & Report"),
     ]
     # Cute segmented progress bar: one colored segment per page, instead of a single continuous bar.
-    progress_colors = [
-        ("#38bdf8", "#075985"),  # blue: concept
-        ("#f59e0b", "#92400e"),  # amber: location
-        ("#a78bfa", "#4c1d95"),  # purple: budget/pricing
-        ("#34d399", "#064e3b"),  # green: decision/report
-    ]
     # Robust segmented progress bar. Keep HTML compact (single-line tags) to avoid Streamlit
     # occasionally rendering part of the markup as literal text.
     import html as _html
@@ -1964,18 +1653,14 @@ def render_open_store():
     for i, title in enumerate(step_titles, start=1):
         active = i <= st.session_state.open_step
         current = i == st.session_state.open_step
-        bg, border = progress_colors[i-1]
-        if active:
-            style = f"background: linear-gradient(135deg, {bg}, {border}); border-color: rgba(255,255,255,0.45); color:#fff;"
-        else:
-            style = "background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.16); color: rgba(255,255,255,0.62);"
+        state_class = "current" if current else "complete" if active else "upcoming"
         badge = "●" if current else "✓" if active else "○"
         safe_title = _html.escape(str(title), quote=True)
         pills.append(
-            '<div class="open-step-pill" style="{}">'
+            '<div class="open-step-pill {}">'
             '<span class="open-step-badge">{}</span>'
             '<span class="open-step-text">{}/4 · {}</span>'
-            '</div>'.format(style, badge, i, safe_title)
+            '</div>'.format(state_class, badge, i, safe_title)
         )
     progress_html = '<div class="open-step-wrap">' + ''.join(pills) + '</div>'
     st.markdown(progress_html, unsafe_allow_html=True)
@@ -1984,10 +1669,12 @@ def render_open_store():
     # This keeps the segmented progress bar and page content perfectly aligned
     # without reintroducing forced st.rerun() calls.
     def _open_store_prev():
+        persist_open_store_widgets()
         st.session_state.open_step = max(1, int(st.session_state.get("open_step", 1)) - 1)
         st.session_state.open_nav_error = ""
 
     def _open_store_next():
+        persist_open_store_widgets()
         current_step = int(st.session_state.get("open_step", 1))
         if current_step == 3:
             check = open_store_feasibility_metrics()
@@ -2022,6 +1709,7 @@ def render_open_store():
                 on_click=_open_store_next,
                 key="open_store_next_btn",
                 disabled=next_is_blocked,
+                type="primary",
             )
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
@@ -2040,7 +1728,7 @@ def render_open_store():
         ))
 
     def show_location_map(lat, lon, label="Target Location"):
-        """Show a cleaner, darker Texas-centered location map with graceful fallback."""
+        """Show the selected location on a light map without custom text glyphs."""
         lat = float(lat)
         lon = float(lon)
         label = label or DEFAULT_TEXAS_LABEL
@@ -2058,7 +1746,7 @@ def render_open_store():
                 data=df,
                 get_position="[lon, lat]",
                 get_radius="radius",
-                get_fill_color=[37, 99, 235, 210],
+                get_fill_color=[54, 92, 69, 230],
                 get_line_color=[255, 255, 255, 230],
                 line_width_min_pixels=2,
                 pickable=True,
@@ -2068,8 +1756,8 @@ def render_open_store():
                 data=df,
                 get_position="[lon, lat]",
                 get_radius=420,
-                get_fill_color=[37, 99, 235, 45],
-                get_line_color=[125, 211, 252, 120],
+                get_fill_color=[54, 92, 69, 35],
+                get_line_color=[54, 92, 69, 120],
                 line_width_min_pixels=1,
                 pickable=False,
             )
@@ -2093,10 +1781,10 @@ def render_open_store():
                 bearing=-12,
             )
             deck = pdk.Deck(
-                layers=[halo_layer, point_layer, text_layer],
+                layers=[halo_layer, point_layer],
                 initial_view_state=view_state,
                 tooltip={"text": "{label}"},
-                map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
             )
             st.pydeck_chart(deck, use_container_width=True, height=360)
         except Exception:
@@ -2105,39 +1793,50 @@ def render_open_store():
     # Page 1: Concept
     if st.session_state.open_step == 1:
         p = st.session_state.profile
-        st.subheader(t("第 1 页：业务概念", "Page 1: Business Concept"))
+        st.subheader(t("第 1 步：你想开一家什么样的店？", "Step 1: Tell us about your little idea"))
         st.markdown(
             "<div class='card'>" + t(
-                "先讲清楚你要开什么店、卖给谁、凭什么赢。选址放到第 2 页，避免一页塞太满。",
-                "First define what you are opening, who you serve, and why customers would choose you. Location is on Page 2 to keep this page light."
+                "想象一位客人推门走进来：你希望谁来？他们会喜欢这里的什么？先写下你的想法，不用一次就完美。",
+                "Picture someone walking through your door. Who are they, and what would make them love your shop? A first thought is enough to get started."
             ) + "</div>",
             unsafe_allow_html=True
         )
 
         col1, col2 = st.columns([1, 1])
         with col1:
+            business_types = ["Coffee Shop", "Flower Shop", "Bakery", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"]
             p["business_type"] = st.selectbox(
                 t("业态", "Business Type"),
-                ["Coffee Shop", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"],
-                index=["Coffee Shop", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"].index(
-                    p.get("business_type", "Coffee Shop") if p.get("business_type", "Coffee Shop") in ["Coffee Shop", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"] else "Coffee Shop"
-                )
+                business_types, key="open_business_type",
             )
+            if p["business_type"] == "Other":
+                p["custom_business_type"] = st.text_input(t("具体想开什么店？", "What kind of shop?"), key="open_custom_business_type")
             p["target_customer"] = st.text_input(
                 t("目标客户", "Target Customer"),
-                p.get("target_customer", "Downtown office workers, tourists, students, and weekend visitors")
+                key="open_target_customer",
             )
         with col2:
             p["differentiator"] = st.text_input(
                 t("差异化", "Differentiator"),
-                p.get("differentiator", "Fast specialty coffee, grab-and-go breakfast, and locally inspired snacks")
+                key="open_differentiator",
             )
             p["notes"] = st.text_area(
                 t("限制/备注（可选）", "Constraints / Notes (optional)"),
-                p.get("notes", ""),
+                key="open_concept_notes",
                 placeholder=t("例如：只做早餐、缺少全职店长、房东给2个月免租等", "E.g., breakfast only, no full-time manager yet, two months free rent from landlord, etc."),
                 height=140
             )
+        p["customer_reason"] = st.text_area(
+            t("客人为什么会特意来找你？", "Why would someone choose you?"),
+            key="open_customer_reason",
+            placeholder=t("比如：按故事定制花束、当日送达、记得老客人的纪念日。", "Think personal bouquets, same-day delivery, or remembering a regular's anniversary."),
+        )
+        p["customer_evidence"] = st.text_input(
+            t("你试过这个想法吗？（可选）", "Have you tried this idea with anyone? (optional)"),
+            key="open_customer_evidence",
+            placeholder=t("聊过的客人、预订、试卖结果；没有也没关系。", "Customer conversations, preorders, or a small pop-up. It's okay if you're just starting."),
+        )
+        render_mood_board(p, st.session_state.lang, ask_ai)
 
     # Page 2: Location Map
     elif st.session_state.open_step == 2:
@@ -2153,10 +1852,15 @@ def render_open_store():
 
         left, right = st.columns([1, 1.35])
         with left:
+            previous_address = s.get("address", DEFAULT_TEXAS_ADDRESS)
             s["address"] = st.text_input(
                 t("地址或商圈", "Address or Trade Area"),
                 s.get("address", DEFAULT_TEXAS_ADDRESS)
             )
+            if s["address"].strip() != previous_address.strip():
+                s.pop("located_address", None)
+                st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
+                st.session_state.profile.pop("partner_ecosystem", None)
             s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
             s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
             s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
@@ -2175,6 +1879,7 @@ def render_open_store():
                     s["address"] = DEFAULT_TEXAS_ADDRESS
                     s["lat"] = DEFAULT_TEXAS_LAT
                     s["lon"] = DEFAULT_TEXAS_LON
+                    s["located_address"] = DEFAULT_TEXAS_ADDRESS
                     st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
 
         with right:
@@ -2190,13 +1895,18 @@ def render_open_store():
                 picked_label = st.selectbox(t("选择匹配地址", "Pick matched address"), labels, index=0)
                 chosen = cands[labels.index(picked_label)]
                 s["lat"], s["lon"] = float(chosen["lat"]), float(chosen["lon"])
+                s["located_address"] = s["address"]
                 st.caption(t(f"已定位：{s['lat']:.5f}, {s['lon']:.5f}", f"Located: {s['lat']:.5f}, {s['lon']:.5f}"))
             elif geo.get("status") == "fail":
                 st.warning(t("地址未定位成功。可继续使用手工指标完成判断。", "Address was not located. You can still proceed using manual metrics."))
 
             lat = float(s.get("lat", DEFAULT_TEXAS_LAT) or DEFAULT_TEXAS_LAT)
             lon = float(s.get("lon", DEFAULT_TEXAS_LON) or DEFAULT_TEXAS_LON)
-            show_location_map(lat, lon, s.get("address", "Target Location"))
+            map_matches_address = s.get("located_address") == s.get("address")
+            if map_matches_address or s.get("address") == DEFAULT_TEXAS_ADDRESS:
+                show_location_map(lat, lon, s.get("address", "Target Location"))
+            else:
+                st.info(t("请先定位新地址，地图就会跟着更新。", "Locate your new address to update the map."))
 
         score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
         risk_flags = []
@@ -2217,6 +1927,7 @@ def render_open_store():
             st.warning(t("选址风险：", "Location risks: ") + "，".join(risk_flags))
         else:
             st.success(t("当前选址输入下没有明显红旗。", "No major location red flags from current inputs."))
+        render_partner_ecosystem(st.session_state.profile, s, st.session_state.lang, ask_ai)
 
     # Page 3: Budget & Pricing
     elif st.session_state.open_step == 3:
@@ -2235,19 +1946,21 @@ def render_open_store():
         col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown("### " + t("资金与收入假设", "Funding & Revenue Assumptions"))
-            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, value=float(launch.get("funding_available", p.get("budget", 80000))), step=1000.0, key="open_funding_widget")
+            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, step=1000.0, key="open_funding_widget")
             p["budget"] = int(launch["funding_available"])
-            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, value=float(launch.get("startup_cost_estimate", 62000)), step=1000.0, key="open_startup_cost_widget")
-            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, value=float(launch.get("monthly_fixed_cost_estimate", 26500)), step=500.0, key="open_fixed_cost_widget")
-            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, value=float(launch.get("expected_monthly_revenue", 52000)), step=1000.0, key="open_revenue_widget")
-            launch["expected_gross_margin"] = st.slider(t("预期毛利率（%）", "Expected Gross Margin (%)"), 10, 90, int(launch.get("expected_gross_margin", 62)), key="open_gross_margin_widget")
-            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, int(launch.get("cash_target_months", 3)), key="open_cash_target_widget")
+            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
+            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
+            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, step=1000.0, key="open_revenue_widget")
+            launch["expected_gross_margin"] = st.slider(t("损耗前的预期毛利率（%）", "Expected Gross Margin Before Spoilage (%)"), 10, 90, key="open_gross_margin_widget",
+                help=t("每收到100元，在扣除商品成本后、付房租工资前剩多少。启用损耗时，请填损耗前的比例。", "Out of each USD 100 in sales, what is left after product costs, before rent and wages? Enter the margin BEFORE spoilage if you enable it below."))
+            launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, key="open_cash_target_widget")
 
         with col2:
             st.markdown("### " + t("代表性产品定价", "Representative Product Pricing"))
-            pr["cost"] = st.number_input(t("单位成本", "Unit Cost"), min_value=0.0, value=float(pr.get("cost", 1.75)), step=0.05, key="open_unit_cost_widget")
-            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, value=float(pr.get("planned_price", 5.25)), step=0.1, key="open_planned_price_widget")
-            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, value=float(pr.get("competitor_price", 5.5)), step=0.1, key="open_competitor_price_widget")
+            pr["cost"] = st.number_input(t("损耗前的单位成本", "Unit Cost Before Spoilage"), min_value=0.0, step=0.05, key="open_unit_cost_widget",
+                help=t("填损耗前的成本。下方会单独计入损耗，避免重复计算。", "Enter the cost BEFORE spoilage. The optional waste setting below adds it once."))
+            pr["planned_price"] = st.number_input(t("计划售价", "Planned Price"), min_value=0.0, step=0.1, key="open_planned_price_widget")
+            pr["competitor_price"] = st.number_input(t("竞品价格", "Competitor Price"), min_value=0.0, step=0.1, key="open_competitor_price_widget")
             pr["strategy"] = st.selectbox(
                 t("定价策略", "Pricing Strategy"),
                 ["Competitive", "Value-based", "Premium", "Penetration"],
@@ -2258,7 +1971,32 @@ def render_open_store():
             st.caption(t(f"隐含加成率：{pr['target_margin']}%", f"Implied markup: {pr['target_margin']}%"))
             launch["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), launch.get("notes", ""), placeholder=t("例如：免租期、供应商账期、设备租赁等", "Free-rent period, supplier credit terms, equipment lease, etc."))
 
+        st.subheader(t("鲜花会谢，节日会忙：一起算进去", "Some stock spoils. Some months bloom."))
+        launch["perishable_enabled"] = st.checkbox(
+            t("我的商品会损耗：把损耗算进成本", "My stock can spoil — include waste in my costs"),
+            key="open_perishable_widget")
+        launch["spoilage_rate_pct"] = st.slider(
+            t("售出前损耗的比例（%）", "Stock that spoils before sale (%)"),
+            0.0, 80.0, step=1.0, key="open_spoilage_widget",
+            disabled=not launch["perishable_enabled"],
+            help=t("买100支花，坏掉15支，就是15%。", "If you buy 100 stems and lose 15 before sale, enter 15%."))
+        st.caption(t(
+            "启用时，此简化模型把全部商品成本视为易损耗库存：有效成本 = 原成本 ÷（1 − 损耗率）。请输入损耗前成本和毛利率；若已包含损耗，请关闭此选项。",
+            "When enabled, this simple model treats all product costs as perishable stock: effective cost = original cost ÷ (1 − waste rate). Use costs and margins BEFORE waste. Leave this off if your costs already include it."
+        ))
+        with st.expander(t("试算情人节、母亲节或其他旺季", "Try a holiday or busy-season scenario"), expanded=False):
+            st.caption(t(
+                "按整个旺季月份的平均值估计，不是只填节日当天的涨幅。固定费用和售价暂时不变；额外人工、配送、税费和融资成本需要另行考虑。",
+                "Use averages for a whole busy month, not just Valentine's Day itself. Selling prices and fixed costs stay constant; allow separately for extra staff, deliveries, taxes and financing."
+            ))
+            launch["holiday_sales_multiplier"] = st.slider(t("旺季月销量倍数", "Busy-month sales volume multiplier"), 0.5, 5.0, step=0.1, key="open_peak_sales_widget")
+            launch["holiday_cost_multiplier"] = st.slider(t("旺季进货单价倍数", "Busy-month wholesale cost multiplier"), 0.5, 5.0, step=0.1, key="open_peak_cost_widget")
+            launch["holiday_months"] = st.slider(t("一年里这样的旺季月份", "Busy months per year"), 0, 12, key="open_peak_months_widget")
+            st.caption(t("开店评分始终看普通月份，避免被旺季的好成绩冲昏头脑。", "Your launch score always uses an ordinary month, so a holiday rush cannot hide everyday losses."))
+
         m = open_store_feasibility_metrics()
+        if launch["perishable_enabled"] or launch.get("holiday_months", 0):
+            render_seasonal_comparison(m)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric(t("启动成本", "Startup Cost"), f"USD {m['startup_cost']:,.0f}")
         c2.metric(t("现金跑道", "Cash Runway"), f"{m['runway_months']:.1f} mo")
@@ -2288,7 +2026,7 @@ def render_open_store():
         decision_msg = {
             "GO": t("可以推进，但仍需完成开业前检查清单。", "Proceed, but complete the pre-launch checklist."),
             "CAUTION": t("谨慎推进，先修复主要风险。", "Proceed cautiously and fix the main risks first."),
-            "NO-GO": t("暂不建议开店，先重做资金、选址或利润假设。", "Do not launch yet; revisit funding, location, or margin assumptions first."),
+            "NO-GO": t("现在还不是投入资金的时候。想法可以留下，我们先把资金、选址或利润问题理顺。", "Not ready to invest yet. Keep the idea; first give the funding, location, or margins a little more work."),
             "REVIEW INPUTS": t("当前输入存在错误，系统不会生成决策报告。请返回预算与定价页修正。", "The current inputs contain errors. No decision report will be generated until they are corrected."),
         }.get(decision, "")
 
@@ -2305,17 +2043,19 @@ def render_open_store():
 
         st.markdown("### " + t("核心依据", "Decision Evidence"))
         metric_df = pd.DataFrame([
-            {"Metric": "Location Score", "Value": int(m["site_score"]), "Meaning": "Traffic, competition, rent pressure, and accessibility"},
+            {"Metric": "Location Score", "Value": str(int(m["site_score"])), "Meaning": "Traffic, competition, rent pressure, and accessibility"},
             {"Metric": "Startup Cost", "Value": f"USD {m['startup_cost']:,.0f}", "Meaning": "One-time cost before opening"},
             {"Metric": "Monthly Fixed Cost", "Value": f"USD {m['monthly_fixed_cost']:,.0f}", "Meaning": "Fixed monthly cash burden"},
             {"Metric": "Cash Runway", "Value": f"{m['runway_months']:.1f} months", "Meaning": "Remaining cash after startup costs"},
             {"Metric": "Break-even Revenue", "Value": f"USD {m['breakeven_revenue']:,.0f}" if np.isfinite(m['breakeven_revenue']) else "N/A", "Meaning": "Revenue needed to cover fixed costs"},
-            {"Metric": "Unit Cost", "Value": f"USD {m['unit_cost']:,.2f}", "Meaning": "Representative product cost"},
+            {"Metric": "Effective Unit Cost", "Value": f"USD {m['unit_cost']:,.2f}", "Meaning": "Representative product cost, including enabled spoilage"},
             {"Metric": "Planned Price", "Value": f"USD {m['recommended_price']:,.2f}", "Meaning": "Representative product price"},
             {"Metric": "Product Margin", "Value": f"{m['implied_margin_pct']:.1f}%", "Meaning": "(Price - unit cost) / price"},
-            {"Metric": "Expected Business Gross Margin", "Value": f"{m['expected_gross_margin_pct']:.1f}%", "Meaning": "User-provided total-business assumption"},
+            {"Metric": "Expected Business Gross Margin", "Value": f"{m['expected_gross_margin_pct']:.1f}%", "Meaning": "Ordinary-month business margin, including enabled spoilage"},
         ])
         st.dataframe(metric_df, use_container_width=True, hide_index=True)
+        if m.get("perishable_enabled") or m.get("holiday_months", 0):
+            render_seasonal_comparison(m)
 
         with st.expander(t("评分方法", "How the score is calculated"), expanded=False):
             score_df = pd.DataFrame([
@@ -2360,6 +2100,15 @@ def render_open_store():
             key="open_store_question",
             height=120
         )
+        plan_fingerprint = current_plan_fingerprint()
+        saved_fingerprint = st.session_state.get("open_store_report_fingerprint")
+        report_stale = bool(st.session_state.outputs.get("open_store_report_md") and (
+            saved_fingerprint != plan_fingerprint
+            or st.session_state.get("open_store_report_question") != open_store_question
+        ))
+        if report_stale:
+            st.info(t("你调整了计划。重新生成报告后，结论和下载内容才会与新输入一致。",
+                      "You've changed your plan. Generate a fresh report so the advice and download match your new inputs."))
         st.session_state.open_store_inputs_reviewed = st.checkbox(
             t(
                 "我已检查所有示例字段，并确认它们现在代表我的业务场景。",
@@ -2393,9 +2142,12 @@ def render_open_store():
                 disabled=not report_ready,
             ):
                 st.session_state.open_store_report_error = ""
-                with st.spinner(t("生成报告中…", "Generating report...")):
+                with st.spinner(t("正在整理你的小店计划，通常需要约一分钟…", "Putting your shop plan together — this may take about a minute…")):
                     try:
                         st.session_state.outputs["open_store_report_md"] = ai_report_open_store(open_store_question)
+                        st.session_state.open_store_report_fingerprint = plan_fingerprint
+                        st.session_state.open_store_report_question = open_store_question
+                        report_stale = False
                     except AIServiceUnavailable as error:
                         st.session_state.open_store_report_error = error.user_message
                         st.rerun()
@@ -2411,7 +2163,7 @@ def render_open_store():
                 st.session_state.outputs["final_open_store"] = None
                 st.session_state.open_store_report_error = ""
 
-        if st.session_state.outputs.get("open_store_report_md", ""):
+        if st.session_state.outputs.get("open_store_report_md", "") and not report_stale:
             st.markdown(st.session_state.outputs["open_store_report_md"])
             st.download_button(
                 label=t("下载 open_store_report.md", "Download open_store_report.md"),
@@ -2838,7 +2590,8 @@ else:
 st.markdown("---")
 st.markdown(
     """
-    <div style="text-align: center; font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5; padding-bottom: 20px;">
+    <div class="toolkit-footer">
+        <b>Small Business Decision Toolkit · Yang Yu</b><br>
         <b>Research & Compliance Notice</b><br>
         This system is developed for research and analytical framework demonstration purposes only.<br>
         It does not provide investment advice, financial advisory services, or regulated commercial services.<br>

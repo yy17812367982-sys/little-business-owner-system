@@ -1,6 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
+import base64
 import os
 import time
 import random
@@ -65,35 +67,38 @@ def toggle_language():
 # fast while preserving the four-second public experience.
 intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
 if intro_video_path.exists() and not st.session_state.get("intro_complete", False):
+    intro_video_data = base64.b64encode(intro_video_path.read_bytes()).decode("ascii")
     st.markdown(
         """
         <style>
         [data-testid="stHeader"], [data-testid="stSidebar"],
         [data-testid="stToolbar"], [data-testid="stDecoration"] { display:none !important; }
         .block-container { max-width:none !important; padding:0 !important; }
-        [data-testid="stVideo"] { width:100vw !important; max-width:none !important;
-          height:100vh !important; margin:0 !important; border:0 !important;
-          border-radius:0 !important; background:#f4efe3 !important; }
-        [data-testid="stVideo"] video { width:100% !important; height:100vh !important;
-          object-fit:cover !important; border-radius:0 !important; }
-        [data-testid="stVideo"] video::-webkit-media-controls { display:none !important; }
+        [data-testid="stIFrame"] { display:block; width:100vw !important;
+          height:100vh !important; border:0 !important; }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    st.video(
-        intro_video_path.read_bytes(),
-        format="video/mp4",
-        start_time=0,
-        end_time=4,
-        autoplay=True,
-        muted=True,
-        loop=False,
+    components.html(
+        f"""
+        <!doctype html>
+        <html><head><style>
+        html, body {{ width:100%; height:100%; margin:0; overflow:hidden; background:#f4efe3; }}
+        video {{ display:block; width:100%; height:100%; object-fit:cover; }}
+        </style></head><body>
+        <video autoplay muted playsinline preload="auto">
+          <source src="data:video/mp4;base64,{intro_video_data}" type="video/mp4">
+        </video>
+        </body></html>
+        """,
+        height=900,
+        scrolling=False,
     )
     try:
-        intro_seconds = max(0.0, min(float(os.getenv("INTRO_VIDEO_SECONDS", "4.15")), 10.0))
+        intro_seconds = max(0.0, min(float(os.getenv("INTRO_VIDEO_SECONDS", "4.5")), 10.0))
     except ValueError:
-        intro_seconds = 4.15
+        intro_seconds = 4.5
     if intro_seconds:
         time.sleep(intro_seconds)
     st.session_state.intro_complete = True

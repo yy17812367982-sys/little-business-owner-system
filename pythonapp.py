@@ -59,6 +59,46 @@ def t(zh: str, en: str) -> str:
 def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
 
+
+# Show the storefront film once at the start of each browser session, then
+# continue into the toolkit. The environment override keeps automated tests
+# fast while preserving the four-second public experience.
+intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
+if intro_video_path.exists() and not st.session_state.get("intro_complete", False):
+    st.markdown(
+        """
+        <style>
+        [data-testid="stHeader"], [data-testid="stSidebar"],
+        [data-testid="stToolbar"], [data-testid="stDecoration"] { display:none !important; }
+        .block-container { max-width:none !important; padding:0 !important; }
+        [data-testid="stVideo"] { width:100vw !important; max-width:none !important;
+          height:100vh !important; margin:0 !important; border:0 !important;
+          border-radius:0 !important; background:#f4efe3 !important; }
+        [data-testid="stVideo"] video { width:100% !important; height:100vh !important;
+          object-fit:cover !important; border-radius:0 !important; }
+        [data-testid="stVideo"] video::-webkit-media-controls { display:none !important; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.video(
+        intro_video_path.read_bytes(),
+        format="video/mp4",
+        start_time=0,
+        end_time=4,
+        autoplay=True,
+        muted=True,
+        loop=False,
+    )
+    try:
+        intro_seconds = max(0.0, min(float(os.getenv("INTRO_VIDEO_SECONDS", "4.15")), 10.0))
+    except ValueError:
+        intro_seconds = 4.15
+    if intro_seconds:
+        time.sleep(intro_seconds)
+    st.session_state.intro_complete = True
+    st.rerun()
+
 # =========================================================
 # API Key + client
 # =========================================================
@@ -1470,18 +1510,6 @@ with st.sidebar:
 # =========================================================
 # Header + Top Ask AI
 # =========================================================
-intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
-if intro_video_path.exists():
-    st.video(
-        intro_video_path.read_bytes(),
-        format="video/mp4",
-        start_time=0,
-        end_time=4,
-        autoplay=True,
-        muted=True,
-        loop=False,
-    )
-
 st.markdown(
     """
     <section class="hero-card">

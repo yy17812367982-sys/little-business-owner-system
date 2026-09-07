@@ -18,6 +18,7 @@ Implemented by Yang Yu in response to the request for a warmer first impression.
 - Session state prevents the opening from replaying during form edits, step changes, or suite navigation.
 - The MP4 has no audio track, and playback is capped so visitors cannot be trapped on the opening screen.
 - No forced Streamlit rerun occurs after playback, preventing the Cloud startup race that displayed `Bad message format: Tried to use SessionInfo before it was initialized`.
+- The Cloud runtime now uses Streamlit 1.52.2 instead of 1.40.2. The older frontend predates Streamlit's upstream SessionInfo reconnect-race fix and could continue showing the dialog even after application-level reruns were removed.
 
 ## Verification
 

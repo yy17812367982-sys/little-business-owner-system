@@ -9,6 +9,7 @@ import json
 import hashlib
 from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 from google import genai
 from google.genai import types
 import requests
@@ -1469,6 +1470,18 @@ with st.sidebar:
 # =========================================================
 # Header + Top Ask AI
 # =========================================================
+intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
+if intro_video_path.exists():
+    st.video(
+        intro_video_path.read_bytes(),
+        format="video/mp4",
+        start_time=0,
+        end_time=4,
+        autoplay=True,
+        muted=True,
+        loop=False,
+    )
+
 st.markdown(
     """
     <section class="hero-card">

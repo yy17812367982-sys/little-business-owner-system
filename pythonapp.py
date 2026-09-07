@@ -801,11 +801,14 @@ Important rules:
 - Do not use dollar signs. Use "USD" before amounts to avoid Markdown rendering issues.
 - Do not overstate risk. Use "GO", "CAUTION", or "NO-GO" as the launch decision.
 - Every key finding must cite at least one specific input or computed number.
+- competitor_price is one user-entered comparison price. Never describe it as a local average, market average, survey, or verified market benchmark.
+- Never invent numeric budgets, prices, costs, thresholds, or legal requirements. If a useful target is not supplied or computed, write "owner to set" instead of choosing a number.
 - Explicitly disclose any assumption warnings contained in the computed metrics.
 - Use exactly the computed Decision and scores; never upgrade the verdict based on storytelling or a holiday scenario.
 - Explain why customers might choose this shop, referring to its customer_reason, differentiator and mood board brief.
 - Treat customer_evidence as user-reported validation, not verified proof. Suggest one small real-world test if it is missing.
 - Include only partner businesses supplied in partner_ecosystem. Map listings are not confirmed partnership agreements.
+- Do not infer neighborhood affluence, customer profile, business quality, or partnership fit from a map listing.
 - Explain ordinary-month spoilage costs and compare the holiday scenario if enabled; do not present peak-month revenue as year-round revenue.
 - Follow the supplied scenario_assumptions, including fixed costs and excluded taxes, debt and extra holiday labor. Do not invent a visual image from an uploaded mood board.
 

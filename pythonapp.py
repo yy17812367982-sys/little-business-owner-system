@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import base64
@@ -62,55 +61,66 @@ def toggle_language():
     st.session_state.lang = "en" if st.session_state.lang == "zh" else "zh"
 
 
-# Show the storefront film once at the start of each browser session, then
-# continue into the toolkit. The environment override keeps automated tests
-# fast while preserving the four-second public experience.
+# Show the storefront film once at the start of each browser session. The
+# homepage is rendered normally underneath a temporary full-screen layer, so
+# Streamlit can finish initializing the session without a forced rerun.
 intro_video_path = Path(__file__).with_name("assets") / "little-shop-intro.mp4"
 if intro_video_path.exists() and not st.session_state.get("intro_complete", False):
-    intro_video_data = base64.b64encode(intro_video_path.read_bytes()).decode("ascii")
-    intro_mobile_path = intro_video_path.with_name("little-shop-intro-mobile.mp4")
-    intro_mobile_data = base64.b64encode(
-        (intro_mobile_path if intro_mobile_path.exists() else intro_video_path).read_bytes()
-    ).decode("ascii")
-    st.markdown(
-        """
-        <style>
-        [data-testid="stHeader"], [data-testid="stSidebar"],
-        [data-testid="stToolbar"], [data-testid="stDecoration"] { display:none !important; }
-        .block-container { max-width:none !important; padding:0 !important; }
-        [data-testid="stIFrame"] { display:block; width:100vw !important;
-          height:100vh !important; border:0 !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    components.html(
-        f"""
-        <!doctype html>
-        <html><head><style>
-        html, body {{ width:100%; height:100%; margin:0; overflow:hidden; background:#f4efe3; }}
-        video {{ display:block; width:100%; height:100%; object-fit:cover; }}
-        @media (max-aspect-ratio: 3/4) {{
-          video {{ object-fit:contain; }}
-        }}
-        </style></head><body>
-        <video autoplay muted playsinline preload="auto">
-          <source media="(max-aspect-ratio: 3/4)" src="data:video/mp4;base64,{intro_mobile_data}" type="video/mp4">
-          <source src="data:video/mp4;base64,{intro_video_data}" type="video/mp4">
-        </video>
-        </body></html>
-        """,
-        height=900,
-        scrolling=False,
-    )
     try:
         intro_seconds = max(0.0, min(float(os.getenv("INTRO_VIDEO_SECONDS", "4.5")), 10.0))
     except ValueError:
         intro_seconds = 4.5
-    if intro_seconds:
-        time.sleep(intro_seconds)
+
+    # Mark it complete immediately. The overlay still remains visible for the
+    # configured duration, but later widget reruns cannot replay the film.
     st.session_state.intro_complete = True
-    st.rerun()
+    if intro_seconds:
+        intro_video_data = base64.b64encode(intro_video_path.read_bytes()).decode("ascii")
+        intro_mobile_path = intro_video_path.with_name("little-shop-intro-mobile.mp4")
+        intro_mobile_data = base64.b64encode(
+            (intro_mobile_path if intro_mobile_path.exists() else intro_video_path).read_bytes()
+        ).decode("ascii")
+        st.markdown(
+            f"""
+            <style>
+            @keyframes yyOpeningFilmDismiss {{
+              from {{ opacity: 1; visibility: visible; }}
+              to {{ opacity: 0; visibility: hidden; pointer-events: none; }}
+            }}
+            .yy-opening-film {{
+              position: fixed;
+              inset: 0;
+              width: 100vw;
+              height: 100vh;
+              height: 100dvh;
+              z-index: 2147483647;
+              overflow: hidden;
+              background: #f4efe3;
+              animation: yyOpeningFilmDismiss 0.35s ease {intro_seconds:.2f}s forwards;
+            }}
+            .yy-opening-film video {{
+              display: block;
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+              background: #f4efe3;
+            }}
+            @media (max-aspect-ratio: 3/4) {{
+              .yy-opening-film video {{ object-fit: contain; }}
+            }}
+            @media (prefers-reduced-motion: reduce) {{
+              .yy-opening-film {{ animation-delay: 0.8s; animation-duration: 0.15s; }}
+            }}
+            </style>
+            <div class="yy-opening-film" aria-hidden="true">
+              <video autoplay muted playsinline preload="auto">
+                <source media="(max-aspect-ratio: 3/4)" src="data:video/mp4;base64,{intro_mobile_data}" type="video/mp4">
+                <source src="data:video/mp4;base64,{intro_video_data}" type="video/mp4">
+              </video>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 # =========================================================
 # API Key + client

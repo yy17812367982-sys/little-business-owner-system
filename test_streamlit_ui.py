@@ -1,12 +1,21 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
 
 class DanielFollowUpUITests(unittest.TestCase):
     def setUp(self):
+        self.intro_environment = patch.dict(os.environ, {"INTRO_VIDEO_SECONDS": "0"})
+        self.intro_environment.start()
+        self.addCleanup(self.intro_environment.stop)
         self.app = AppTest.from_file("pythonapp.py", default_timeout=30).run()
         self.assertFalse(self.app.exception)
+
+    def test_intro_completes_before_homepage_tests_continue(self):
+        self.assertTrue(self.app.session_state["intro_complete"])
+        self.assertTrue(any("A little idea" in heading.value for heading in self.app.markdown))
 
     def _go_to_budget_page(self):
         self.app.button(key="open_store_next_btn").click().run()

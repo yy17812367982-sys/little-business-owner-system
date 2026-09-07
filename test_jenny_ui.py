@@ -41,7 +41,10 @@ class JennyFeedbackUITests(unittest.TestCase):
     def setUp(self):
         # Explicitly override secrets/env so a developer's real key cannot be used.
         self.addCleanup(patch.stopall)
-        self.api_environment = patch.dict(os.environ, {"GEMINI_API_KEY": "mock-provider-only"})
+        self.api_environment = patch.dict(
+            os.environ,
+            {"GEMINI_API_KEY": "mock-provider-only", "INTRO_VIDEO_SECONDS": "0"},
+        )
         self.api_environment.start()
         self.provider = Mock(return_value=SimpleNamespace(text=MOCK_REPORT))
         patch(

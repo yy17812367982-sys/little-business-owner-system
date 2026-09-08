@@ -8,6 +8,7 @@ import random
 import re
 import json
 import hashlib
+import importlib
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +46,13 @@ st.set_page_config(
 # Warm visual language shared across the three suites.
 from location_analysis import render_location_analysis, report_location
 from visual_planner import render_shop_cards, render_idea_preview, render_money_picture
-from warm_theme import WARM_CSS
+import warm_theme as _warm_theme
+# Streamlit Cloud can keep imported helper modules alive while hot-reloading the
+# entry script. Reload only when a deployment has new visual classes but the
+# cached theme predates them; a fresh process takes the normal fast path.
+if ".yy-ops-story" not in _warm_theme.WARM_CSS:
+    _warm_theme = importlib.reload(_warm_theme)
+WARM_CSS = _warm_theme.WARM_CSS
 from owner_experience import render_mood_board, render_partner_ecosystem
 from operations_finance_visuals import (
     build_operations_focus,

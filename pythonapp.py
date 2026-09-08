@@ -43,6 +43,7 @@ st.set_page_config(
 )
 
 # Warm visual language shared across the three suites.
+from location_analysis import render_location_analysis, report_location
 from visual_planner import render_shop_cards, render_idea_preview, render_money_picture
 from warm_theme import WARM_CSS
 from owner_experience import render_mood_board, render_partner_ecosystem
@@ -840,7 +841,7 @@ def clean_currency_for_markdown(text: str) -> str:
 
 def ai_report_open_store(user_question: str = "") -> str:
     p = st.session_state.profile
-    s = st.session_state.site
+    s = report_location(st.session_state.site, p.get("business_type", "Other"))
     launch = st.session_state.launch
     pr = st.session_state.pricing
     m = open_store_feasibility_metrics()
@@ -870,6 +871,8 @@ Important rules:
 - Never invent numeric budgets, prices, costs, thresholds, or legal requirements. If a useful target is not supplied or computed, write "owner to set" instead of choosing a number.
 - Explicitly disclose any assumption warnings contained in the computed metrics.
 - Use exactly the computed Decision and scores; never upgrade the verdict based on storytelling or a holiday scenario.
+- Null scores mean unavailable: write "Not assessed", never invent or substitute a score. If location_pending is true, explicitly label the decision provisional and financial-assumptions-only.
+- Public map counts are partial mapped features, not a complete census of competitors. Road AADT counts vehicles, not pedestrians or customers. Census tract statistics cover the named tract, not the search radius. Preserve source dates and missing-data notices.
 - Explain why customers might choose this shop, referring to its customer_reason, differentiator and mood board brief.
 - Treat customer_evidence as user-reported validation, not verified proof. Suggest one small real-world test if it is missing.
 - Include only partner businesses supplied in partner_ecosystem. Map listings are not confirmed partnership agreements.
@@ -1915,96 +1918,10 @@ def render_open_store():
 
     # Page 2: Location Map
     elif st.session_state.open_step == 2:
-        s = st.session_state.site
-        st.subheader(t("第 2 页：选址地图", "Page 2: Location Map"))
-        st.markdown(
-            "<div class='card'>" + t(
-                "这里只看选址是否大致成立：地址、客流、竞品、租金压力、停车/可达性。默认点已放到 Austin, Texas。",
-                "This page checks whether the location roughly works: address, traffic, competitors, rent pressure, and accessibility. Default location is Austin, Texas."
-            ) + "</div>",
-            unsafe_allow_html=True
+        render_location_analysis(
+            st.session_state.profile, st.session_state.site,
+            st.session_state.launch, st.session_state.lang,
         )
-
-        left, right = st.columns([1, 1.35])
-        with left:
-            previous_address = s.get("address", DEFAULT_TEXAS_ADDRESS)
-            s["address"] = st.text_input(
-                t("地址或商圈", "Address or Trade Area"),
-                s.get("address", DEFAULT_TEXAS_ADDRESS)
-            )
-            if s["address"].strip() != previous_address.strip():
-                s.pop("located_address", None)
-                st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
-                st.session_state.profile.pop("partner_ecosystem", None)
-            st.caption(t("先定位地址，再按需要调整选址假设。", "Locate the address first, then adjust assumptions if needed."))
-            with st.expander(t("选址评分假设（请检查示例值）", "Location assumptions — review example values"), expanded=False):
-                s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
-                s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
-                s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
-                s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("rent_level", "Medium")))
-                s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("parking", "Medium")))
-                s["foot_traffic_source"] = st.selectbox(
-                    t("客流来源", "Foot Traffic Source"),
-                    ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
-                    index=["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
-                )
-            b1, b2 = st.columns([1, 1])
-            with b1:
-                do_search = st.button("🔎 " + t("定位地址", "Locate Address"), use_container_width=True)
-            with b2:
-                if st.button(t("德州默认点", "Texas Default"), use_container_width=True):
-                    s["address"] = DEFAULT_TEXAS_ADDRESS
-                    s["lat"] = DEFAULT_TEXAS_LAT
-                    s["lon"] = DEFAULT_TEXAS_LON
-                    s["located_address"] = DEFAULT_TEXAS_ADDRESS
-                    st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
-
-        with right:
-            if do_search:
-                query = (s.get("address") or "").strip()
-                cands, dbg = geocode_candidates_multi_fuzzy(query, limit=6)
-                st.session_state.site_geo = {"status": "ok" if cands else "fail", "cands": cands, "picked_idx": 0, "debug": dbg}
-
-            geo = st.session_state.site_geo
-            cands = geo.get("cands", []) or []
-            if geo.get("status") == "ok" and cands:
-                labels = [c["display_name"] for c in cands]
-                picked_label = st.selectbox(t("选择匹配地址", "Pick matched address"), labels, index=0)
-                chosen = cands[labels.index(picked_label)]
-                s["lat"], s["lon"] = float(chosen["lat"]), float(chosen["lon"])
-                s["located_address"] = s["address"]
-                st.caption(t(f"已定位：{s['lat']:.5f}, {s['lon']:.5f}", f"Located: {s['lat']:.5f}, {s['lon']:.5f}"))
-            elif geo.get("status") == "fail":
-                st.warning(t("地址未定位成功。可继续使用手工指标完成判断。", "Address was not located. You can still proceed using manual metrics."))
-
-            lat = float(s.get("lat", DEFAULT_TEXAS_LAT) or DEFAULT_TEXAS_LAT)
-            lon = float(s.get("lon", DEFAULT_TEXAS_LON) or DEFAULT_TEXAS_LON)
-            map_matches_address = s.get("located_address") == s.get("address")
-            if map_matches_address or s.get("address") == DEFAULT_TEXAS_ADDRESS:
-                show_location_map(lat, lon, s.get("address", "Target Location"))
-            else:
-                st.info(t("请先定位新地址，地图就会跟着更新。", "Locate your new address to update the map."))
-
-        score = score_from_inputs_site(int(s["traffic"]), int(s["competitors"]), s["rent_level"], s["parking"])
-        risk_flags = []
-        if int(s["competitors"]) > 15:
-            risk_flags.append(t("竞品密度偏高", "High competitive density"))
-        if s["rent_level"] == "High":
-            risk_flags.append(t("租金压力高", "High rent pressure"))
-        if s["parking"] == "Low":
-            risk_flags.append(t("停车/可达性弱", "Weak parking/accessibility"))
-        s["risk_flags"] = risk_flags
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric(t("选址评分", "Site Score"), score)
-        m2.metric(t("竞品数", "Competitors"), int(s["competitors"]))
-        m3.metric(t("客流估计", "Traffic"), int(s["traffic"]))
-        m4.metric(t("租金压力", "Rent"), s["rent_level"])
-        if risk_flags:
-            st.warning(t("选址风险：", "Location risks: ") + "，".join(risk_flags))
-        else:
-            st.success(t("当前选址输入下没有明显红旗。", "No major location red flags from current inputs."))
-        render_partner_ecosystem(st.session_state.profile, s, st.session_state.lang, ask_ai)
 
     # Page 3: Budget & Pricing
     elif st.session_state.open_step == 3:
@@ -2108,10 +2025,12 @@ def render_open_store():
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric(t("最终判断", "Decision"), decision)
-        c2.metric(t("总评分", "Overall"), int(m["overall_score"]))
-        c3.metric(t("选址", "Site"), int(m["site_score"]))
+        c2.metric(t("总评分", "Overall"), (int(m["overall_score"]) if m["overall_score"] is not None else "—"))
+        c3.metric(t("选址", "Site"), (int(m["site_score"]) if m["site_score"] is not None else "—"))
         c4.metric(t("现金", "Cash"), int(m["cash_score"]))
         c5.metric(t("利润", "Margin"), int(m["margin_score"]))
+        if m.get("location_pending"):
+            st.warning(t("选址证据尚不完整：综合评分暂缺，以下为财务假设试算。", "Location evidence is incomplete: no overall score is issued. Financial figures below remain scenario estimates."))
         if decision == "REVIEW INPUTS":
             st.error(decision_msg)
         else:
@@ -2119,7 +2038,7 @@ def render_open_store():
 
         st.markdown("### " + t("核心依据", "Decision Evidence"))
         metric_df = pd.DataFrame([
-            {"Metric": "Location Score", "Value": str(int(m["site_score"])), "Meaning": "Traffic, competition, rent pressure, and accessibility"},
+            {"Metric": "Location Score", "Value": str((int(m["site_score"]) if m["site_score"] is not None else "—")), "Meaning": "Traffic, competition, rent pressure, and accessibility"},
             {"Metric": "Startup Cost", "Value": f"USD {m['startup_cost']:,.0f}", "Meaning": "One-time cost before opening"},
             {"Metric": "Monthly Fixed Cost", "Value": f"USD {m['monthly_fixed_cost']:,.0f}", "Meaning": "Fixed monthly cash burden"},
             {"Metric": "Cash Runway", "Value": f"{m['runway_months']:.1f} months", "Meaning": "Remaining cash after startup costs"},
@@ -2135,11 +2054,12 @@ def render_open_store():
 
         with st.expander(t("评分方法", "How the score is calculated"), expanded=False):
             score_df = pd.DataFrame([
-                {"Component": "Site", "Score": int(m["site_score"]), "Weight": "35%"},
+                {"Component": "Site", "Score": (int(m["site_score"]) if m["site_score"] is not None else "—"), "Weight": "35%"},
                 {"Component": "Cash", "Score": int(m["cash_score"]), "Weight": "35%"},
                 {"Component": "Margin", "Score": int(m["margin_score"]), "Weight": "20%"},
-                {"Component": "Competition", "Score": int(m["competition_score"]), "Weight": "10%"},
+                {"Component": "Competition", "Score": (int(m["competition_score"]) if m["competition_score"] is not None else "—"), "Weight": "10%"},
             ])
+            score_df["Score"] = score_df["Score"].astype(str)
             st.dataframe(score_df, use_container_width=True, hide_index=True)
             score_status = t(
                 "当前没有阻止最终判断的输入错误。",

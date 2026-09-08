@@ -308,6 +308,19 @@ def calculate_open_store_feasibility(
     else:
         decision = "NO-GO"
 
+    # Public map features and road AADT do not establish storefront demand.
+    # Do not feed unavailable observations or inherited demo numbers into scores.
+    location_pending = site.get("assessment_mode") == "free"
+    if location_pending:
+        site_score = competition_score = overall_score = None
+        if decision_ready:
+            decision = "NO-GO" if funding_gap > 0 or monthly_profit_after_fixed < 0 else "CAUTION"
+        input_warnings.append(
+            "Location evidence is incomplete. No site, competition or overall score is issued. "
+            "Public map counts are partial; road vehicle counts are not storefront footfall. "
+            "The decision is provisional and based on financial assumptions only."
+        )
+
     risks: List[str] = []
     risks.extend(f"Input error: {message}" for message in input_errors)
     risks.extend(f"Assumption warning: {message}" for message in input_warnings)
@@ -355,6 +368,7 @@ def calculate_open_store_feasibility(
         "monthly_profit_after_fixed": monthly_profit_after_fixed,
         "breakeven_revenue": breakeven_revenue,
         "site_score": site_score,
+        "location_pending": location_pending,
         "cash_score": cash_score,
         "margin_score": margin_score,
         "competition_score": competition_score,

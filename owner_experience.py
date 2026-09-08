@@ -127,7 +127,10 @@ def mood_prompt(profile, lang):
 
 
 def render_mood_board(profile, lang, ask_ai):
-    with st.expander(_tr(lang, "Picture your little shop", "想象你的小店"), expanded=True):
+    # The caller already places this section inside an optional expander.
+    # A bordered container avoids Streamlit's unsupported nested-expander state.
+    with st.container(border=True):
+        st.markdown("#### " + _tr(lang, "Picture your little shop", "想象你的小店"))
         st.caption(_tr(lang, "Start with a feeling: a photo, a few colors, or a sentence is enough.", "从一种感觉开始：一张照片、几种颜色，或一句话就够了。"))
         left, right = st.columns([1, 1.25])
         with left:

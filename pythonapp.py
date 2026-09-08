@@ -47,6 +47,12 @@ from location_analysis import render_location_analysis, report_location
 from visual_planner import render_shop_cards, render_idea_preview, render_money_picture
 from warm_theme import WARM_CSS
 from owner_experience import render_mood_board, render_partner_ecosystem
+from operations_finance_visuals import (
+    build_operations_focus,
+    calculate_finance_snapshot,
+    render_finance_story,
+    render_operations_story,
+)
 
 st.markdown(WARM_CSS, unsafe_allow_html=True)
 
@@ -633,6 +639,11 @@ if "inventory" not in st.session_state:
         "seasonality": "Winter",
         "notes": ""
     }
+
+if "ops_plan_savings" not in st.session_state:
+    st.session_state.ops_plan_savings = 0.0
+if "ops_plan_item" not in st.session_state:
+    st.session_state.ops_plan_item = ""
 
 if "pricing" not in st.session_state:
     st.session_state.pricing = {
@@ -1976,7 +1987,10 @@ def render_open_store():
                 "启用时，此简化模型把全部商品成本视为易损耗库存：有效成本 = 原成本 ÷（1 − 损耗率）。请输入损耗前成本和毛利率；若已包含损耗，请关闭此选项。",
                 "When enabled, this simple model treats all product costs as perishable stock: effective cost = original cost ÷ (1 − waste rate). Use costs and margins BEFORE waste. Leave this off if your costs already include it."
             ))
-            with st.expander(t("试算情人节、母亲节或其他旺季", "Try a holiday or busy-season scenario"), expanded=False):
+            # This lives inside the broader pricing expander, so use a bordered
+            # section instead of an unsupported nested expander.
+            with st.container(border=True):
+                st.markdown("#### " + t("试算情人节、母亲节或其他旺季", "Try a holiday or busy-season scenario"))
                 st.caption(t(
                     "按整个旺季月份的平均值估计，不是只填节日当天的涨幅。固定费用和售价暂时不变；额外人工、配送、税费和融资成本需要另行考虑。",
                     "Use averages for a whole busy month, not just Valentine's Day itself. Selling prices and fixed costs stay constant; allow separately for extra staff, deliveries, taxes and financing."
@@ -2173,12 +2187,12 @@ def render_open_store():
 # Suite 2: Operations
 # =========================================================
 def render_operations():
-    st.header(t("运营控制中心", "Operations Control Center"))
+    st.header(t("把今天的小店安排明白", "Make today’s shop easier to run"))
 
     st.markdown(
         "<div class='card'>{}</div>".format(
-            t("这一模块用于把库存、补货、滞销、现金占用和行动清单串起来，帮助小企业做日常运营诊断。",
-              "This suite connects inventory, replenishment, overstock, cash tied in stock, and action plans for day-to-day SME operations diagnosis.")
+            t("先看今天最值得处理的一件事，再按需展开库存表、AI 诊断和完整报告。",
+              "Start with the one thing worth handling today, then open the inventory details, AI diagnosis, or full report only when you need them.")
         ),
         unsafe_allow_html=True
     )
@@ -2218,13 +2232,13 @@ def render_operations():
     if "ops_diagnosis_md" not in st.session_state.outputs:
         st.session_state.outputs["ops_diagnosis_md"] = ""
 
-    st.subheader(t("1. 上传或加载库存运营数据", "1. Upload or Load Operations Inventory Data"))
+    st.subheader(t("先把库存放进小店", "Start with your stock room"))
     st.caption(t(
         "必需字段：Item, Stock, Cost, Monthly_Sales。可选字段：Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier。",
         "Required columns: Item, Stock, Cost, Monthly_Sales. Optional: Category, Lead_Time_Days, MOQ, Shelf_Life_Days, Supplier."
     ))
 
-    colA, colB, colC = st.columns([1, 1.4, 1])
+    colA, colFlower, colB, colC = st.columns([1, 1, 1.4, 1])
     with colA:
         if st.button(t("加载咖啡店示例数据", "Load café sample data"), key="ops_load_cafe_sample", use_container_width=True):
             sample_data = {
@@ -2248,9 +2262,30 @@ def render_operations():
                 ]
             }
             inv["df"] = pd.DataFrame(sample_data)
+            st.session_state.ops_plan_savings = 0.0
+            st.session_state.ops_plan_item = ""
             st.session_state.outputs["ops_ai_output"] = ""
             st.session_state.outputs["ops_diagnosis_md"] = ""
             # st.rerun() removed to avoid Streamlit Cloud SessionInfo race
+
+    with colFlower:
+        if st.button(t("加载花店示例数据", "Load flower shop demo"), key="ops_load_flower_sample", use_container_width=True):
+            flower_data = {
+                "Item": ["Tulips", "Garden Roses", "Seasonal Greens", "Wrapping Paper", "Glass Vases", "Dried Bouquets"],
+                "Category": ["Perishable", "Perishable", "Perishable", "Packaging", "Merchandise", "Dried"],
+                "Stock": [72, 48, 95, 160, 34, 26],
+                "Cost": [1.85, 2.70, 0.65, 0.35, 7.50, 12.00],
+                "Monthly_Sales": [105, 82, 150, 135, 18, 5],
+                "Lead_Time_Days": [3, 4, 2, 8, 14, 10],
+                "MOQ": [20, 20, 30, 50, 12, 6],
+                "Shelf_Life_Days": [7, 8, 12, 365, 365, 365],
+                "Supplier": ["Local Flower Market", "Specialty Grower", "Local Flower Market", "Packaging Partner", "Vase Wholesaler", "Local Maker"],
+            }
+            inv["df"] = pd.DataFrame(flower_data)
+            st.session_state.ops_plan_savings = 0.0
+            st.session_state.ops_plan_item = ""
+            st.session_state.outputs["ops_ai_output"] = ""
+            st.session_state.outputs["ops_diagnosis_md"] = ""
 
     with colB:
         uploaded = st.file_uploader(
@@ -2261,6 +2296,8 @@ def render_operations():
         if uploaded is not None:
             try:
                 inv["df"] = pd.read_csv(uploaded)
+                st.session_state.ops_plan_savings = 0.0
+                st.session_state.ops_plan_item = ""
                 st.session_state.outputs["ops_ai_output"] = ""
                 st.session_state.outputs["ops_diagnosis_md"] = ""
                 st.success(t("已读取 CSV。", "CSV loaded."))
@@ -2271,6 +2308,8 @@ def render_operations():
     with colC:
         if st.button(t("清空运营数据", "Clear operations data"), use_container_width=True):
             inv["df"] = None
+            st.session_state.ops_plan_savings = 0.0
+            st.session_state.ops_plan_item = ""
             st.session_state.outputs["ops_ai_output"] = ""
             st.session_state.outputs["ops_report_md"] = ""
             st.session_state.outputs["ops_diagnosis_md"] = ""
@@ -2288,7 +2327,34 @@ def render_operations():
         st.error(t(f"库存数据结构不符合要求：{e}", f"Inventory data format error: {e}"))
         return
 
-    st.subheader(t("2. 库存健康仪表盘", "2. Inventory Health Dashboard"))
+    focus = build_operations_focus(health, st.session_state.lang)
+    plan_applied = bool(st.session_state.ops_plan_item == focus.get("item") and st.session_state.ops_plan_item)
+
+    def _apply_today_plan():
+        st.session_state.ops_plan_item = focus.get("item", "")
+        st.session_state.ops_plan_savings = focus.get("savings", 0.0)
+
+    render_operations_story(
+        health,
+        focus,
+        st.session_state.lang,
+        plan_applied=plan_applied,
+    )
+    if focus.get("action"):
+        st.button(
+            (t("✓ 已加入今天的行动", "✓ Added to today’s plan") if plan_applied else focus["action"]),
+            key="ops_apply_today_plan",
+            type="primary",
+            use_container_width=True,
+            disabled=plan_applied,
+            on_click=_apply_today_plan,
+        )
+        st.caption(t(
+            "这一步只记录行动计划，不会改写你上传的原始库存。若该行动减少损耗，Finance 的试算会同步显示。",
+            "This records a planning action without changing your uploaded inventory. If it reduces modeled waste, the Finance picture will show the same change.",
+        ))
+
+    st.subheader(t("需要细看时，再打开库存数字", "Open the inventory numbers when you need detail"))
     m1, m2, m3, m4 = st.columns(4)
     m1.metric(t("库存总价值", "Total Inventory Value"), f"USD {health['total_value']:,.0f}")
     m2.metric(t("慢动销/积压金额", "Slow-Moving Value"), f"USD {health['slow_value']:,.0f}")
@@ -2413,7 +2479,100 @@ def render_operations():
 # Suite 3: Finance
 # =========================================================
 def render_finance():
-    st.header(t("财务分析（上传资料 → AI 指导）", "Financial Analysis (Upload docs → AI guidance)"))
+    st.header(t("看懂钱在小店里怎样流动", "See how money moves through your shop"))
+
+    launch = st.session_state.launch
+    profile = st.session_state.profile
+    business_type = str(profile.get("business_type", "")).lower()
+    base_average = 68.0 if "flower" in business_type else (12.0 if "coffee" in business_type or "café" in business_type else 45.0)
+    base_revenue = max(float(launch.get("expected_monthly_revenue", 0) or 0), 0.0)
+    base_orders = max(1, min(250, round(base_revenue / max(base_average * 26, 1))))
+    base_rent = max(float(launch.get("monthly_rent", 0) or 0), 1000.0)
+    if "finance_base_average_sale" not in st.session_state:
+        st.session_state.finance_base_average_sale = base_average
+        st.session_state.finance_base_orders_day = base_orders
+        st.session_state.finance_base_rent = base_rent
+    if "finance_average_sale" not in st.session_state:
+        st.session_state.finance_average_sale = st.session_state.finance_base_average_sale
+    if "finance_orders_day" not in st.session_state:
+        st.session_state.finance_orders_day = st.session_state.finance_base_orders_day
+    if "finance_rent" not in st.session_state:
+        st.session_state.finance_rent = st.session_state.finance_base_rent
+
+    def _set_finance_scenario(name):
+        average = float(st.session_state.finance_base_average_sale)
+        orders = int(st.session_state.finance_base_orders_day)
+        rent = float(st.session_state.finance_base_rent)
+        if name == "safer":
+            rent *= 0.80
+        elif name == "holiday":
+            average *= 1.08
+            orders = min(250, max(1, round(orders * 1.60)))
+        st.session_state.finance_average_sale = round(average, 0)
+        st.session_state.finance_orders_day = orders
+        st.session_state.finance_rent = round(rent / 100) * 100
+
+    st.markdown("### " + t("先试三个真正会改变结果的开关", "Try the three levers that really change the result"))
+    scenario_a, scenario_b, scenario_c = st.columns(3)
+    with scenario_a:
+        st.button(t("现在的计划", "Current plan"), key="finance_scenario_current", use_container_width=True,
+                  on_click=_set_finance_scenario, args=("current",))
+    with scenario_b:
+        st.button(t("房租更稳妥", "Safer rent"), key="finance_scenario_safer", use_container_width=True,
+                  on_click=_set_finance_scenario, args=("safer",))
+    with scenario_c:
+        st.button(t("节日旺季", "Holiday rush"), key="finance_scenario_holiday", use_container_width=True,
+                  on_click=_set_finance_scenario, args=("holiday",))
+
+    picture_col, controls_col = st.columns([1.45, 0.85])
+    with controls_col:
+        st.markdown("#### " + t("拖一拖，马上看变化", "Move a lever and watch it change"))
+        average_sale = st.slider(
+            t("平均每单", "Average sale"), 5.0, 200.0, step=1.0,
+            key="finance_average_sale", format="USD %.0f",
+        )
+        orders_per_day = st.slider(
+            t("每天订单数", "Orders each day"), 1, 250, step=1,
+            key="finance_orders_day",
+        )
+        monthly_rent = st.slider(
+            t("每月房租", "Monthly rent"), 1000.0, 20000.0, step=100.0,
+            key="finance_rent", format="USD %.0f",
+        )
+        st.caption(t(
+            "按每月营业 26 天试算。团队、其他固定费用、毛利和损耗沿用开店计划，可在 Open a Store 中调整。",
+            "Uses 26 open days per month. Team, other fixed costs, margin and spoilage come from your Open a Store plan.",
+        ))
+
+    payroll = max(float(launch.get("monthly_payroll", 0) or 0), 0.0)
+    original_rent = max(float(launch.get("monthly_rent", 0) or 0), 0.0)
+    fixed_total = max(float(launch.get("monthly_fixed_cost_estimate", 0) or 0), 0.0)
+    other_fixed = max(fixed_total - payroll - original_rent, 0.0)
+    gross_margin = min(max(float(launch.get("expected_gross_margin", 60) or 60) / 100.0, 0.0), 1.0)
+    waste_rate = (
+        min(max(float(launch.get("spoilage_rate_pct", 0) or 0) / 100.0, 0.0), 0.80)
+        if launch.get("perishable_enabled", False) else 0.0
+    )
+    available_cash = max(
+        float(launch.get("funding_available", 0) or 0) - float(launch.get("startup_cost_estimate", 0) or 0),
+        0.0,
+    )
+    snapshot = calculate_finance_snapshot(
+        average_sale,
+        orders_per_day,
+        monthly_rent,
+        payroll=payroll,
+        other_fixed=other_fixed,
+        product_cost_rate=1.0 - gross_margin,
+        waste_rate=waste_rate,
+        available_cash=available_cash,
+        operations_savings=float(st.session_state.get("ops_plan_savings", 0) or 0),
+    )
+    with picture_col:
+        render_finance_story(snapshot, st.session_state.lang)
+
+    st.divider()
+    st.subheader(t("用真实资料做进一步分析", "Analyze your real records when you are ready"))
 
     st.markdown(
         "<div class='card'>{}</div>".format(

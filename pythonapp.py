@@ -43,6 +43,7 @@ st.set_page_config(
 )
 
 # Warm visual language shared across the three suites.
+from visual_planner import render_shop_cards, render_idea_preview, render_money_picture
 from warm_theme import WARM_CSS
 from owner_experience import render_mood_board, render_partner_ecosystem
 
@@ -1878,41 +1879,39 @@ def render_open_store():
             unsafe_allow_html=True
         )
 
+        render_shop_cards(p, st.session_state.lang)
         col1, col2 = st.columns([1, 1])
         with col1:
             business_types = ["Coffee Shop", "Flower Shop", "Bakery", "Restaurant", "Convenience Store", "Small Retail Store", "Beauty Salon", "Auto Parts Store", "Other"]
             p["business_type"] = st.selectbox(
-                t("业态", "Business Type"),
+                t("业态（也可以选其他店型）", "Business Type — more shop ideas"),
                 business_types, key="open_business_type",
             )
             if p["business_type"] == "Other":
                 p["custom_business_type"] = st.text_input(t("具体想开什么店？", "What kind of shop?"), key="open_custom_business_type")
             p["target_customer"] = st.text_input(
-                t("目标客户", "Target Customer"),
-                key="open_target_customer",
+                t("你希望谁来？", "Who is your shop for?"), key="open_target_customer",
+            )
+            p["differentiator"] = st.text_input(
+                t("客人为什么选择你？", "What makes your shop special?"),
+                key="open_differentiator",
+                placeholder=t("例如：记得每位客人纪念日的街角花店", "A neighborhood florist who remembers every anniversary"),
             )
         with col2:
-            p["differentiator"] = st.text_input(
-                t("差异化", "Differentiator"),
-                key="open_differentiator",
+            render_idea_preview(p, st.session_state.lang)
+        with st.expander(t("补充想法与客户验证（可选）", "Add details and customer evidence (optional)"), expanded=False):
+            p["notes"] = st.text_area(t("限制/备注（可选）", "Constraints / Notes (optional)"),
+                                     key="open_concept_notes")
+            p["customer_reason"] = st.text_area(
+                t("展开说说客人为什么会来", "Tell us more about why customers would visit"),
+                key="open_customer_reason",
             )
-            p["notes"] = st.text_area(
-                t("限制/备注（可选）", "Constraints / Notes (optional)"),
-                key="open_concept_notes",
-                placeholder=t("例如：只做早餐、缺少全职店长、房东给2个月免租等", "E.g., breakfast only, no full-time manager yet, two months free rent from landlord, etc."),
-                height=140
+            p["customer_evidence"] = st.text_input(
+                t("你试过这个想法吗？（可选）", "Have you tried this idea with anyone? (optional)"),
+                key="open_customer_evidence",
             )
-        p["customer_reason"] = st.text_area(
-            t("客人为什么会特意来找你？", "Why would someone choose you?"),
-            key="open_customer_reason",
-            placeholder=t("比如：按故事定制花束、当日送达、记得老客人的纪念日。", "Think personal bouquets, same-day delivery, or remembering a regular's anniversary."),
-        )
-        p["customer_evidence"] = st.text_input(
-            t("你试过这个想法吗？（可选）", "Have you tried this idea with anyone? (optional)"),
-            key="open_customer_evidence",
-            placeholder=t("聊过的客人、预订、试卖结果；没有也没关系。", "Customer conversations, preorders, or a small pop-up. It's okay if you're just starting."),
-        )
-        render_mood_board(p, st.session_state.lang, ask_ai)
+        with st.expander(t("用颜色和图片想象小店（可选）", "Explore colors and inspiration (optional)"), expanded=False):
+            render_mood_board(p, st.session_state.lang, ask_ai)
 
     # Page 2: Location Map
     elif st.session_state.open_step == 2:
@@ -1937,16 +1936,18 @@ def render_open_store():
                 s.pop("located_address", None)
                 st.session_state.site_geo = {"status": "idle", "cands": [], "picked_idx": 0, "debug": {}}
                 st.session_state.profile.pop("partner_ecosystem", None)
-            s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
-            s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
-            s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
-            s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("rent_level", "Medium")))
-            s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("parking", "Medium")))
-            s["foot_traffic_source"] = st.selectbox(
-                t("客流来源", "Foot Traffic Source"),
-                ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
-                index=["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
-            )
+            st.caption(t("先定位地址，再按需要调整选址假设。", "Locate the address first, then adjust assumptions if needed."))
+            with st.expander(t("选址评分假设（请检查示例值）", "Location assumptions — review example values"), expanded=False):
+                s["radius_miles"] = st.selectbox(t("半径（英里）", "Radius (miles)"), [0.5, 1.0, 3.0], index=[0.5, 1.0, 3.0].index(s.get("radius_miles", 1.0)))
+                s["traffic"] = st.slider(t("客流/车流估计", "Traffic Estimate"), 1000, 50000, int(s.get("traffic", 26000)), step=500)
+                s["competitors"] = st.number_input(t("半径内竞品", "Competitors Nearby"), min_value=0, value=int(s.get("competitors", 9)), step=1)
+                s["rent_level"] = st.selectbox(t("租金压力", "Rent Pressure"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("rent_level", "Medium")))
+                s["parking"] = st.selectbox(t("停车/可达性", "Parking / Accessibility"), ["Low", "Medium", "High"], index=["Low", "Medium", "High"].index(s.get("parking", "Medium")))
+                s["foot_traffic_source"] = st.selectbox(
+                    t("客流来源", "Foot Traffic Source"),
+                    ["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"],
+                    index=["Mixed (Transit + Street)", "Street Dominant", "Transit Dominant", "Destination Only"].index(s.get("foot_traffic_source", "Mixed (Transit + Street)"))
+                )
             b1, b2 = st.columns([1, 1])
             with b1:
                 do_search = st.button("🔎 " + t("定位地址", "Locate Address"), use_container_width=True)
@@ -2019,19 +2020,17 @@ def render_open_store():
             unsafe_allow_html=True
         )
 
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.markdown("### " + t("资金与收入假设", "Funding & Revenue Assumptions"))
-            launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, step=1000.0, key="open_funding_widget")
-            p["budget"] = int(launch["funding_available"])
-            launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
-            launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
-            launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, step=1000.0, key="open_revenue_widget")
+        launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, step=1000.0, key="open_funding_widget")
+        p["budget"] = int(launch["funding_available"])
+        launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
+        launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
+        launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, step=1000.0, key="open_revenue_widget")
+        st.caption(t("以下图表仍使用毛利、定价和损耗假设。请展开检查，尤其是示例数据。", "The charts also use margin, pricing and waste assumptions. Review them below, especially when starting from sample data."))
+        with st.expander(t("调整毛利、定价、损耗和旺季", "Adjust margin, pricing, waste and busy months"), expanded=False):
             launch["expected_gross_margin"] = st.slider(t("损耗前的预期毛利率（%）", "Expected Gross Margin Before Spoilage (%)"), 10, 90, key="open_gross_margin_widget",
                 help=t("每收到100元，在扣除商品成本后、付房租工资前剩多少。启用损耗时，请填损耗前的比例。", "Out of each USD 100 in sales, what is left after product costs, before rent and wages? Enter the margin BEFORE spoilage if you enable it below."))
             launch["cash_target_months"] = st.slider(t("目标现金跑道（月）", "Target Cash Runway (months)"), 1, 12, key="open_cash_target_widget")
 
-        with col2:
             st.markdown("### " + t("代表性产品定价", "Representative Product Pricing"))
             pr["cost"] = st.number_input(t("损耗前的单位成本", "Unit Cost Before Spoilage"), min_value=0.0, step=0.05, key="open_unit_cost_widget",
                 help=t("填损耗前的成本。下方会单独计入损耗，避免重复计算。", "Enter the cost BEFORE spoilage. The optional waste setting below adds it once."))
@@ -2047,30 +2046,31 @@ def render_open_store():
             st.caption(t(f"隐含加成率：{pr['target_margin']}%", f"Implied markup: {pr['target_margin']}%"))
             launch["notes"] = st.text_area(t("备注（可选）", "Notes (optional)"), launch.get("notes", ""), placeholder=t("例如：免租期、供应商账期、设备租赁等", "Free-rent period, supplier credit terms, equipment lease, etc."))
 
-        st.subheader(t("鲜花会谢，节日会忙：一起算进去", "Some stock spoils. Some months bloom."))
-        launch["perishable_enabled"] = st.checkbox(
-            t("我的商品会损耗：把损耗算进成本", "My stock can spoil — include waste in my costs"),
-            key="open_perishable_widget")
-        launch["spoilage_rate_pct"] = st.slider(
-            t("售出前损耗的比例（%）", "Stock that spoils before sale (%)"),
-            0.0, 80.0, step=1.0, key="open_spoilage_widget",
-            disabled=not launch["perishable_enabled"],
-            help=t("买100支花，坏掉15支，就是15%。", "If you buy 100 stems and lose 15 before sale, enter 15%."))
-        st.caption(t(
-            "启用时，此简化模型把全部商品成本视为易损耗库存：有效成本 = 原成本 ÷（1 − 损耗率）。请输入损耗前成本和毛利率；若已包含损耗，请关闭此选项。",
-            "When enabled, this simple model treats all product costs as perishable stock: effective cost = original cost ÷ (1 − waste rate). Use costs and margins BEFORE waste. Leave this off if your costs already include it."
-        ))
-        with st.expander(t("试算情人节、母亲节或其他旺季", "Try a holiday or busy-season scenario"), expanded=False):
+            st.subheader(t("鲜花会谢，节日会忙：一起算进去", "Some stock spoils. Some months bloom."))
+            launch["perishable_enabled"] = st.checkbox(
+                t("我的商品会损耗：把损耗算进成本", "My stock can spoil — include waste in my costs"),
+                key="open_perishable_widget")
+            launch["spoilage_rate_pct"] = st.slider(
+                t("售出前损耗的比例（%）", "Stock that spoils before sale (%)"),
+                0.0, 80.0, step=1.0, key="open_spoilage_widget",
+                disabled=not launch["perishable_enabled"],
+                help=t("买100支花，坏掉15支，就是15%。", "If you buy 100 stems and lose 15 before sale, enter 15%."))
             st.caption(t(
-                "按整个旺季月份的平均值估计，不是只填节日当天的涨幅。固定费用和售价暂时不变；额外人工、配送、税费和融资成本需要另行考虑。",
-                "Use averages for a whole busy month, not just Valentine's Day itself. Selling prices and fixed costs stay constant; allow separately for extra staff, deliveries, taxes and financing."
+                "启用时，此简化模型把全部商品成本视为易损耗库存：有效成本 = 原成本 ÷（1 − 损耗率）。请输入损耗前成本和毛利率；若已包含损耗，请关闭此选项。",
+                "When enabled, this simple model treats all product costs as perishable stock: effective cost = original cost ÷ (1 − waste rate). Use costs and margins BEFORE waste. Leave this off if your costs already include it."
             ))
-            launch["holiday_sales_multiplier"] = st.slider(t("旺季月销量倍数", "Busy-month sales volume multiplier"), 0.5, 5.0, step=0.1, key="open_peak_sales_widget")
-            launch["holiday_cost_multiplier"] = st.slider(t("旺季进货单价倍数", "Busy-month wholesale cost multiplier"), 0.5, 5.0, step=0.1, key="open_peak_cost_widget")
-            launch["holiday_months"] = st.slider(t("一年里这样的旺季月份", "Busy months per year"), 0, 12, key="open_peak_months_widget")
-            st.caption(t("开店评分始终看普通月份，避免被旺季的好成绩冲昏头脑。", "Your launch score always uses an ordinary month, so a holiday rush cannot hide everyday losses."))
+            with st.expander(t("试算情人节、母亲节或其他旺季", "Try a holiday or busy-season scenario"), expanded=False):
+                st.caption(t(
+                    "按整个旺季月份的平均值估计，不是只填节日当天的涨幅。固定费用和售价暂时不变；额外人工、配送、税费和融资成本需要另行考虑。",
+                    "Use averages for a whole busy month, not just Valentine's Day itself. Selling prices and fixed costs stay constant; allow separately for extra staff, deliveries, taxes and financing."
+                ))
+                launch["holiday_sales_multiplier"] = st.slider(t("旺季月销量倍数", "Busy-month sales volume multiplier"), 0.5, 5.0, step=0.1, key="open_peak_sales_widget")
+                launch["holiday_cost_multiplier"] = st.slider(t("旺季进货单价倍数", "Busy-month wholesale cost multiplier"), 0.5, 5.0, step=0.1, key="open_peak_cost_widget")
+                launch["holiday_months"] = st.slider(t("一年里这样的旺季月份", "Busy months per year"), 0, 12, key="open_peak_months_widget")
+                st.caption(t("开店评分始终看普通月份，避免被旺季的好成绩冲昏头脑。", "Your launch score always uses an ordinary month, so a holiday rush cannot hide everyday losses."))
 
         m = open_store_feasibility_metrics()
+        render_money_picture(launch, m, st.session_state.lang)
         if launch["perishable_enabled"] or launch.get("holiday_months", 0):
             render_seasonal_comparison(m)
         c1, c2, c3, c4 = st.columns(4)

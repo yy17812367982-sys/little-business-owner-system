@@ -7,6 +7,7 @@ They never call a live AI provider and do not claim to evaluate model quality.
 import io
 import os
 import unittest
+import pandas as pd
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -233,6 +234,35 @@ class JennyFeedbackUITests(unittest.TestCase):
         self.assertIn("Milk Gallons", self.provider.call_args.kwargs["contents"])
         self.app.checkbox(key="operations_ai_consent").uncheck().run()
         self.assertTrue(self.button("Generate Operations Report").disabled)
+
+    def test_flower_operations_action_is_visible_in_finance_without_rewriting_inventory(self):
+        self.app.radio[0].set_value("Operations").run()
+        self.app.button(key="ops_load_flower_sample").click().run()
+        self.assert_no_exception()
+        original = self.app.session_state["inventory"]["df"].copy(deep=True)
+        self.assertTrue(any("Run the day by looking at the shop" in item.value for item in self.app.markdown))
+        self.button("Add a freshness action for today").click().run()
+        self.assert_no_exception()
+        self.assertEqual(self.app.session_state["ops_plan_item"], "Tulips")
+        self.assertGreater(self.app.session_state["ops_plan_savings"], 0)
+        pd.testing.assert_frame_equal(original, self.app.session_state["inventory"]["df"])
+
+        self.app.radio[0].set_value("Finance").run()
+        self.assert_no_exception()
+        self.assertTrue(any("operations action is saved" in item.value for item in self.app.markdown))
+
+    def test_finance_scenario_buttons_update_the_three_levers(self):
+        self.app.radio[0].set_value("Finance").run()
+        original_rent = self.app.slider(key="finance_rent").value
+        self.button("Safer rent").click().run()
+        self.assert_no_exception()
+        self.assertEqual(self.app.slider(key="finance_rent").value, round(original_rent * .8 / 100) * 100)
+        self.button("Holiday rush").click().run()
+        self.assert_no_exception()
+        self.assertGreater(
+            self.app.slider(key="finance_orders_day").value,
+            self.app.session_state["finance_base_orders_day"],
+        )
 
     def test_finance_csv_requires_consent_and_supplies_real_computed_data_to_ai(self):
         self.app.radio[0].set_value("Finance").run()

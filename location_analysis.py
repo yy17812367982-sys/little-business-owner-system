@@ -1,5 +1,6 @@
 """Free, on-demand location evidence. No paid keys or AI requests."""
 import hashlib
+import html
 import json
 import math
 import os
@@ -323,7 +324,7 @@ def render_location_analysis(profile, site, launch, lang):
         st.info(tr("Choose an address to build your location snapshot. Missing data will stay unknown.",
                    "输入地址开始生成选址参考。缺失的数据会保留为未知。"))
     else:
-        render_snapshot(saved, site, zh)
+        render_snapshot(saved, site, kind, zh)
     with st.expander(tr("Add the landlord's quote (optional)", "填写房东报价（可选）")):
         rent = st.number_input(tr("Monthly rent quoted (USD)", "房东报的月租（美元）"),
                                min_value=0.0, value=float(site.get("monthly_rent_quote") or 0), step=100.0)
@@ -338,15 +339,54 @@ def render_location_analysis(profile, site, launch, lang):
                   "真实门前人流和租约条款仍待核实。公开数据不完整时，不给出选址或综合分数。"))
 
 
-def render_snapshot(saved, site, zh):
+def render_snapshot(saved, site, kind, zh):
     def tr(en, cn):
         return cn if zh else en
     mapped = saved.get("map", {})
     rows = mapped.get("places", []) if mapped.get("status") == "ok" else []
-    columns = st.columns(4)
-    for col, (category_name, labels) in zip(columns, LABELS.items()):
-        available = mapped.get("status") == "ok" and (category_name != "competitor" or mapped.get("competitor_supported"))
-        col.metric(labels[1 if zh else 0], str(sum(x["category"] == category_name for x in rows)) if available else "—")
+    colors = {"competitor": "#bd806e", "parking": "#5382b4",
+              "transit": "#cfa23c", "partner": "#365c45"}
+    shop_names = {
+        "Flower Shop": ("flower shops", "花店"), "Coffee Shop": ("coffee shops", "咖啡店"),
+        "Bakery": ("bakeries", "烘焙店"), "Restaurant": ("restaurants", "餐厅"),
+        "Convenience Store": ("convenience stores", "便利店"),
+        "Small Retail Store": ("general shops", "综合零售店"),
+        "Beauty Salon": ("beauty and hair salons", "美容美发店"),
+        "Auto Parts Store": ("auto-parts stores", "汽配店"),
+    }
+    category_titles = {
+        "competitor": (f"Mapped {shop_names.get(kind, ('similar shops', '同类店铺'))[0]}",
+                       f"地图找到的{shop_names.get(kind, ('similar shops', '同类店铺'))[1]}"),
+        "parking": ("Mapped parking areas", "地图停车设施"),
+        "transit": ("Mapped bus / rail stops", "地图公交和轨道站点"),
+        "partner": ("Hotels / event venues", "酒店与活动场地"),
+    }
+    category_help = {
+        "competitor": ("Same business type recorded on OpenStreetMap", "OpenStreetMap 中记录的同类店"),
+        "parking": ("Parking features; some may be private", "停车设施，部分可能不对外开放"),
+        "transit": ("Bus and rail map points; opposite stops count separately", "公交及轨道站点，道路两侧可能分别计数"),
+        "partner": ("Possible partners, not confirmed relationships", "可能合作的地点，并非已有合作关系"),
+    }
+    cards = []
+    for category_name in LABELS:
+        available = mapped.get("status") == "ok" and (
+            category_name != "competitor" or mapped.get("competitor_supported")
+        )
+        count = str(sum(x["category"] == category_name for x in rows)) if available else "—"
+        title = category_titles[category_name][1 if zh else 0]
+        help_text = category_help[category_name][1 if zh else 0]
+        cards.append(
+            f'<div style="border:1px solid #ded8ca;border-left:8px solid {colors[category_name]};'
+            f'border-radius:16px;padding:16px;background:#fffaf2">'
+            f'<div style="font-size:14px;font-weight:700">{html.escape(title)}</div>'
+            f'<div style="font-size:30px;font-weight:800;margin:4px 0">{count}</div>'
+            f'<div style="font-size:12px;line-height:1.35;color:#626b64">{html.escape(help_text)}</div></div>'
+        )
+    st.markdown(
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));'
+        'gap:12px;margin:12px 0 16px">' + "".join(cards) + "</div>",
+        unsafe_allow_html=True,
+    )
     st.caption(tr("Counts are mapped features found, not a complete business census. Stops may include both sides of a road; parking may be private.",
                   "数量为地图找到的设施，不代表完整商户清单。站点可能包含道路两侧，停车场可能不对外开放。"))
     if mapped.get("status") != "ok":
@@ -359,22 +399,57 @@ def render_snapshot(saved, site, zh):
         st.warning(tr("A busy area reached the result limit. These are partial counts; try a smaller radius.",
                       "区域结果达到上限，当前数量不完整。请缩小查询半径。"))
     import pydeck as pdk
-    colors = {"competitor": [189, 128, 110], "parking": [83, 130, 180],
-              "transit": [207, 162, 60], "partner": [54, 92, 69]}
-    points = [{**x, "color": colors[x["category"]]} for x in rows]
-    points.append({"lat": site["lat"], "lon": site["lon"], "name": tr("Your selected location", "你的选址"),
-                   "category": "Selected location", "color": [50, 45, 40]})
+    rgb_colors = {"competitor": [189, 128, 110], "parking": [83, 130, 180],
+                  "transit": [207, 162, 60], "partner": [54, 92, 69]}
+    category_options = [name for name in LABELS if any(x["category"] == name for x in rows)]
+    if category_options:
+        selected_category = st.selectbox(
+            tr("What should the map show?", "地图上看什么？"), category_options,
+            format_func=lambda name: (
+                category_titles[name][1 if zh else 0]
+                + f" ({sum(x['category'] == name for x in rows)})"
+            ), key="location_map_category",
+        )
+    else:
+        selected_category = None
+    points = [{**x, "color": rgb_colors[x["category"]],
+               "category_label": category_titles[x["category"]][1 if zh else 0]}
+              for x in rows if x["category"] == selected_category]
+    target = [{"lat": site["lat"], "lon": site["lon"],
+               "name": tr("Your selected shop location", "你选择的店址"),
+               "category_label": tr("YOUR SHOP", "你的店"), "color": [35, 45, 38]}]
+    layers = [
+        pdk.Layer("ScatterplotLayer", data=points, get_position="[lon, lat]",
+                  get_fill_color="color", get_radius=38, radius_min_pixels=7, pickable=True),
+        pdk.Layer("ScatterplotLayer", data=target, get_position="[lon, lat]",
+                  get_fill_color="color", get_radius=70, radius_min_pixels=11,
+                  stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=3, pickable=True),
+        pdk.Layer("TextLayer", data=target, get_position="[lon, lat]", get_text="category_label",
+                  get_size=13, get_color=[35, 45, 38], get_pixel_offset=[0, -25]),
+    ]
+    if selected_category:
+        selected_title = category_titles[selected_category][1 if zh else 0]
+        st.markdown(
+            f'<div style="font-weight:700;margin:8px 0">'
+            f'<span style="color:{colors[selected_category]};font-size:24px">●</span> '
+            f'{html.escape(tr("Showing only: ", "当前只显示：") + selected_title)} · '
+            f'<span style="color:#232d26">● {html.escape(tr("Your shop", "你的店址"))}</span></div>',
+            unsafe_allow_html=True,
+        )
     st.pydeck_chart(pdk.Deck(
-        layers=[pdk.Layer("ScatterplotLayer", data=points, get_position="[lon, lat]",
-                          get_fill_color="color", get_radius=30, radius_min_pixels=5, pickable=True)],
+        layers=layers,
         initial_view_state=pdk.ViewState(latitude=site["lat"], longitude=site["lon"], zoom=13),
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-        tooltip={"text": "{name}\n{category}"}), height=360)
-    st.caption(tr("Terracotta: similar shops · Blue: parking · Gold: transit · Green: partners · Dark: your location",
-                  "陶红：同类店铺 · 蓝色：停车 · 金色：交通站点 · 绿色：合作地点 · 深色：你的选址"))
-    if rows:
-        with st.expander(tr("View names, distances and sources", "查看名称、距离和来源")):
-            st.dataframe(pd.DataFrame(rows)[["name", "category", "distance_miles", "access", "source"]],
+        tooltip={"text": "{name}\n{category_label}\n{distance_miles} mi"}), height=360)
+    if points:
+        detail_title = category_titles[selected_category][1 if zh else 0]
+        with st.expander(tr(f"View {detail_title}: names, distances and sources",
+                            f"查看{detail_title}：名称、距离和来源")):
+            detail = pd.DataFrame(points)[["name", "distance_miles", "access", "source"]].rename(
+                columns={"name": tr("Name", "名称"), "distance_miles": tr("Miles away", "距离（英里）"),
+                         "access": tr("Access", "开放情况"), "source": tr("Map source", "地图来源")}
+            )
+            st.dataframe(detail,
                          hide_index=True, use_container_width=True)
     if mapped.get("status") == "ok":
         st.caption("© OpenStreetMap contributors · " + mapped.get("retrieved_at", "") +

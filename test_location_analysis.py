@@ -84,7 +84,12 @@ class LocationEvidenceTests(unittest.TestCase):
 
 class FreeLocationUITests(unittest.TestCase):
     def test_lookup_is_explicit_and_address_edits_clear_results(self):
-        result = {"map": {"status": "ok", "places": [], "competitor_supported": True},
+        result = {"map": {"status": "ok", "places": [
+                      {"name": "Example Coffee", "category": "competitor", "lat": 30.251,
+                       "lon": -97.751, "distance_miles": 0.1, "access": "unknown", "source": "https://example.test/1"},
+                      {"name": "Example Parking", "category": "parking", "lat": 30.252,
+                       "lon": -97.752, "distance_miles": 0.2, "access": "private", "source": "https://example.test/2"},
+                  ], "competitor_supported": True},
                   "traffic": {"status": "ok", "stations": []}, "community": {"status": "key_required"}}
         matches = [{"name": "1011 S CONGRESS AVE, AUSTIN, TX", "lat": 30.25, "lon": -97.75}]
         with patch.dict(os.environ, {"INTRO_VIDEO_SECONDS": "0"}), \
@@ -98,6 +103,9 @@ class FreeLocationUITests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertIn("location_evidence", app.session_state["site"])
             collect.assert_called_once()
+            legend = next(item.value for item in app.markdown if "Mapped coffee shops" in item.value)
+            self.assertIn("Same business type recorded on OpenStreetMap", legend)
+            self.assertEqual(app.selectbox(key="location_map_category").value, "competitor")
             app.text_input(key="free_location_address").set_value("A different address").run()
             self.assertFalse(app.exception)
             self.assertNotIn("location_evidence", app.session_state["site"])
@@ -106,4 +114,3 @@ class FreeLocationUITests(unittest.TestCase):
             app.button(key="open_store_next_btn").click().run()
             self.assertFalse(app.exception)
             self.assertTrue(any("no overall score" in w.value.lower() for w in app.warning))
-

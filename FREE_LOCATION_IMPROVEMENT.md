@@ -8,6 +8,7 @@ Owners enter a US address, choose a search radius and request a neighborhood sna
 
 - Census address lookup with a rate-limited OpenStreetMap fallback; ambiguous addresses can be selected before neighborhood lookup.
 - OpenStreetMap queries for mapped competitors, parking, transit and potential partner locations, with a colored map and source links.
+- Replaced the crowded all-color map with plain-language, color-matched explanation cards and a category selector. The map shows one category at a time plus a separately labelled shop location, and its details table follows the selected category.
 - Nearby TxDOT annual average daily vehicle counts with station ID, year and distance. These are explicitly not storefront footfall or customer counts.
 - Optional landlord rent quote and comparison with assumed sales; rent must be included in the existing fixed-cost total, not added twice.
 - Independent data-source failures, bounded requests, daily caches, timestamps and partial-result notices.

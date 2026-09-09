@@ -308,18 +308,62 @@ def calculate_open_store_feasibility(
     else:
         decision = "NO-GO"
 
-    # Public map features and road AADT do not establish storefront demand.
-    # Do not feed unavailable observations or inherited demo numbers into scores.
+    # Public evidence can support a bounded planning score, but never a verified
+    # demand claim. A free-data location remains provisional and cannot issue GO.
     location_pending = site.get("assessment_mode") == "free"
+    site_score_provisional = False
+    site_score_range_low = site_score_range_high = None
+    site_score_confidence = None
+    site_score_components = []
     if location_pending:
-        site_score = competition_score = overall_score = None
+        assessment = site.get("provisional_site_assessment", {})
+        evidence = site.get("location_evidence", {})
+        assessment_valid = (
+            isinstance(assessment, dict)
+            and isinstance(evidence, dict)
+            and bool(evidence.get("key"))
+            and assessment.get("source_key") == evidence.get("key")
+            and isinstance(assessment.get("score"), (int, float))
+            and math.isfinite(float(assessment["score"]))
+        )
+        if assessment_valid:
+            site_score = int(max(0, min(100, round(float(assessment["score"])))))
+            site_score_range_low = int(max(0, min(100, _as_float(assessment.get("range_low"), site_score))))
+            site_score_range_high = int(max(0, min(100, _as_float(assessment.get("range_high"), site_score))))
+            site_score_confidence = str(assessment.get("confidence") or "Low")
+            site_score_components = assessment.get("components")
+            if not isinstance(site_score_components, list):
+                site_score_components = []
+            competition_component = next(
+                (component for component in site_score_components
+                 if isinstance(component, dict)
+                 and component.get("key") == "competition"
+                 and isinstance(component.get("score"), (int, float))), None
+            )
+            competition_score = int(competition_component["score"]) if competition_component else 50
+            overall_score = int(round(
+                site_score * score_weights["site"]
+                + cash_score * score_weights["cash"]
+                + margin_score * score_weights["margin"]
+                + competition_score * score_weights["competition"]
+            ))
+            site_score_provisional = True
+        else:
+            site_score = competition_score = overall_score = None
         if decision_ready:
             decision = "NO-GO" if funding_gap > 0 or monthly_profit_after_fixed < 0 else "CAUTION"
-        input_warnings.append(
-            "Location evidence is incomplete. No site, competition or overall score is issued. "
-            "Public map counts are partial; road vehicle counts are not storefront footfall. "
-            "The decision is provisional and based on financial assumptions only."
-        )
+        if site_score_provisional:
+            input_warnings.append(
+                f"The site score is a provisional planning estimate ({site_score_range_low}–"
+                f"{site_score_range_high}, {site_score_confidence.lower()} evidence coverage). Public map "
+                "counts are partial and road vehicle counts are not storefront footfall. The "
+                "location decision remains provisional and cannot issue GO until the site is verified."
+            )
+        else:
+            input_warnings.append(
+                "Location evidence has not been loaded, so no site, competition or overall score is "
+                "available. Explore an address on the Location page."
+            )
 
     risks: List[str] = []
     risks.extend(f"Input error: {message}" for message in input_errors)
@@ -369,6 +413,11 @@ def calculate_open_store_feasibility(
         "breakeven_revenue": breakeven_revenue,
         "site_score": site_score,
         "location_pending": location_pending,
+        "site_score_provisional": site_score_provisional,
+        "site_score_range_low": site_score_range_low,
+        "site_score_range_high": site_score_range_high,
+        "site_score_confidence": site_score_confidence,
+        "site_score_components": site_score_components,
         "cash_score": cash_score,
         "margin_score": margin_score,
         "competition_score": competition_score,

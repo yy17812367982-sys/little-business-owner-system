@@ -889,7 +889,7 @@ Important rules:
 - Never invent numeric budgets, prices, costs, thresholds, or legal requirements. If a useful target is not supplied or computed, write "owner to set" instead of choosing a number.
 - Explicitly disclose any assumption warnings contained in the computed metrics.
 - Use exactly the computed Decision and scores; never upgrade the verdict based on storytelling or a holiday scenario.
-- Null scores mean unavailable: write "Not assessed", never invent or substitute a score. If location_pending is true, explicitly label the decision provisional and financial-assumptions-only.
+- Null scores mean unavailable: write "Not assessed", never invent or substitute a score. If site_score_provisional is true, label the Site and Overall scores as provisional, include the supplied range and evidence coverage, and never describe them as verified footfall or a success probability. If location_pending is true, explicitly label the location conclusion provisional.
 - Public map counts are partial mapped features, not a complete census of competitors. Road AADT counts vehicles, not pedestrians or customers. Census tract statistics cover the named tract, not the search radius. Preserve source dates and missing-data notices.
 - Explain why customers might choose this shop, referring to its customer_reason, differentiator and mood board brief.
 - Treat customer_evidence as user-reported validation, not verified proof. Suggest one small real-world test if it is missing.
@@ -2043,23 +2043,59 @@ def render_open_store():
             "NO-GO": t("现在还不是投入资金的时候。想法可以留下，我们先把资金、选址或利润问题理顺。", "Not ready to invest yet. Keep the idea; first give the funding, location, or margins a little more work."),
             "REVIEW INPUTS": t("当前输入存在错误，系统不会生成决策报告。请返回预算与定价页修正。", "The current inputs contain errors. No decision report will be generated until they are corrected."),
         }.get(decision, "")
+        if m.get("location_pending") and decision == "NO-GO":
+            if m["funding_gap"] > 0 and m["monthly_profit_after_fixed"] < 0:
+                decision_msg = t(
+                    f"这是财务上的暂不通过：目标现金跑道还差 USD {m['funding_gap']:,.0f}，普通月份预计每月亏损 USD {abs(m['monthly_profit_after_fixed']):,.0f}。选址结论仍是临时判断。",
+                    f"This is a financial NO-GO: the target cash runway has a USD {m['funding_gap']:,.0f} gap and an ordinary month is estimated to lose USD {abs(m['monthly_profit_after_fixed']):,.0f}. The location conclusion remains provisional.",
+                )
+            elif m["monthly_profit_after_fixed"] < 0:
+                decision_msg = t(
+                    f"这是财务上的暂不通过：普通月份预计每月亏损 USD {abs(m['monthly_profit_after_fixed']):,.0f}。选址结论仍是临时判断。",
+                    f"This is a financial NO-GO: an ordinary month is estimated to lose USD {abs(m['monthly_profit_after_fixed']):,.0f}. The location conclusion remains provisional.",
+                )
+            else:
+                decision_msg = t(
+                    f"这是财务上的暂不通过：目标现金跑道还差 USD {m['funding_gap']:,.0f}。选址结论仍是临时判断。",
+                    f"This is a financial NO-GO: the target cash runway has a USD {m['funding_gap']:,.0f} gap. The location conclusion remains provisional.",
+                )
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric(t("最终判断", "Decision"), decision)
-        c2.metric(t("总评分", "Overall"), (int(m["overall_score"]) if m["overall_score"] is not None else "—"))
-        c3.metric(t("选址", "Site"), (int(m["site_score"]) if m["site_score"] is not None else "—"))
+        display_decision = t("财务暂不通过", "FINANCIAL NO-GO") if m.get("location_pending") and decision == "NO-GO" else decision
+        provisional_suffix = t("（临时）", " (provisional)") if m.get("site_score_provisional") else ""
+        c1.metric(t("最终判断", "Decision"), display_decision)
+        c2.metric(t("总评分", "Overall") + provisional_suffix, (int(m["overall_score"]) if m["overall_score"] is not None else "—"))
+        c3.metric(t("选址", "Site") + provisional_suffix, (int(m["site_score"]) if m["site_score"] is not None else "—"))
         c4.metric(t("现金", "Cash"), int(m["cash_score"]))
         c5.metric(t("利润", "Margin"), int(m["margin_score"]))
         if m.get("location_pending"):
-            st.warning(t("选址证据尚不完整：综合评分暂缺，以下为财务假设试算。", "Location evidence is incomplete: no overall score is issued. Financial figures below remain scenario estimates."))
+            if m.get("site_score_provisional"):
+                confidence = {"High": "高", "Medium": "中", "Low": "低"}.get(m["site_score_confidence"], m["site_score_confidence"])
+                st.warning(t(
+                    f"当前选址分为规划参考：{m['site_score']} 分，合理区间 {m['site_score_range_low']}–{m['site_score_range_high']}，证据完整度{confidence}。它使用公开地图与租金信息，不代表真实门前客流；线下核实前不会给出正式 GO。",
+                    f"Planning site score: {m['site_score']} (range {m['site_score_range_low']}–{m['site_score_range_high']}, {m['site_score_confidence']} evidence coverage). It uses public map and rent evidence, not verified storefront footfall; no final GO is issued before in-person verification.",
+                ))
+            else:
+                st.warning(t(
+                    "选址证据尚未载入，因此选址分和综合分暂缺。请返回选址页查询地址。",
+                    "Location evidence has not been loaded, so Site and Overall are not assessed. Return to Location and explore the address.",
+                ))
         if decision == "REVIEW INPUTS":
             st.error(decision_msg)
         else:
             st.info(decision_msg)
 
         st.markdown("### " + t("核心依据", "Decision Evidence"))
+        location_value = "—"
+        location_meaning = "Not assessed; explore an address on the Location page"
+        if m.get("site_score_provisional"):
+            location_value = f"{int(m['site_score'])} provisional ({m['site_score_range_low']}–{m['site_score_range_high']})"
+            location_meaning = f"Partial public-map and rent evidence; {m['site_score_confidence']} evidence coverage; not storefront footfall"
+        elif m["site_score"] is not None:
+            location_value = str(int(m["site_score"]))
+            location_meaning = "Traffic, competition, rent pressure, and accessibility"
         metric_df = pd.DataFrame([
-            {"Metric": "Location Score", "Value": str((int(m["site_score"]) if m["site_score"] is not None else "—")), "Meaning": "Traffic, competition, rent pressure, and accessibility"},
+            {"Metric": "Location Score", "Value": location_value, "Meaning": location_meaning},
             {"Metric": "Startup Cost", "Value": f"USD {m['startup_cost']:,.0f}", "Meaning": "One-time cost before opening"},
             {"Metric": "Monthly Fixed Cost", "Value": f"USD {m['monthly_fixed_cost']:,.0f}", "Meaning": "Fixed monthly cash burden"},
             {"Metric": "Cash Runway", "Value": f"{m['runway_months']:.1f} months", "Meaning": "Remaining cash after startup costs"},
@@ -2075,7 +2111,7 @@ def render_open_store():
 
         with st.expander(t("评分方法", "How the score is calculated"), expanded=False):
             score_df = pd.DataFrame([
-                {"Component": "Site", "Score": (int(m["site_score"]) if m["site_score"] is not None else "—"), "Weight": "35%"},
+                {"Component": "Site (provisional)" if m.get("site_score_provisional") else "Site", "Score": (int(m["site_score"]) if m["site_score"] is not None else "—"), "Weight": "35%"},
                 {"Component": "Cash", "Score": int(m["cash_score"]), "Weight": "35%"},
                 {"Component": "Margin", "Score": int(m["margin_score"]), "Weight": "20%"},
                 {"Component": "Competition", "Score": (int(m["competition_score"]) if m["competition_score"] is not None else "—"), "Weight": "10%"},
@@ -2092,7 +2128,10 @@ def render_open_store():
             st.caption(t(
                 "总分 = 选址×35% + 现金×35% + 利润×20% + 竞争×10%。",
                 "Overall = Site×35% + Cash×35% + Margin×20% + Competition×10%.",
-            ) + " " + score_status)
+            ) + " " + score_status + (" " + t(
+                "选址分和总分为临时规划分，不能代替线下选址核实。",
+                "The Site and Overall scores are provisional planning scores, not a substitute for in-person site verification.",
+            ) if m.get("site_score_provisional") else ""))
 
         if m["risks"]:
             st.markdown("### " + t("主要风险", "Main Risks"))

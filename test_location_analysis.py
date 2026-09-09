@@ -8,7 +8,8 @@ from streamlit.testing.v1 import AppTest
 
 from business_logic import calculate_open_store_feasibility
 from location_analysis import (parse_places, collect_evidence, evidence_key,
-                               report_location, road_traffic, community_data)
+                               report_location, road_traffic, community_data,
+                               provisional_site_assessment)
 from test_business_logic import PROFILE, SITE, LAUNCH, PRICING
 
 
@@ -18,6 +19,31 @@ def element(oid=1, lat=30.25, lon=-97.75, tags=None):
 
 
 class LocationEvidenceTests(unittest.TestCase):
+    def test_public_map_evidence_builds_a_bounded_provisional_score(self):
+        saved = {"key": "evidence-1", "map": {"status": "ok", "competitor_supported": True,
+                 "places": [
+                     {"category": "competitor"},
+                     {"category": "parking"},
+                     {"category": "partner"},
+                 ]}}
+        result = provisional_site_assessment(saved, 1)
+        self.assertIsInstance(result["score"], int)
+        self.assertLess(result["range_low"], result["score"])
+        self.assertGreater(result["range_high"], result["score"])
+        self.assertEqual(result["confidence"], "Medium")
+        self.assertEqual(result["source_key"], "evidence-1")
+
+    def test_rent_quote_is_an_explicit_score_component(self):
+        saved = {"key": "evidence-1", "map": {"status": "ok", "competitor_supported": True,
+                 "places": [{"category": "competitor"}, {"category": "parking"}]}}
+        result = provisional_site_assessment(saved, 1, monthly_rent_quote=2000,
+                                             expected_revenue=20000)
+        self.assertIn("rent_fit", [item["key"] for item in result["components"]])
+        self.assertEqual(result["confidence"], "High")
+
+    def test_no_evidence_does_not_invent_a_site_score(self):
+        self.assertIsNone(provisional_site_assessment({}, 1))
+
     def test_counts_exclude_wrong_categories_far_away_and_duplicates(self):
         nearby = element()
         result = parse_places({"elements": [nearby, nearby, element(2, lat=31),
@@ -71,6 +97,21 @@ class LocationEvidenceTests(unittest.TestCase):
         self.assertTrue(result["location_pending"])
         self.assertEqual(result["decision"], "CAUTION")
 
+    def test_valid_public_evidence_issues_a_provisional_score_but_never_go(self):
+        launch = {**LAUNCH, "funding_available": 500000}
+        site = {**SITE, "assessment_mode": "free", "location_evidence": {"key": "current"},
+                "provisional_site_assessment": {
+                    "source_key": "current", "score": 68, "range_low": 56,
+                    "range_high": 80, "confidence": "Medium",
+                    "components": [{"key": "competition", "score": 72}],
+                }}
+        result = calculate_open_store_feasibility(PROFILE, site, launch, PRICING)
+        self.assertEqual(result["site_score"], 68)
+        self.assertIsNotNone(result["overall_score"])
+        self.assertTrue(result["site_score_provisional"])
+        self.assertEqual(result["site_score_confidence"], "Medium")
+        self.assertNotEqual(result["decision"], "GO")
+
     def test_new_address_radius_or_business_cannot_reuse_report_evidence(self):
         site = {"address": "Austin", "lat": 30.25, "lon": -97.75, "radius_miles": 1}
         site["location_evidence"] = {"key": evidence_key("Austin", 30.25, -97.75, 1, "Flower Shop"),
@@ -83,6 +124,30 @@ class LocationEvidenceTests(unittest.TestCase):
 
 
 class FreeLocationUITests(unittest.TestCase):
+    def test_loaded_evidence_reaches_decision_page_as_a_provisional_score(self):
+        result = {"map": {"status": "ok", "places": [
+                      {"name": "Example Coffee", "category": "competitor", "lat": 30.251,
+                       "lon": -97.751, "distance_miles": 0.1, "access": "unknown", "source": "https://example.test/1"},
+                      {"name": "Example Parking", "category": "parking", "lat": 30.252,
+                       "lon": -97.752, "distance_miles": 0.2, "access": "public", "source": "https://example.test/2"},
+                  ], "competitor_supported": True},
+                  "traffic": {"status": "ok", "stations": []}, "community": {"status": "key_required"}}
+        matches = [{"name": "1011 S CONGRESS AVE, AUSTIN, TX", "lat": 30.25, "lon": -97.75}]
+        with patch.dict(os.environ, {"INTRO_VIDEO_SECONDS": "0"}), \
+             patch("location_analysis.locate_address", return_value=matches), \
+             patch("location_analysis.collect_evidence", return_value=result):
+            app = AppTest.from_file("pythonapp.py", default_timeout=30).run()
+            app.button(key="open_store_next_btn").click().run()
+            app.button(key="free_location_search").click().run()
+            app.button(key="open_store_next_btn").click().run()
+            app.button(key="open_store_next_btn").click().run()
+        self.assertFalse(app.exception)
+        metrics = {metric.label: metric.value for metric in app.metric}
+        self.assertIn("Site (provisional)", metrics)
+        self.assertNotEqual(metrics["Site (provisional)"], "—")
+        self.assertIn("Overall (provisional)", metrics)
+        self.assertTrue(any("Planning site score" in warning.value for warning in app.warning))
+
     def test_lookup_is_explicit_and_address_edits_clear_results(self):
         result = {"map": {"status": "ok", "places": [
                       {"name": "Example Coffee", "category": "competitor", "lat": 30.251,
@@ -102,6 +167,8 @@ class FreeLocationUITests(unittest.TestCase):
             app.button(key="free_location_search").click().run()
             self.assertFalse(app.exception)
             self.assertIn("location_evidence", app.session_state["site"])
+            self.assertIn("provisional_site_assessment", app.session_state["site"])
+            self.assertIsInstance(app.session_state["site"]["provisional_site_assessment"]["score"], int)
             collect.assert_called_once()
             legend = next(item.value for item in app.markdown if "Mapped coffee shops" in item.value)
             self.assertIn("Same business type recorded on OpenStreetMap", legend)
@@ -113,4 +180,4 @@ class FreeLocationUITests(unittest.TestCase):
             app.button(key="open_store_next_btn").click().run()
             app.button(key="open_store_next_btn").click().run()
             self.assertFalse(app.exception)
-            self.assertTrue(any("no overall score" in w.value.lower() for w in app.warning))
+            self.assertTrue(any("has not been loaded" in w.value.lower() for w in app.warning))

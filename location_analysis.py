@@ -222,7 +222,8 @@ def evidence_key(address, lat, lon, radius, kind):
 
 def report_location(site, kind):
     """Keep report evidence small and reject stale lookups."""
-    result = {k: v for k, v in site.items() if k != "location_evidence"}
+    result = {k: v for k, v in site.items()
+              if k not in ("location_evidence", "provisional_site_assessment")}
     saved = site.get("location_evidence", {})
     key = evidence_key(site.get("address", ""), site.get("lat"), site.get("lon"),
                        site.get("radius_miles", 1.0), kind)
@@ -241,6 +242,9 @@ def report_location(site, kind):
         "community": saved.get("community"),
         "road_traffic": saved.get("traffic"),
     }
+    assessment = site.get("provisional_site_assessment", {})
+    if assessment.get("source_key") == key:
+        result["provisional_site_assessment"] = assessment
     return result
 
 
@@ -258,6 +262,135 @@ def collect_evidence(lat, lon, radius, kind):
             except (requests.RequestException, ValueError, KeyError, TypeError, IndexError):
                 result[key] = {"status": "unavailable"}
     return result
+
+
+def provisional_site_assessment(saved, radius, monthly_rent_quote=0, expected_revenue=0):
+    """Build a transparent planning score from available, non-footfall evidence.
+
+    Missing sources are excluded and the remaining weights are normalized. The
+    result is deliberately a range with a confidence label, not a claim that
+    public map features measure storefront demand.
+    """
+    mapped = saved.get("map", {}) if isinstance(saved, dict) else {}
+    places = mapped.get("places", []) if mapped.get("status") == "ok" else []
+    radius = max(float(radius or 1), 0.1)
+    area = math.pi * radius * radius
+    components = []
+
+    if mapped.get("status") == "ok" and mapped.get("competitor_supported"):
+        competitor_count = sum(item.get("category") == "competitor" for item in places)
+        density = competitor_count / area
+        if competitor_count == 0:
+            score = 55
+        elif density <= 2:
+            score = 82
+        elif density <= 5:
+            score = 72
+        elif density <= 10:
+            score = 58
+        elif density <= 20:
+            score = 43
+        else:
+            score = 30
+        components.append({"key": "competition", "score": score, "weight": 30,
+                           "observed": competitor_count, "density": round(density, 1)})
+
+    if mapped.get("status") == "ok":
+        parking_count = sum(item.get("category") == "parking" for item in places)
+        transit_count = sum(item.get("category") == "transit" for item in places)
+        if parking_count or transit_count:
+            score = min(92, 38 + min(parking_count, 8) * 3 + min(transit_count, 8) * 4)
+        else:
+            score = 35
+        components.append({"key": "access", "score": score, "weight": 30,
+                           "parking": parking_count, "transit": transit_count})
+
+        partner_count = sum(item.get("category") == "partner" for item in places)
+        score = min(88, 40 + min(partner_count, 6) * 8)
+        components.append({"key": "ecosystem", "score": score, "weight": 15,
+                           "observed": partner_count})
+
+    rent = max(float(monthly_rent_quote or 0), 0.0)
+    revenue = max(float(expected_revenue or 0), 0.0)
+    if rent and revenue:
+        ratio = rent / revenue
+        if ratio <= .10:
+            score = 88
+        elif ratio <= .15:
+            score = 74
+        elif ratio <= .20:
+            score = 58
+        elif ratio <= .30:
+            score = 38
+        else:
+            score = 20
+        components.append({"key": "rent_fit", "score": score, "weight": 25,
+                           "ratio": ratio, "rent": rent, "revenue": revenue})
+
+    available_weight = sum(component["weight"] for component in components)
+    if not available_weight:
+        return None
+    score = round(sum(component["score"] * component["weight"] for component in components) / available_weight)
+    if available_weight >= 95 and not mapped.get("limited"):
+        confidence, spread = "High", 7
+    elif available_weight >= 60 and not mapped.get("limited"):
+        confidence, spread = "Medium", 12
+    else:
+        confidence, spread = "Low", 18
+    return {
+        "score": int(max(0, min(100, score))),
+        "range_low": int(max(0, score - spread)),
+        "range_high": int(min(100, score + spread)),
+        "confidence": confidence,
+        "coverage_pct": available_weight,
+        "components": components,
+        "source_key": saved.get("key"),
+        "limitations": [
+            "Storefront footfall is not measured.",
+            "OpenStreetMap counts are partial mapped features, not a complete census.",
+            "Community demographics are context only and do not determine demand.",
+        ],
+    }
+
+
+def render_provisional_score(assessment, lang):
+    zh = lang == "zh"
+    if not assessment:
+        st.info("请先查询地址，或填写房东租金报价，系统才能生成临时选址评分。" if zh else
+                "Explore the address or add a landlord rent quote to build a provisional site score.")
+        return
+    names = {
+        "competition": ("同类店密度", "Similar-shop pressure"),
+        "access": ("公共交通与停车", "Mapped access"),
+        "ecosystem": ("周边合作生态", "Partner ecosystem"),
+        "rent_fit": ("租金与收入匹配", "Rent fit"),
+    }
+    bars = []
+    for component in assessment["components"]:
+        label = names[component["key"]][0 if zh else 1]
+        bars.append(
+            f'<div style="display:grid;grid-template-columns:minmax(120px,1fr) 2fr 42px;gap:10px;align-items:center;margin:9px 0">'
+            f'<span style="font-size:13px">{html.escape(label)}</span>'
+            f'<span style="height:10px;border-radius:99px;background:#e5e9df;overflow:hidden"><i style="display:block;width:{component["score"]}%;height:100%;background:#5b8268;border-radius:99px"></i></span>'
+            f'<b style="text-align:right">{component["score"]}</b></div>'
+        )
+    confidence = {"High": "高", "Medium": "中", "Low": "低"}.get(assessment["confidence"], assessment["confidence"]) if zh else assessment["confidence"]
+    st.markdown(
+        f'<section style="border:1px solid #d9d7c8;border-radius:22px;background:#fffaf2;padding:22px;margin:18px 0">'
+        f'<div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap">'
+        f'<div><div style="font-size:12px;font-weight:800;letter-spacing:.1em;color:#486548">{"临时选址评分" if zh else "PROVISIONAL SITE SCORE"}</div>'
+        f'<div style="font:700 46px/1.1 Georgia,serif;margin-top:6px">{assessment["score"]}<span style="font:400 18px/1 system-ui;color:#687067"> / 100</span></div></div>'
+        f'<div style="padding:9px 13px;border-radius:14px;background:#e7eee4;color:#405e48;font-weight:700">'
+        f'{"合理区间" if zh else "Planning range"}: {assessment["range_low"]}–{assessment["range_high"]}<br>'
+        f'<small>{"证据完整度" if zh else "Evidence coverage"}: {confidence}</small></div></div>'
+        f'<div style="margin-top:15px">{"".join(bars)}</div></section>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "这是使用已找到的地图设施和房东报价生成的规划参考，不是经过验证的门前客流或成功概率。缺失项目会被排除，并扩大评分区间。"
+        if zh else
+        "This planning reference uses available mapped features and a landlord quote. It is not verified storefront footfall or a probability of success. Missing inputs are excluded and widen the score range."
+    )
 
 
 def render_location_analysis(profile, site, launch, lang):
@@ -279,6 +412,7 @@ def render_location_analysis(profile, site, launch, lang):
     if address != old_address:
         site.pop("located_address", None)
         site.pop("location_evidence", None)
+        site.pop("provisional_site_assessment", None)
         st.session_state.pop("free_location_matches", None)
         st.session_state.pop("free_location_match", None)
     st.caption(tr("The address/coordinates are sent to public Census, OpenStreetMap and TxDOT services when you search.",
@@ -287,6 +421,7 @@ def render_location_analysis(profile, site, launch, lang):
                        key="free_location_search", disabled=len(address.strip()) < 3)
     if search:
         site.pop("location_evidence", None)
+        site.pop("provisional_site_assessment", None)
         with st.spinner(tr("Finding your address…", "正在定位地址…")):
             try:
                 matches = locate_address(address.strip())
@@ -308,6 +443,7 @@ def render_location_analysis(profile, site, launch, lang):
     saved = site.get("location_evidence", {})
     if saved and saved.get("key") != key:
         site.pop("location_evidence", None)
+        site.pop("provisional_site_assessment", None)
         saved = {}
     # Exact single matches run immediately; ambiguous addresses require selection before lookup.
     analyze = search and len(matches) == 1
@@ -335,8 +471,18 @@ def render_location_analysis(profile, site, launch, lang):
                         f"月租占你假设的月销售额的 {rent/revenue:.1%}。"))
         st.caption(tr("Include this rent in your monthly fixed-cost total on Budget. It is not added twice automatically.",
                       "请把租金计入预算页每月固定费用总额。系统不会自动再加一次。"))
-    st.caption(tr("Actual storefront footfall and lease terms remain unverified. A location or overall score is not issued from incomplete public data.",
-                  "真实门前人流和租约条款仍待核实。公开数据不完整时，不给出选址或综合分数。"))
+    assessment = provisional_site_assessment(saved, radius, site.get("monthly_rent_quote"),
+                                              launch.get("expected_monthly_revenue")) if saved else None
+    if assessment:
+        site["provisional_site_assessment"] = assessment
+    else:
+        site.pop("provisional_site_assessment", None)
+    st.subheader(tr("Planning site score", "选址规划评分"))
+    render_provisional_score(assessment, lang)
+    st.caption(tr(
+        "Actual storefront footfall and lease terms remain unverified. The planning score will become more useful when you add a real rent quote and verify the shortlist in person.",
+        "真实门前人流和租约条款仍待核实。填写真实租金报价并线下查看候选店址后，这个规划分会更有参考价值。",
+    ))
 
 
 def render_snapshot(saved, site, kind, zh):
@@ -471,8 +617,8 @@ def render_snapshot(saved, site, kind, zh):
             st.markdown("[US Census ACS](" + community["source"] + ")")
             st.caption(community["retrieved_at"])
         else:
-            message = tr("Community statistics are not connected yet. Other location results are available.",
-                         "社区统计暂未接通，其他选址结果仍可使用。") if community.get("status") == "key_required" else tr(
+            message = tr("Community statistics require a free Census API key. They are optional and are not used in the provisional site score.",
+                         "社区统计需要免费的 Census API key；它是可选信息，不参与临时选址评分。") if community.get("status") == "key_required" else tr(
                          "Community data is unavailable for this lookup.", "本次查询暂无社区数据。")
             st.info(message)
     with right:

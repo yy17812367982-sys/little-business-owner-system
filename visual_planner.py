@@ -1,18 +1,151 @@
-"""Visual planning feedback using the same inputs and calculations as the report."""
+"""Visual planning components backed by the app's existing plan and calculations."""
+from copy import deepcopy
 import html
-import math
 
-import pandas as pd
 import streamlit as st
 
-SHOP_ICONS = {"Flower Shop": "🌷", "Coffee Shop": "☕", "Bakery": "🥐",
-              "Restaurant": "🍽️", "Convenience Store": "🛒", "Small Retail Store": "🛍️",
-              "Beauty Salon": "✂️", "Auto Parts Store": "🔧", "Other": "🏡"}
+from business_logic import calculate_open_store_feasibility
+
+
+SHOP_ICONS = {
+    "Flower Shop": "🌷", "Coffee Shop": "☕", "Bakery": "🥐",
+    "Restaurant": "🍽️", "Convenience Store": "🛒", "Small Retail Store": "🛍️",
+    "Beauty Salon": "✂️", "Auto Parts Store": "🔧", "Other": "🏡",
+}
+
+PALETTE_TOKENS = {
+    "garden": {"name_en": "Garden mornings", "name_zh": "花园清晨",
+               "wall": "#e8eadc", "accent": "#4e6553", "awning": "#bd806e", "light": "#fff9ef"},
+    "blush": {"name_en": "Soft blush", "name_zh": "柔和玫瑰",
+              "wall": "#f3ddd5", "accent": "#615047", "awning": "#b57672", "light": "#fff8f3"},
+    "sunshine": {"name_en": "Sunny neighborhood", "name_zh": "暖阳街角",
+                 "wall": "#f3dfad", "accent": "#695444", "awning": "#8da68b", "light": "#fff8e6"},
+    "clay": {"name_en": "Coffee & clay", "name_zh": "咖啡与陶土",
+             "wall": "#dfc2aa", "accent": "#4d4339", "awning": "#986a50", "light": "#fbf2e7"},
+}
+
+DECORATION_PACKS = {
+    "Flower Shop": {"window": ("🌿", "🌷", "🌼"), "street": ("🪴", "🌸"), "label": "BOTANICAL DETAILS"},
+    "Coffee Shop": {"window": ("☕", "🫘", "🥤"), "street": ("🪑", "🌿"), "label": "COFFEE DETAILS"},
+    "Bakery": {"window": ("🥖", "🥐", "🍞"), "street": ("🧺", "🌿"), "label": "BAKERY DETAILS"},
+}
+
+STORE_PRESETS = {
+    "jenny": {
+        "label": "Jenny’s Flower Room", "business_type": "Flower Shop",
+        "shop_name": "Jenny’s Flower Room", "mood_palette": "garden",
+        "target_customer": "Neighbors marking meaningful everyday moments",
+        "differentiator": "Personal bouquets with a warm neighborhood feel",
+    },
+    "corner_bean": {
+        "label": "Corner Bean Café", "business_type": "Coffee Shop",
+        "shop_name": "Corner Bean Café", "mood_palette": "clay",
+        "target_customer": "Neighbors and commuters looking for a familiar stop",
+        "differentiator": "A calm corner for well-made coffee and quick breakfasts",
+    },
+    "sunrise": {
+        "label": "Sunrise Bakery", "business_type": "Bakery",
+        "shop_name": "Sunrise Bakery", "mood_palette": "sunshine",
+        "target_customer": "Local families and early-morning regulars",
+        "differentiator": "Fresh everyday bakes in a bright, welcoming shop",
+    },
+}
+
+
+def storefront_identity(profile, lang="en"):
+    """Return a bounded visual identity; only curated values enter CSS."""
+    kind = str(profile.get("business_type") or "Other")
+    custom_kind = str(profile.get("custom_business_type") or "").strip()
+    display_kind = custom_kind if kind == "Other" and custom_kind else kind
+    default_name = "你的小店" if lang == "zh" else "Your Little Shop"
+    name = str(profile.get("shop_name") or custom_kind or default_name).strip()[:80]
+    palette_key = str(profile.get("mood_palette") or "")
+    if palette_key not in PALETTE_TOKENS:
+        palette_key = "garden" if kind == "Flower Shop" else "sunshine" if kind == "Bakery" else "clay"
+    pack = DECORATION_PACKS.get(kind, {
+        "window": (SHOP_ICONS.get(kind, "🏡"), "✦", "▦"), "street": ("🪴", "◫"),
+        "label": "SHOP DETAILS",
+    })
+    return {"kind": kind, "display_kind": display_kind, "name": name,
+            "palette_key": palette_key, "palette": PALETTE_TOKENS[palette_key], "pack": pack}
+
+
+def storefront_markup(profile, lang="en"):
+    """Build one reusable 2.5D storefront from shop type, name and palette."""
+    identity = storefront_identity(profile, lang)
+    palette = identity["palette"]
+    pack = identity["pack"]
+    esc_name = html.escape(identity["name"])
+    esc_kind = html.escape(identity["display_kind"])
+    window_items = "".join(f'<span aria-hidden="true">{item}</span>' for item in pack["window"])
+    street_items = "".join(f'<span aria-hidden="true">{item}</span>' for item in pack["street"])
+    eyebrow = "你的小店正在成形" if lang == "zh" else "YOUR IDEA IS TAKING SHAPE"
+    illustrative = "示意图 · 不代表已验证需求" if lang == "zh" else "ILLUSTRATIVE · NOT VERIFIED DEMAND"
+    palette_name = palette["name_zh" if lang == "zh" else "name_en"]
+    return f"""
+<div class="yy-storefront-card" data-shop-type="{html.escape(identity['kind'], quote=True)}" data-palette="{identity['palette_key']}"
+ style="--sf-wall:{palette['wall']};--sf-accent:{palette['accent']};--sf-awning:{palette['awning']};--sf-light:{palette['light']}">
+  <div class="yy-storefront-head"><div><span>{eyebrow}</span><b>{esc_kind}</b></div>
+    <small>{html.escape(palette_name)}</small></div>
+  <div class="yy-storefront-scene" role="img" aria-label="{html.escape(illustrative + ': ' + identity['name'], quote=True)}">
+    <div class="yy-storefront-sky"><i></i><i></i><i></i></div>
+    <div class="yy-storefront-building">
+      <div class="yy-storefront-side"></div><div class="yy-storefront-roof"></div>
+      <div class="yy-storefront-face">
+        <div class="yy-storefront-sign">{esc_name}</div>
+        <div class="yy-storefront-awning"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="yy-storefront-window"><div class="yy-storefront-decor">{window_items}</div><div class="yy-storefront-shelf"></div></div>
+        <div class="yy-storefront-door"><span>{SHOP_ICONS.get(identity['kind'], '◆')}</span></div>
+      </div>
+    </div>
+    <div class="yy-storefront-pavement"><div>{street_items}</div><span>{html.escape(pack['label'])}</span></div>
+  </div>
+  <div class="yy-storefront-foot"><span>{illustrative}</span><b>{esc_name}</b></div>
+</div>"""
+
+
+def _sync_profile_widgets(profile, fields):
+    for field, value in fields.items():
+        profile[field] = value
+    widget_keys = {
+        "business_type": "open_business_type", "shop_name": "open_shop_name",
+        "mood_palette": "open_storefront_palette", "target_customer": "open_target_customer",
+        "differentiator": "open_differentiator", "custom_business_type": "open_custom_business_type",
+    }
+    for field, key in widget_keys.items():
+        if field in fields:
+            st.session_state[key] = fields[field]
+
+
+def apply_store_preset(profile, preset_key):
+    """Apply concept-only sample text; never introduce financial or traction data."""
+    if preset_key == "own":
+        _sync_profile_widgets(profile, {
+            "business_type": "Other", "custom_business_type": "", "shop_name": "",
+            "target_customer": "", "differentiator": "", "mood_palette": "garden",
+        })
+        return
+    preset = STORE_PRESETS[preset_key]
+    _sync_profile_widgets(profile, {key: value for key, value in preset.items() if key != "label"})
+
+
+def render_store_presets(profile, lang):
+    zh = lang == "zh"
+    st.markdown("#### " + ("从一个示意概念开始" if zh else "Start from an illustrative concept"))
+    st.caption("这些示例只提供店名、店型和视觉方向，不包含经营表现、客流或财务假设。" if zh else
+               "These examples set only concept text and visual identity—never performance, traction or financial assumptions.")
+    columns = st.columns(4)
+    options = [("jenny", "Jenny’s Flower Room"), ("corner_bean", "Corner Bean Café"),
+               ("sunrise", "Sunrise Bakery"), ("own", "Start with my own idea")]
+    for column, (key, label) in zip(columns, options):
+        translated = "从我的想法开始" if zh and key == "own" else label
+        column.button(translated, key=f"store_preset_{key}", use_container_width=True,
+                      on_click=apply_store_preset, args=(profile, key))
 
 
 def render_shop_cards(profile, lang):
     zh = lang == "zh"
-    st.caption("点一个店型，开始想象你的店。" if zh else "Pick a shop to start picturing your idea.")
+    st.caption("选择店型，店面装饰会立即改变。" if zh else "Choose a shop type and the storefront details change instantly.")
     columns = st.columns(3)
     for column, (kind, label) in zip(columns, [
         ("Flower Shop", "花店" if zh else "Flower shop"),
@@ -28,60 +161,140 @@ def render_shop_cards(profile, lang):
 
 
 def render_idea_preview(profile, lang):
+    customer = profile.get("target_customer") or ("你想服务谁？" if lang == "zh" else "Who would love this place?")
+    promise = profile.get("differentiator") or ("写一句你的特色，预览会同步更新。" if lang == "zh" else
+                                                "Add your special touch and the preview will follow.")
+    st.markdown(
+        storefront_markup(profile, lang)
+        + f'<div class="yy-storefront-promise"><span>{html.escape(str(customer))}</span>'
+        f'<b>{html.escape(str(promise))}</b></div>', unsafe_allow_html=True,
+    )
+    st.caption("这是视觉构想，不是经过验证的市场需求或成功预测。" if lang == "zh" else
+               "This is a visual concept—not verified market demand or a prediction of success.")
+
+
+def money_scenario(profile, site, launch, pricing, scenario_key):
+    """Run a what-if through existing calculations without mutating the base plan."""
+    scenario_launch = deepcopy(launch)
+    if scenario_key == "sales_down":
+        scenario_launch["expected_monthly_revenue"] = float(launch["expected_monthly_revenue"]) * 0.80
+    elif scenario_key == "sales_up":
+        scenario_launch["expected_monthly_revenue"] = float(launch["expected_monthly_revenue"]) * 1.15
+    elif scenario_key == "opening_down":
+        scenario_launch["startup_cost_estimate"] = float(launch["startup_cost_estimate"]) * 0.90
+    return calculate_open_store_feasibility(deepcopy(profile), deepcopy(site), scenario_launch, deepcopy(pricing))
+
+
+def render_money_story(profile, site, launch, pricing, metrics, lang):
     zh = lang == "zh"
-    kind = profile.get("business_type", "Other")
-    title = profile.get("custom_business_type") if kind == "Other" else kind
-    title = title or ("我的小店" if zh else "Your little shop")
-    customer = profile.get("target_customer") or ("你想服务谁？" if zh else "Who would love this place?")
-    promise = profile.get("differentiator") or ("写一句你的特色，预览就会更新。" if zh else "Add your special touch and watch this take shape.")
+    funding = float(launch["funding_available"])
+    startup = float(metrics["startup_cost"])
+    cash_left = funding - startup
+    gap = float(metrics["funding_gap"])
+    result = float(metrics["monthly_profit_after_fixed"])
     st.markdown(f"""
-<div style="border:1px solid #d5ddcb;border-radius:24px;padding:28px;background:#f0f0e6;margin:12px 0">
-<div style="font-size:48px" aria-hidden="true">{SHOP_ICONS.get(kind, "🏡")}</div>
-<p style="color:#365c45">{'你的小店正在成形' if zh else 'YOUR IDEA IS TAKING SHAPE'}</p>
-<h3>{html.escape(str(title))}</h3>
-<p>{html.escape(str(customer))}</p>
-<hr style="border:0;border-top:1px solid #cbd5c5">
-<p>{html.escape(str(promise))}</p>
+<div class="yy-plan-money-story">
+  <section><span>{'OPENING DAY · 开业日' if zh else 'OPENING DAY'}</span><h3>{'开门之后，手头还剩多少？' if zh else 'What remains after the doors open?'}</h3>
+    <div class="yy-opening-equation"><div><small>{'可用现金' if zh else 'Cash available'}</small><b>USD {funding:,.0f}</b></div><i>−</i>
+    <div><small>{'开店成本' if zh else 'Opening cost'}</small><b>USD {startup:,.0f}</b></div><i>=</i>
+    <div class="{'negative' if cash_left < 0 else ''}"><small>{'开业后现金' if zh else 'Cash left after opening'}</small><b>USD {cash_left:,.0f}</b></div></div>
+    <p>{('目标现金储备仍差 USD ' if zh else 'Gap to the target cash reserve: USD ') + f'{gap:,.0f}'}</p></section>
+  <section><span>{'AN ORDINARY MONTH · 普通月份' if zh else 'AN ORDINARY MONTH'}</span><h3>{'一个普通月的钱会怎么走？' if zh else 'How does the money move in a normal month?'}</h3>
+    <div class="yy-month-flow"><div><small>{'销售额' if zh else 'Sales'}</small><b>USD {metrics['expected_revenue']:,.0f}</b></div>
+    <div><small>{'商品成本' if zh else 'Product costs'}</small><b>− USD {metrics['ordinary_cogs']:,.0f}</b></div>
+    <div><small>{'固定费用' if zh else 'Fixed costs'}</small><b>− USD {metrics['monthly_fixed_cost']:,.0f}</b></div>
+    <div class="{'negative' if result < 0 else 'positive'}"><small>{'月度结果' if zh else 'Monthly result'}</small><b>USD {result:,.0f}</b></div></div></section>
 </div>""", unsafe_allow_html=True)
-    st.caption("这是你的构想预览，不代表已验证的市场需求。" if zh else
-               "A picture of your idea, not evidence of market demand.")
+
+    st.markdown("### " + ("What if? · 如果情况有变化" if zh else "What if?"))
+    st.caption("以下仅为模拟，绝不会改写上方基础计划。" if zh else
+               "These scenarios are simulations only. Your base plan stays unchanged.")
+    labels = {
+        "sales_down": "Sales -20%" if not zh else "销售额 -20%",
+        "sales_up": "Sales +15%" if not zh else "销售额 +15%",
+        "opening_down": "Opening cost -10%" if not zh else "开店成本 -10%",
+    }
+    selected = st.radio("Scenario" if not zh else "选择情景", list(labels), horizontal=True,
+                        format_func=lambda key: labels[key], key="open_money_what_if", label_visibility="collapsed")
+    scenario = money_scenario(profile, site, launch, pricing, selected)
+    left, right, third = st.columns(3)
+    left.metric("Monthly sales" if not zh else "月销售额", f"USD {scenario['expected_revenue']:,.0f}")
+    right.metric("Opening cost" if not zh else "开店成本", f"USD {scenario['startup_cost']:,.0f}")
+    third.metric("Monthly result" if not zh else "月度结果", f"USD {scenario['monthly_profit_after_fixed']:,.0f}")
+    st.caption(("模拟结果 · 基础输入未改变" if zh else "Simulated result · base inputs unchanged") +
+               (" · 包含当前损耗设置" if zh else " · includes current waste settings"))
 
 
 def render_money_picture(launch, metrics, lang):
-    zh = lang == "zh"
-    st.subheader("看看钱会怎么走" if zh else "See where your money goes")
-    st.caption("图表使用当前输入和损耗调整；修改数字后会更新。" if zh else
-               "These charts use your current inputs, including waste. Change a number to update the picture.")
-    funding = float(launch["funding_available"])
-    required = metrics["startup_cost"] + metrics["monthly_fixed_cost"] * int(launch["cash_target_months"])
-    revenue = float(launch["expected_monthly_revenue"])
-    profit = metrics["monthly_profit_after_fixed"]
-    columns = st.columns(2)
-    with columns[0]:
-        st.markdown("**启动资金够不够？**" if zh else "**Enough to open and keep going?**")
-        st.bar_chart(pd.DataFrame({
-            "USD": [funding, required],
-        }, index=["手头资金" if zh else "Cash available",
-                  "开店 + 目标储备" if zh else "Opening + target reserve"]),
-            color="#365c45", horizontal=True, height=220)
-        st.caption(("目标储备按固定费用计算：" if zh else "Reserve based on fixed costs: ") +
-                   f"{int(launch['cash_target_months'])} " + ("个月。" if zh else "months."))
-    with columns[1]:
-        st.markdown("**普通月份会剩多少？**" if zh else "**What is left in an ordinary month?**")
-        st.bar_chart(pd.DataFrame({
-            "USD": [revenue, revenue - profit, profit],
-        }, index=["销售收入" if zh else "Sales",
-                  "商品 + 固定费用" if zh else "Product + fixed costs",
-                  "月度结果" if zh else "Monthly result"]),
-            color="#bd806e", horizontal=True, height=220)
-        st.caption("负数表示亏损。未计税费和融资等额外费用。" if zh else
-                   "A negative result means a loss. Taxes, financing and other extra costs are excluded.")
-    gap = metrics["funding_gap"]
-    breakeven = metrics["breakeven_revenue"]
-    if gap > 0:
-        st.info((f"距离目标资金还差 USD {gap:,.0f}。试着降低开店成本，看看图怎么变。" if zh else
-                 f"USD {gap:,.0f} short of your funding target. Try a lower opening cost and see what changes."))
-    if math.isfinite(breakeven):
-        st.caption((f"按当前利润假设，每月销售约 USD {breakeven:,.0f} 才能打平。" if zh else
-                    f"At your current margin, about USD {breakeven:,.0f} in monthly sales covers costs."))
+    """Compatibility wrapper for older imports; new UI uses render_money_story."""
+    del launch
+    st.caption(("月度结果：" if lang == "zh" else "Monthly result: ") +
+               f"USD {metrics['monthly_profit_after_fixed']:,.0f}")
 
+
+def decision_reasons(metrics, lang):
+    zh = lang == "zh"
+    reasons = []
+    if metrics["funding_gap"] > 0:
+        reasons.append((f"目标现金储备仍差 USD {metrics['funding_gap']:,.0f}" if zh else
+                        f"The target cash reserve has a USD {metrics['funding_gap']:,.0f} gap"))
+    else:
+        reasons.append(("资金覆盖开店成本和目标固定费用储备" if zh else
+                        "Available cash covers opening cost and the target fixed-cost reserve"))
+    if metrics["monthly_profit_after_fixed"] < 0:
+        reasons.append((f"普通月份预计亏损 USD {abs(metrics['monthly_profit_after_fixed']):,.0f}" if zh else
+                        f"An ordinary month is estimated to lose USD {abs(metrics['monthly_profit_after_fixed']):,.0f}"))
+    else:
+        reasons.append((f"普通月份预计结余 USD {metrics['monthly_profit_after_fixed']:,.0f}" if zh else
+                        f"An ordinary month is estimated to leave USD {metrics['monthly_profit_after_fixed']:,.0f}"))
+    if metrics.get("site_score_provisional"):
+        reasons.append(("选址仅有公开地图和租金形成的临时证据，仍需线下核实" if zh else
+                        "Location evidence is provisional public-map and rent evidence; verify it in person"))
+    elif metrics.get("location_pending"):
+        reasons.append(("选址证据尚未探索，不能判断真实需求" if zh else
+                        "Location evidence is still unexplored; demand has not been verified"))
+    return reasons[:3]
+
+
+def decision_next_action(metrics, lang):
+    zh = lang == "zh"
+    if not metrics.get("decision_ready"):
+        return "返回预算页修正输入错误。" if zh else "Return to Budget and correct the blocking input errors."
+    if metrics["monthly_profit_after_fixed"] < 0:
+        return ("先测试能否提高普通月销售或降低商品与固定成本，再承担租约。" if zh else
+                "Test a path to higher ordinary-month sales or lower product and fixed costs before taking on a lease.")
+    if metrics["funding_gap"] > 0:
+        return ("先缩小开店成本、谈免租期或补足资金缺口。" if zh else
+                "Reduce opening cost, negotiate a rent-free period, or close the funding gap first.")
+    if metrics.get("location_pending"):
+        return ("线下核实客流、租约和附近竞争，再决定是否签约。" if zh else
+                "Verify storefront footfall, lease terms and nearby competition in person before signing.")
+    return "完成开业前检查清单，再决定是否投入。" if zh else "Complete the pre-launch checklist before committing funds."
+
+
+def render_decision_lead(metrics, decision_message, display_decision, profile, lang):
+    identity = storefront_identity(profile, lang)
+    reasons = decision_reasons(metrics, lang)
+    reason_html = "".join(f"<li>{html.escape(reason)}</li>" for reason in reasons)
+    next_action = decision_next_action(metrics, lang)
+    decision_class = "go" if metrics["decision"] == "GO" else "caution" if metrics["decision"] == "CAUTION" else "stop"
+    st.markdown(f"""
+<div class="yy-decision-lead {decision_class}">
+  <div class="yy-decision-shop"><span>{SHOP_ICONS.get(identity['kind'], '🏡')}</span><div><small>{html.escape(identity['display_kind'])}</small><b>{html.escape(identity['name'])}</b></div></div>
+  <span class="yy-section-kicker">{'SHOULD I OPEN? · 是否开店？' if lang == 'zh' else 'SHOULD I OPEN?'}</span>
+  <h2>{html.escape(str(display_decision))}</h2><p>{html.escape(str(decision_message))}</p>
+  <div class="yy-decision-grid"><div><b>{'为什么？' if lang == 'zh' else 'Why?'}</b><ul>{reason_html}</ul></div>
+  <div><b>{'下一步做什么？' if lang == 'zh' else 'What should I do next?'}</b><p>{html.escape(next_action)}</p></div></div>
+</div>""", unsafe_allow_html=True)
+
+
+def render_store_identity_strip(profile, step, lang):
+    identity = storefront_identity(profile, lang)
+    verbs_en = ("Imagine it", "Place it", "Make the money work", "Decide")
+    verbs_zh = ("想象它", "找到它的位置", "让钱算得通", "做决定")
+    verb = verbs_zh[step - 1] if lang == "zh" else verbs_en[step - 1]
+    st.markdown(
+        f'<div class="yy-identity-strip"><span>{SHOP_ICONS.get(identity["kind"], "🏡")}</span>'
+        f'<div><small>{html.escape(verb)} · {step}/4</small><b>{html.escape(identity["name"])}</b></div>'
+        f'<i style="background:{identity["palette"]["awning"]}"></i></div>', unsafe_allow_html=True,
+    )

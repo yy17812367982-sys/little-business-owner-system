@@ -9,7 +9,7 @@ from streamlit.testing.v1 import AppTest
 from business_logic import calculate_open_store_feasibility
 from location_analysis import (parse_places, collect_evidence, evidence_key,
                                report_location, road_traffic, community_data,
-                               provisional_site_assessment)
+                               provisional_site_assessment, shop_marker_symbol)
 from test_business_logic import PROFILE, SITE, LAUNCH, PRICING
 
 
@@ -19,6 +19,14 @@ def element(oid=1, lat=30.25, lon=-97.75, tags=None):
 
 
 class LocationEvidenceTests(unittest.TestCase):
+    def test_selected_shop_marker_changes_with_business_type(self):
+        self.assertEqual(shop_marker_symbol("Flower Shop"), "FL")
+        self.assertEqual(shop_marker_symbol("Coffee Shop"), "CF")
+        self.assertEqual(shop_marker_symbol("Bakery"), "BK")
+        self.assertEqual(shop_marker_symbol("Beauty Salon"), "SL")
+        self.assertEqual(shop_marker_symbol("Auto Parts Store"), "AP")
+        self.assertNotEqual(shop_marker_symbol("Flower Shop"), shop_marker_symbol("Bakery"))
+
     def test_public_map_evidence_builds_a_bounded_provisional_score(self):
         saved = {"key": "evidence-1", "map": {"status": "ok", "competitor_supported": True,
                  "places": [
@@ -167,6 +175,10 @@ class FreeLocationUITests(unittest.TestCase):
             app.button(key="free_location_search").click().run()
             self.assertFalse(app.exception)
             self.assertIn("location_evidence", app.session_state["site"])
+            self.assertTrue(any("Neighborhood explored" in item.value for item in app.success))
+            snapshot = next(i for i, item in enumerate(app.markdown) if "Neighborhood Snapshot" in item.value)
+            map_legend = next(i for i, item in enumerate(app.markdown) if "Mapped coffee shops" in item.value)
+            self.assertLess(snapshot, map_legend)
             self.assertIn("provisional_site_assessment", app.session_state["site"])
             self.assertIsInstance(app.session_state["site"]["provisional_site_assessment"]["score"], int)
             collect.assert_called_once()

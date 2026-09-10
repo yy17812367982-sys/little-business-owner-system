@@ -31,8 +31,18 @@ FILTERS = {
 }
 LABELS = {"competitor": ("Similar shops", "同类店铺"), "parking": ("Parking facilities", "停车设施"),
           "transit": ("Transit stops", "公交与轨道站点"), "partner": ("Potential partners", "潜在合作地点")}
+SHOP_MARKERS = {
+    "Flower Shop": "FL", "Coffee Shop": "CF", "Bakery": "BK", "Restaurant": "RT",
+    "Convenience Store": "CV", "Small Retail Store": "SH", "Beauty Salon": "SL",
+    "Auto Parts Store": "AP", "Other": "MY",
+}
 _lock = threading.Lock()
 _last_call = {}
+
+
+def shop_marker_symbol(kind):
+    """Return a fixed, business-type marker glyph for the selected site."""
+    return SHOP_MARKERS.get(kind, SHOP_MARKERS["Other"])
 
 
 def fetch_json(url, params=None, data=None):
@@ -397,7 +407,7 @@ def render_location_analysis(profile, site, launch, lang):
     zh = lang == "zh"
     def tr(en, cn):
         return cn if zh else en
-    st.subheader(tr("Explore this neighborhood", "看看这个位置怎么样"))
+    st.subheader(tr("Step 2: Place it", "第 2 步：找到它的位置"))
     st.caption(tr("Free public data for US locations; road counts cover Texas. No paid AI is used.",
                   "查询美国免费公开数据；道路车流目前覆盖得州。不调用付费 AI。"))
     old_address = site.get("address", "")
@@ -417,7 +427,21 @@ def render_location_analysis(profile, site, launch, lang):
         st.session_state.pop("free_location_match", None)
     st.caption(tr("The address/coordinates are sent to public Census, OpenStreetMap and TxDOT services when you search.",
                   "点击查询时，地址或坐标将发送给 Census、OpenStreetMap 和得州交通局公开服务。"))
-    search = st.button(tr("🔎 Explore this address", "🔎 分析这个地址"), type="primary",
+    st.markdown(
+        '<div class="yy-explore-callout"><span>'
+        + html.escape(tr("BEFORE YOU CONTINUE", "继续之前"))
+        + '</span><h3>' + html.escape(tr("Explore what surrounds this storefront", "先看看店址周围有什么"))
+        + '</h3><p>' + html.escape(tr(
+            "You’ll see Similar Shops, Parking, Transit and Potential Partners from public sources.",
+            "你会看到公开数据中的同类店铺、停车、公交与潜在合作地点。",
+        )) + '</p><div><b>'
+        + '</b><b>'.join(html.escape(item) for item in (
+            tr("Similar Shops", "同类店铺"), tr("Parking", "停车"),
+            tr("Transit", "公共交通"), tr("Potential Partners", "潜在合作地点"),
+        )) + '</b></div></div>',
+        unsafe_allow_html=True,
+    )
+    search = st.button(tr("🔎 Explore this address", "🔎 探索这个地址"), type="primary",
                        key="free_location_search", disabled=len(address.strip()) < 3)
     if search:
         site.pop("location_evidence", None)
@@ -459,7 +483,11 @@ def render_location_analysis(profile, site, launch, lang):
     if not saved:
         st.info(tr("Choose an address to build your location snapshot. Missing data will stay unknown.",
                    "输入地址开始生成选址参考。缺失的数据会保留为未知。"))
+        st.caption(tr("You may continue without exploring, but the location and overall scores will remain unassessed.",
+                      "你可以不探索直接继续，但选址分和综合分会保持未评估状态。"))
     else:
+        st.success(tr("Neighborhood explored", "已探索周边环境"))
+        st.markdown("### " + tr("Neighborhood Snapshot", "周边概览"))
         render_snapshot(saved, site, kind, zh)
     with st.expander(tr("Add the landlord's quote (optional)", "填写房东报价（可选）")):
         rent = st.number_input(tr("Monthly rent quoted (USD)", "房东报的月租（美元）"),
@@ -561,17 +589,30 @@ def render_snapshot(saved, site, kind, zh):
     points = [{**x, "color": rgb_colors[x["category"]],
                "category_label": category_titles[x["category"]][1 if zh else 0]}
               for x in rows if x["category"] == selected_category]
+    kind_label = tr(kind, {
+        "Flower Shop": "花店", "Coffee Shop": "咖啡店", "Bakery": "烘焙店",
+        "Restaurant": "餐厅", "Convenience Store": "便利店", "Small Retail Store": "小型零售店",
+        "Beauty Salon": "美容美发店", "Auto Parts Store": "汽车配件店", "Other": "我的店",
+    }.get(kind, "我的店"))
     target = [{"lat": site["lat"], "lon": site["lon"],
-               "name": tr("Your selected shop location", "你选择的店址"),
-               "category_label": tr("YOUR SHOP", "你的店"), "color": [35, 45, 38]}]
+                "name": tr("Your selected shop location", "你选择的店址"),
+                "category_label": f"{shop_marker_symbol(kind)} · {kind_label.upper()} · {tr('YOUR SHOP', '你的店')}",
+                "business_type": kind_label, "color": [35, 45, 38],
+                "marker": shop_marker_symbol(kind), "distance_miles": tr("Selected location", "所选店址")}]
     layers = [
         pdk.Layer("ScatterplotLayer", data=points, get_position="[lon, lat]",
                   get_fill_color="color", get_radius=38, radius_min_pixels=7, pickable=True),
         pdk.Layer("ScatterplotLayer", data=target, get_position="[lon, lat]",
-                  get_fill_color="color", get_radius=70, radius_min_pixels=11,
-                  stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=3, pickable=True),
+                  get_fill_color=[54, 92, 69, 35], get_radius=190, radius_min_pixels=27,
+                  stroked=True, get_line_color=[54, 92, 69, 100], line_width_min_pixels=2),
+        pdk.Layer("ScatterplotLayer", data=target, get_position="[lon, lat]",
+                  get_fill_color=[255, 252, 247, 245], get_radius=82, radius_min_pixels=16,
+                  stroked=True, get_line_color="color", line_width_min_pixels=4, pickable=True),
+        pdk.Layer("TextLayer", data=target, get_position="[lon, lat]", get_text="marker",
+                  get_size=18, get_color=[35, 45, 38], get_pixel_offset=[-8, 6],
+                  pickable=True),
         pdk.Layer("TextLayer", data=target, get_position="[lon, lat]", get_text="category_label",
-                  get_size=13, get_color=[35, 45, 38], get_pixel_offset=[0, -25]),
+                  get_size=13, get_color=[35, 45, 38], get_pixel_offset=[0, -32]),
     ]
     if selected_category:
         selected_title = category_titles[selected_category][1 if zh else 0]
@@ -586,7 +627,7 @@ def render_snapshot(saved, site, kind, zh):
         layers=layers,
         initial_view_state=pdk.ViewState(latitude=site["lat"], longitude=site["lon"], zoom=13),
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-        tooltip={"text": "{name}\n{category_label}\n{distance_miles} mi"}), height=360)
+        tooltip={"text": "{name}\n{business_type}\n{category_label}\n{distance_miles}"}), height=360)
     if points:
         detail_title = category_titles[selected_category][1 if zh else 0]
         with st.expander(tr(f"View {detail_title}: names, distances and sources",

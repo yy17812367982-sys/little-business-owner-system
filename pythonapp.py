@@ -45,7 +45,15 @@ st.set_page_config(
 
 # Warm visual language shared across the three suites.
 from location_analysis import render_location_analysis, report_location
-from visual_planner import render_shop_cards, render_idea_preview, render_money_picture
+from visual_planner import (
+    PALETTE_TOKENS,
+    render_decision_lead,
+    render_idea_preview,
+    render_money_story,
+    render_shop_cards,
+    render_store_identity_strip,
+    render_store_presets,
+)
 import warm_theme as _warm_theme
 # Streamlit Cloud can keep imported helper modules alive while hot-reloading the
 # entry script. Reload only when a deployment has new visual classes but the
@@ -604,6 +612,8 @@ if "open_step" not in st.session_state:
 if "profile" not in st.session_state:
     st.session_state.profile = {
         "business_type": "Coffee Shop",
+        "shop_name": "Corner Bean Café",
+        "mood_palette": "clay",
         "stage": "Planning",
         "budget": 80000,
         "target_customer": "Local residents, office workers, tourists, and weekend shoppers",
@@ -727,6 +737,8 @@ for _widget_key, (_bucket, _field, _default) in _OPEN_STORE_WIDGET_FIELDS.items(
 # Persistent concept fields also make the scenario label reflect user edits.
 _CONCEPT_WIDGET_FIELDS = {
     "open_business_type": ("business_type", "Coffee Shop"),
+    "open_shop_name": ("shop_name", "Corner Bean Café"),
+    "open_storefront_palette": ("mood_palette", "clay"),
     "open_target_customer": ("target_customer", ""),
     "open_differentiator": ("differentiator", ""),
     "open_concept_notes": ("notes", ""),
@@ -1738,10 +1750,10 @@ def render_open_store():
     ))
 
     step_titles = [
-        t("业务概念", "Concept"),
-        t("选址地图", "Location"),
-        t("预算定价", "Budget & Pricing"),
-        t("结论报告", "Decision & Report"),
+        t("想象它", "Imagine it"),
+        t("找到它的位置", "Place it"),
+        t("让钱算得通", "Make the money work"),
+        t("做决定", "Decide"),
     ]
     # Cute segmented progress bar: one colored segment per page, instead of a single continuous bar.
     # Robust segmented progress bar. Keep HTML compact (single-line tags) to avoid Streamlit
@@ -1762,6 +1774,7 @@ def render_open_store():
         )
     progress_html = '<div class="open-step-wrap">' + ''.join(pills) + '</div>'
     st.markdown(progress_html, unsafe_allow_html=True)
+    render_store_identity_strip(st.session_state.profile, st.session_state.open_step, st.session_state.lang)
 
     # Navigation uses callbacks instead of mutating session_state mid-render.
     # This keeps the segmented progress bar and page content perfectly aligned
@@ -1789,6 +1802,13 @@ def render_open_store():
         st.session_state.open_step == 3
         and not open_store_feasibility_metrics().get("decision_ready", False)
     )
+    pending_location_address = str(st.session_state.get(
+        "free_location_address", st.session_state.site.get("address", "")
+    )).strip()
+    location_explored = bool(
+        st.session_state.site.get("location_evidence")
+        and str(st.session_state.site.get("located_address", "")).strip() == pending_location_address
+    )
 
     nav1, nav2, nav3 = st.columns([1, 1, 2])
     with nav1:
@@ -1807,14 +1827,14 @@ def render_open_store():
                 on_click=_open_store_next,
                 key="open_store_next_btn",
                 disabled=next_is_blocked,
-                type="primary",
+                type=("secondary" if st.session_state.open_step == 2 and not location_explored else "primary"),
             )
         else:
             st.button(t("已到最后一页", "Final Page"), use_container_width=True, disabled=True)
     with nav3:
         st.caption(t(
-            "共 4 段：①业务概念 → ②选址地图 → ③预算定价 → ④结论报告。每段对应一个页面。",
-            "4 segments total: ① Concept → ② Location Map → ③ Budget & Pricing → ④ Decision & Report. Each segment matches one page."
+            "共 4 步：①想象它 → ②找到它的位置 → ③让钱算得通 → ④做决定。",
+            "4 steps: ① Imagine it → ② Place it → ③ Make the money work → ④ Decide."
         ))
 
     if st.session_state.get("open_nav_error"):
@@ -1891,7 +1911,7 @@ def render_open_store():
     # Page 1: Concept
     if st.session_state.open_step == 1:
         p = st.session_state.profile
-        st.subheader(t("第 1 步：你想开一家什么样的店？", "Step 1: Tell us about your little idea"))
+        st.subheader(t("第 1 步：想象它", "Step 1: Imagine it"))
         st.markdown(
             "<div class='card'>" + t(
                 "想象一位客人推门走进来：你希望谁来？他们会喜欢这里的什么？先写下你的想法，不用一次就完美。",
@@ -1900,6 +1920,7 @@ def render_open_store():
             unsafe_allow_html=True
         )
 
+        render_store_presets(p, st.session_state.lang)
         render_shop_cards(p, st.session_state.lang)
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -1910,6 +1931,16 @@ def render_open_store():
             )
             if p["business_type"] == "Other":
                 p["custom_business_type"] = st.text_input(t("具体想开什么店？", "What kind of shop?"), key="open_custom_business_type")
+            p["shop_name"] = st.text_input(
+                t("店名", "Shop name"), key="open_shop_name",
+                placeholder=t("例如：Jenny 的花房", "For example: Jenny’s Flower Room"),
+            )
+            palette_keys = list(PALETTE_TOKENS)
+            palette_label_key = "name_zh" if st.session_state.lang == "zh" else "name_en"
+            p["mood_palette"] = st.selectbox(
+                t("店面配色", "Storefront palette"), palette_keys, key="open_storefront_palette",
+                format_func=lambda key: PALETTE_TOKENS[key][palette_label_key],
+            )
             p["target_customer"] = st.text_input(
                 t("你希望谁来？", "Who is your shop for?"), key="open_target_customer",
             )
@@ -1946,20 +1977,25 @@ def render_open_store():
         p = st.session_state.profile
         launch = st.session_state.launch
         pr = st.session_state.pricing
-        st.subheader(t("第 3 页：预算与定价", "Page 3: Budget & Pricing"))
+        st.subheader(t("第 3 步：让钱算得通", "Step 3: Make the money work"))
         st.markdown(
             "<div class='card'>" + t(
-                "把细项合并成几个关键假设：启动成本、每月固定成本、预期收入、毛利率和代表性产品定价。别做成会计考试。",
-                "This combines details into a few key assumptions: startup cost, monthly fixed cost, expected revenue, gross margin, and representative product pricing. No accounting exam here."
+                "先看开业日，再看一个普通月，最后试试不同情景。高级假设仍在下方，随时可以展开。",
+                "Start with opening day, follow the money through an ordinary month, then try a few scenarios. Detailed assumptions remain available below."
             ) + "</div>",
             unsafe_allow_html=True
         )
 
-        launch["funding_available"] = st.number_input(t("可用启动资金", "Available Launch Funding"), min_value=0.0, step=1000.0, key="open_funding_widget")
+        opening_left, opening_right = st.columns(2)
+        with opening_left:
+            launch["funding_available"] = st.number_input(t("可用现金", "Cash Available"), min_value=0.0, step=1000.0, key="open_funding_widget")
+            launch["startup_cost_estimate"] = st.number_input(t("开店成本", "Opening Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
+        with opening_right:
+            launch["monthly_fixed_cost_estimate"] = st.number_input(t("每月固定费用", "Monthly Fixed Costs"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
+            launch["expected_monthly_revenue"] = st.number_input(t("每月销售额", "Monthly Sales"), min_value=0.0, step=1000.0, key="open_revenue_widget")
         p["budget"] = int(launch["funding_available"])
-        launch["startup_cost_estimate"] = st.number_input(t("预计一次性启动成本", "Estimated One-Time Startup Cost"), min_value=0.0, step=1000.0, key="open_startup_cost_widget")
-        launch["monthly_fixed_cost_estimate"] = st.number_input(t("预计每月固定成本", "Estimated Monthly Fixed Cost"), min_value=0.0, step=500.0, key="open_fixed_cost_widget")
-        launch["expected_monthly_revenue"] = st.number_input(t("预期月收入", "Expected Monthly Revenue"), min_value=0.0, step=1000.0, key="open_revenue_widget")
+        m = open_store_feasibility_metrics()
+        render_money_story(p, st.session_state.site, launch, pr, m, st.session_state.lang)
         st.caption(t("以下图表仍使用毛利、定价和损耗假设。请展开检查，尤其是示例数据。", "The charts also use margin, pricing and waste assumptions. Review them below, especially when starting from sample data."))
         with st.expander(t("调整毛利、定价、损耗和旺季", "Adjust margin, pricing, waste and busy months"), expanded=False):
             launch["expected_gross_margin"] = st.slider(t("损耗前的预期毛利率（%）", "Expected Gross Margin Before Spoilage (%)"), 10, 90, key="open_gross_margin_widget",
@@ -2008,7 +2044,6 @@ def render_open_store():
                 st.caption(t("开店评分始终看普通月份，避免被旺季的好成绩冲昏头脑。", "Your launch score always uses an ordinary month, so a holiday rush cannot hide everyday losses."))
 
         m = open_store_feasibility_metrics()
-        render_money_picture(launch, m, st.session_state.lang)
         if launch["perishable_enabled"] or launch.get("holiday_months", 0):
             render_seasonal_comparison(m)
         c1, c2, c3, c4 = st.columns(4)
@@ -2034,7 +2069,7 @@ def render_open_store():
 
     # Page 4: Decision & Report
     else:
-        st.subheader(t("第 4 页：结论与报告", "Page 4: Decision & Report"))
+        st.subheader(t("第 4 步：做决定", "Step 4: Decide"))
         m = open_store_feasibility_metrics()
         decision = m["decision"]
         decision_msg = {
@@ -2060,9 +2095,13 @@ def render_open_store():
                     f"This is a financial NO-GO: the target cash runway has a USD {m['funding_gap']:,.0f} gap. The location conclusion remains provisional.",
                 )
 
-        c1, c2, c3, c4, c5 = st.columns(5)
         display_decision = t("财务暂不通过", "FINANCIAL NO-GO") if m.get("location_pending") and decision == "NO-GO" else decision
         provisional_suffix = t("（临时）", " (provisional)") if m.get("site_score_provisional") else ""
+        render_decision_lead(
+            m, decision_msg, display_decision, st.session_state.profile, st.session_state.lang
+        )
+        st.markdown("### " + t("评分与详细证据", "Scores & detailed evidence"))
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric(t("最终判断", "Decision"), display_decision)
         c2.metric(t("总评分", "Overall") + provisional_suffix, (int(m["overall_score"]) if m["overall_score"] is not None else "—"))
         c3.metric(t("选址", "Site") + provisional_suffix, (int(m["site_score"]) if m["site_score"] is not None else "—"))
@@ -2082,8 +2121,6 @@ def render_open_store():
                 ))
         if decision == "REVIEW INPUTS":
             st.error(decision_msg)
-        else:
-            st.info(decision_msg)
 
         st.markdown("### " + t("核心依据", "Decision Evidence"))
         location_value = "—"

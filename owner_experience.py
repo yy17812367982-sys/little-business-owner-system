@@ -149,12 +149,11 @@ def render_mood_board(profile, lang, ask_ai):
             st.caption(_tr(lang, "The photo stays in this session and is not included in AI requests or reports.", "照片仅保留在当前会话中，不会加入 AI 请求或报告。"))
         with right:
             default_palette = profile.get("mood_palette", "garden" if "flower" in str(profile.get("business_type", "")).lower() else "clay")
-            keys = list(PALETTES)
-            profile["mood_palette"] = st.selectbox(
-                _tr(lang, "A color palette to start from", "从一组配色开始"), keys,
-                index=keys.index(default_palette) if default_palette in keys else 0,
-                format_func=lambda key: PALETTES[key]["zh" if lang == "zh" else "en"], key="owner_mood_palette",
-            )
+            if default_palette not in PALETTES:
+                default_palette = "garden"
+            profile["mood_palette"] = default_palette
+            st.caption(_tr(lang, "The storefront palette selected above is also used here.",
+                           "这里会沿用上方店面预览所选的配色。"))
             st.markdown(palette_html(profile["mood_palette"], _tr(lang, "Your starter palette", "你的起始配色")), unsafe_allow_html=True)
             profile["mood_board_brief"] = st.text_area(
                 _tr(lang, "How should people feel when they walk in?", "你希望客人进门时有什么感觉？"),

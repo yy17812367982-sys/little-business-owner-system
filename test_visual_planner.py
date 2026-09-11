@@ -42,6 +42,17 @@ class VisualPlannerTests(unittest.TestCase):
             self.assertEqual(app.selectbox(key="open_business_type").value, "Flower Shop")
             self.assertEqual(app.text_input(key="open_target_customer").value, "Local gift buyers")
 
+    def test_business_type_updates_default_name_and_palette_but_preserves_owner_name(self):
+        with patch.dict(os.environ, {"INTRO_VIDEO_SECONDS": "0"}):
+            app = AppTest.from_file("pythonapp.py", default_timeout=30).run()
+            app.button(key="shop_card_Flower Shop").click().run()
+            self.assertEqual(app.text_input(key="open_shop_name").value, "Jenny’s Flower Room")
+            self.assertEqual(app.selectbox(key="open_storefront_palette").value, "garden")
+            app.text_input(key="open_shop_name").set_value("Petal & Pine").run()
+            app.button(key="shop_card_Bakery").click().run()
+            self.assertEqual(app.selectbox(key="open_business_type").value, "Bakery")
+            self.assertEqual(app.text_input(key="open_shop_name").value, "Petal & Pine")
+
     def test_preview_escapes_user_html(self):
         with patch.dict(os.environ, {"INTRO_VIDEO_SECONDS": "0"}):
             app = AppTest.from_file("pythonapp.py", default_timeout=30).run()

@@ -47,6 +47,9 @@ st.set_page_config(
 from location_analysis import render_location_analysis, report_location
 from visual_planner import (
     PALETTE_TOKENS,
+    apply_business_type,
+    mark_shop_name_customized,
+    mark_storefront_palette_customized,
     render_decision_lead,
     render_idea_preview,
     render_money_story,
@@ -1928,18 +1931,21 @@ def render_open_store():
             p["business_type"] = st.selectbox(
                 t("业态（也可以选其他店型）", "Business Type — more shop ideas"),
                 business_types, key="open_business_type",
+                on_change=apply_business_type, args=(p,),
             )
             if p["business_type"] == "Other":
                 p["custom_business_type"] = st.text_input(t("具体想开什么店？", "What kind of shop?"), key="open_custom_business_type")
             p["shop_name"] = st.text_input(
                 t("店名", "Shop name"), key="open_shop_name",
                 placeholder=t("例如：Jenny 的花房", "For example: Jenny’s Flower Room"),
+                on_change=mark_shop_name_customized,
             )
             palette_keys = list(PALETTE_TOKENS)
             palette_label_key = "name_zh" if st.session_state.lang == "zh" else "name_en"
             p["mood_palette"] = st.selectbox(
                 t("店面配色", "Storefront palette"), palette_keys, key="open_storefront_palette",
                 format_func=lambda key: PALETTE_TOKENS[key][palette_label_key],
+                on_change=mark_storefront_palette_customized,
             )
             p["target_customer"] = st.text_input(
                 t("你希望谁来？", "Who is your shop for?"), key="open_target_customer",

@@ -17,7 +17,10 @@ from owner_experience import distance_miles
 
 TXDOT = "https://services.arcgis.com/KTcxiTD9dsQw4r7Z/ArcGIS/rest/services/TxDOT_5_Year_Statewide_AADT_Traffic_Counts/FeatureServer/0"
 CENSUS_GEO = "https://geocoding.geo.census.gov/geocoder"
-OVERPASS = "https://overpass-api.de/api/interpreter"
+OVERPASS_ENDPOINTS = (
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+)
 UA = {"User-Agent": "YangYu-SmallBusinessToolkit/1.2 (https://github.com/yy17812367982-sys/little-business-owner-system)"}
 FILTERS = {
     "Flower Shop": '["shop"="florist"]',
@@ -157,8 +160,17 @@ def nearby_places(lat, lon, radius, kind):
                 '["railway"~"^(station|tram_stop)$"]', '["tourism"~"^(hotel|guest_house)$"]',
                 '["amenity"~"^(events_venue|conference_centre)$"]']
     body = "".join(f"nwr{tag}(around:{int(radius*1609.344)},{lat:.6f},{lon:.6f});" for tag in filters)
-    throttle("overpass", 2)
-    payload = fetch_json(OVERPASS, data={"data": "[out:json][timeout:12][maxsize:16777216];(" + body + ");out center 500;"})
+    query = "[out:json][timeout:12][maxsize:16777216];(" + body + ");out center 500;"
+    payload = None
+    for endpoint in OVERPASS_ENDPOINTS:
+        try:
+            throttle("overpass:" + endpoint, .5)
+            payload = fetch_json(endpoint, data={"data": query})
+            break
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            continue
+    if payload is None:
+        raise requests.RequestException("mapped_places_unavailable")
     result = parse_places(payload, lat, lon, radius, kind)
     result["retrieved_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return result
@@ -472,8 +484,9 @@ def render_location_analysis(profile, site, launch, lang):
     # Exact single matches run immediately; ambiguous addresses require selection before lookup.
     analyze = search and len(matches) == 1
     if verified:
+        map_retry = bool(saved) and saved.get("map", {}).get("status") != "ok"
         analyze = st.button(tr("Load / refresh neighborhood data", "查询 / 更新周边数据"),
-                            key="free_location_load") or analyze
+                            key="free_location_load", type="primary" if map_retry else "secondary") or analyze
     if analyze and verified:
         with st.spinner(tr("Checking maps, community statistics and road counts…",
                            "正在查询地图、社区统计和道路车流…")):
@@ -486,7 +499,13 @@ def render_location_analysis(profile, site, launch, lang):
         st.caption(tr("You may continue without exploring, but the location and overall scores will remain unassessed.",
                       "你可以不探索直接继续，但选址分和综合分会保持未评估状态。"))
     else:
-        st.success(tr("Neighborhood explored", "已探索周边环境"))
+        if saved.get("map", {}).get("status") == "ok":
+            st.success(tr("Neighborhood explored", "已探索周边环境"))
+        else:
+            st.warning(tr(
+                "Neighborhood check incomplete. The map provider did not respond; use the refresh button to retry.",
+                "周边查询未完成。地图服务没有响应，请点击更新按钮重试。",
+            ))
         st.markdown("### " + tr("Neighborhood Snapshot", "周边概览"))
         render_snapshot(saved, site, kind, zh)
     with st.expander(tr("Add the landlord's quote (optional)", "填写房东报价（可选）")):

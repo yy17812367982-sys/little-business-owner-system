@@ -9,7 +9,8 @@ from streamlit.testing.v1 import AppTest
 from business_logic import calculate_open_store_feasibility
 from location_analysis import (parse_places, collect_evidence, evidence_key,
                                report_location, road_traffic, community_data,
-                               provisional_site_assessment, shop_marker_symbol)
+                               provisional_site_assessment, shop_marker_symbol,
+                               nearby_places)
 from test_business_logic import PROFILE, SITE, LAUNCH, PRICING
 
 
@@ -19,6 +20,17 @@ def element(oid=1, lat=30.25, lon=-97.75, tags=None):
 
 
 class LocationEvidenceTests(unittest.TestCase):
+    def test_map_lookup_falls_back_to_second_bounded_provider(self):
+        nearby_places.clear()
+        with patch("location_analysis.throttle"), patch(
+            "location_analysis.fetch_json",
+            side_effect=[requests.Timeout(), {"elements": [], "osm3s": {}}],
+        ) as fetch:
+            result = nearby_places(30.251234, -97.751234, 0.5, "Flower Shop")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(result["places"], [])
+        self.assertTrue(result["competitor_supported"])
+
     def test_selected_shop_marker_changes_with_business_type(self):
         self.assertEqual(shop_marker_symbol("Flower Shop"), "FL")
         self.assertEqual(shop_marker_symbol("Coffee Shop"), "CF")

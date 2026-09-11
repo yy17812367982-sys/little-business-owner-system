@@ -51,6 +51,18 @@ STORE_PRESETS = {
     },
 }
 
+BUSINESS_TYPE_DEFAULTS = {
+    "Flower Shop": {"shop_name": "Jenny’s Flower Room", "mood_palette": "garden"},
+    "Coffee Shop": {"shop_name": "Corner Bean Café", "mood_palette": "clay"},
+    "Bakery": {"shop_name": "Sunrise Bakery", "mood_palette": "sunshine"},
+    "Restaurant": {"shop_name": "My Neighborhood Restaurant", "mood_palette": "clay"},
+    "Convenience Store": {"shop_name": "My Corner Store", "mood_palette": "sunshine"},
+    "Small Retail Store": {"shop_name": "My Little Shop", "mood_palette": "garden"},
+    "Beauty Salon": {"shop_name": "My Neighborhood Salon", "mood_palette": "blush"},
+    "Auto Parts Store": {"shop_name": "My Auto Parts Shop", "mood_palette": "clay"},
+    "Other": {"shop_name": "", "mood_palette": "garden"},
+}
+
 
 def storefront_identity(profile, lang="en"):
     """Return a bounded visual identity; only curated values enter CSS."""
@@ -124,9 +136,41 @@ def apply_store_preset(profile, preset_key):
             "business_type": "Other", "custom_business_type": "", "shop_name": "",
             "target_customer": "", "differentiator": "", "mood_palette": "garden",
         })
+        st.session_state.open_shop_name_customized = False
+        st.session_state.open_storefront_palette_customized = False
         return
     preset = STORE_PRESETS[preset_key]
     _sync_profile_widgets(profile, {key: value for key, value in preset.items() if key != "label"})
+    st.session_state.open_shop_name_customized = False
+    st.session_state.open_storefront_palette_customized = False
+
+
+def apply_business_type(profile, kind=None):
+    """Change visual defaults without overwriting a name or palette the owner edited."""
+    new_kind = kind or st.session_state.get("open_business_type", "Other")
+    current_name = str(st.session_state.get("open_shop_name", profile.get("shop_name", "")) or "")
+    current_palette = str(st.session_state.get("open_storefront_palette", profile.get("mood_palette", "")) or "")
+    known_names = {item["shop_name"] for item in BUSINESS_TYPE_DEFAULTS.values()}
+    known_palettes = {item["mood_palette"] for item in BUSINESS_TYPE_DEFAULTS.values()}
+    defaults = BUSINESS_TYPE_DEFAULTS.get(new_kind, BUSINESS_TYPE_DEFAULTS["Other"])
+    profile["business_type"] = new_kind
+    st.session_state.open_business_type = new_kind
+    if not st.session_state.get("open_shop_name_customized") or current_name in known_names:
+        profile["shop_name"] = defaults["shop_name"]
+        st.session_state.open_shop_name = defaults["shop_name"]
+        st.session_state.open_shop_name_customized = False
+    if not st.session_state.get("open_storefront_palette_customized") or current_palette in known_palettes:
+        profile["mood_palette"] = defaults["mood_palette"]
+        st.session_state.open_storefront_palette = defaults["mood_palette"]
+        st.session_state.open_storefront_palette_customized = False
+
+
+def mark_shop_name_customized():
+    st.session_state.open_shop_name_customized = True
+
+
+def mark_storefront_palette_customized():
+    st.session_state.open_storefront_palette_customized = True
 
 
 def render_store_presets(profile, lang):
@@ -153,8 +197,7 @@ def render_shop_cards(profile, lang):
         ("Bakery", "烘焙店" if zh else "Bakery"),
     ]):
         def choose(value=kind):
-            st.session_state.open_business_type = value
-            st.session_state.profile["business_type"] = value
+            apply_business_type(st.session_state.profile, value)
         column.button(f"{SHOP_ICONS[kind]}  {label}", key=f"shop_card_{kind}",
                       type="primary" if profile.get("business_type") == kind else "secondary",
                       on_click=choose, use_container_width=True)
